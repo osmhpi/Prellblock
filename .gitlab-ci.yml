@@ -1,0 +1,53 @@
+image: rust:1
+
+stages:
+  - test
+  - build
+
+variables:
+  CARGO_HOME: $CI_PROJECT_DIR/cargo
+  RUSTFLAGS: -D warnings
+
+test:
+  stage: test
+  script:
+    - rustc --version
+    - cargo --version
+    - cargo test --verbose
+
+clippy:
+  stage: test
+  script:
+    - rustup component add clippy
+    - cargo clippy
+
+rustfmt:
+  stage: test
+  script:
+    - rustup toolchain install nightly-2020-03-22 --component rustfmt --no-self-update
+    - cargo +nightly-2020-03-22 fmt -- --check
+
+pages:
+  stage: build
+  script:
+    - cargo doc --no-deps
+    - mv target/doc public
+    - echo '<meta http-equiv="refresh" content="0; url=prellblock">' > public/index.html
+  artifacts:
+    paths:
+      - public
+
+release-build:
+  stage: build
+  script:
+    - mkdir release
+    - cargo build --release
+    - find target/release -maxdepth 2 -executable -type f -exec sh -c 'cp "$@" release' {} +
+  artifacts:
+    paths:
+      - release
+
+cache:
+  paths:
+    - cargo/
+    - target/
