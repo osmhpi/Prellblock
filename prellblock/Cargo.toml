@@ -1,0 +1,12 @@
+[package]
+name = "prellblock"
+version = "0.1.0"
+authors = [
+    "Benedikt Schenkel <benedikt.schenkel@student.hpi.de>",
+    "Felix Gohla <felix.gohla@student.hpi.de>",
+    "Malte Andersch <malte.andersch@student.hpi.de>",
+    "Martin Michaelis <code@mgjm.de>",
+]
+edition = "2018"
+
+[dependencies]
