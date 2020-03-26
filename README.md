@@ -1,8 +1,9 @@
 # PrellBlock
 
-Bahndaten verlässlich und schnell gepuffert - **Persistente Redundante Einheit für Langzeit-Logging über Blockchain**
+Bahndaten verlässlich und schnell in die Blockchain gepuffert - **Persistente Redundante Einheit für Langzeit-Logging über Blockchain**
 
-## Kurzbeschreibung
+## Overview
 
-PrellBlock ist eine in Rust geschriebene, leichtgewichtige Logging-Blockchaintechnologie, die insbesondere für die Datensicherung im Bahnbetrieb entwickelt wird.
-Durch das Execute-Order-Validate verfahren wird sichergestellt, dass Daten auch bei einem Ausfall von allen bis auf eine Einheit gesichert werden können, während in vollem Betrieb die Daten mit Byzantinischer Fehlertoleranz verteilt gespeichert und validiert werden können.
+`PrellBlock` is a lightweight logging blockchain, written in `Rust`, which is designed for datastorage purposes in a railway environment.
+By using an execute-order-validate procedure it is assured, that data will be saved, even in case of a total failure of all but one redundant processing unit.
+While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
