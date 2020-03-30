@@ -17,7 +17,7 @@ pub struct Server {}
 
 impl Server {
     /// The main server loop.
-    pub fn serve(self, listener: TcpListener) -> Result<(), BoxError> {
+    pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
         log::info!(
             "Server is now listening on Port {}",
             listener.local_addr()?.port()
@@ -59,7 +59,7 @@ impl Server {
             stream.read_exact(&mut buf)?;
 
             // handle the request
-            let res = match self.handle_request(&addr, buf) {
+            let res = match self.handle_request(&addr, &buf) {
                 Ok(res) => Ok(res),
                 Err(err) => Err(err.to_string()),
             };
@@ -70,34 +70,33 @@ impl Server {
             // send response
             let size: u32 = data.len().try_into()?;
             let size = size.to_le_bytes();
-            stream.write(&size)?;
+            stream.write_all(&size)?;
             stream.write_all(&data)?;
         }
         Ok(())
     }
 
-    fn handle_request(
-        &self,
-        addr: &SocketAddr,
-        req: Vec<u8>,
-    ) -> Result<serde_json::Value, BoxError> {
+    fn handle_request(&self, addr: &SocketAddr, req: &[u8]) -> Result<serde_json::Value, BoxError> {
+        // TODO: Remove this.
+        let _ = self;
         // Deserialize request.
-        let req: RequestData = serde_json::from_slice(&req)?;
+        let req: RequestData = serde_json::from_slice(req)?;
         log::trace!("Received request from {}: {:?}", addr, req);
         // handle the actual request
         let res = match req {
             RequestData::Add(params) => params.handle(|params| params.0 + params.1),
             RequestData::Sub(params) => params.handle(|params| params.0 - params.1),
             RequestData::Ping(params) => params.handle(|_| {
-                let mut addr = addr.clone();
+                let mut addr = *addr;
+                // TODO: Remove this.
                 addr.set_port(2480);
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_millis(100));
                     let mut client = client::Client::new(addr);
-                    client.send_request(Ping());
-                    client.send_request(Ping());
-                    client.send_request(Ping());
-                    client.send_request(Ping());
+                    match client.send_request(Ping()) {
+                        Err(err) => log::error!("Failed to send Ping: {}.", err),
+                        Ok(res) => log::debug!("Ping response: {:?}", res),
+                    }
                 });
                 Pong
             }),

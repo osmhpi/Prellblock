@@ -1,4 +1,6 @@
 #![warn(missing_docs, clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(clippy::missing_errors_doc, clippy::similar_names)]
+
 //! Bahndaten verlässlich und schnell in die Blockchain gepuffert - **Persistente Redundante Einheit für Langzeit-Logging über Blockchain**
 //!
 //! ## Overview

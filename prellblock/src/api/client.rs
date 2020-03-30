@@ -28,9 +28,10 @@ impl Client {
     /// let addr = "127.0.0.1:2480".parse().unwrap();
     /// let client = Client::new(addr);
     /// ```
-    pub fn new(addr: SocketAddr) -> Self {
-        Client {
-            addr: addr,
+    #[must_use]
+    pub const fn new(addr: SocketAddr) -> Self {
+        Self {
+            addr,
             stream: None,
             timeout: Duration::from_secs(60),
         }
@@ -79,7 +80,7 @@ impl Client {
         // send request
         let size: u32 = data.len().try_into()?;
         let size = size.to_le_bytes();
-        stream.write(&size)?;
+        stream.write_all(&size)?;
         stream.write_all(&data)?;
 
         // read response length

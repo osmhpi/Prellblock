@@ -1,4 +1,6 @@
 #![warn(missing_docs, clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(clippy::missing_errors_doc, clippy::similar_names)]
+
 //! Bahndaten verlässlich und schnell in die Blockchain gepuffert - **Persistente Redundante Einheit für Langzeit-Logging über Blockchain**
 //!
 //! ## Overview
@@ -35,15 +37,21 @@ fn main() {
         std::thread::spawn(move || {
             let listener = TcpListener::bind(bind_addr).unwrap();
             let server = server::Server {};
-            server.serve(listener).unwrap();
+            server.serve(&listener).unwrap();
         })
     });
 
     // execute the test client
     if let Some(peer_addr) = opt.peer {
         let mut client = client::Client::new(peer_addr);
-        client.send_request(prellblock::api::Ping());
-        println!("{:?}", client.send_request(prellblock::api::Add(100, 2)));
+        match client.send_request(prellblock::api::Ping()) {
+            Err(err) => log::error!("Failed to send Ping: {}.", err),
+            Ok(res) => log::debug!("Ping response: {:?}", res),
+        }
+        log::info!(
+            "The sum is {:?}",
+            client.send_request(prellblock::api::Add(100, 2))
+        );
     }
 
     // wait for the server thread
