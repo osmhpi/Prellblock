@@ -38,11 +38,11 @@ impl From<Sub> for RequestData {
     }
 }
 
-/// Ping Message.u8
+/// Ping Message. See [`Pong`](struct.Pong.html).
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Ping();
+pub struct Ping;
 
-/// Subtract two numbers.
+/// Play ping pong. See [`Ping`](struct.Ping.html).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Pong;
 

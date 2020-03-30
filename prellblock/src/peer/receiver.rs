@@ -14,6 +14,23 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 type ArcMut<T> = Arc<Mutex<T>>;
 
 /// A receiver (server) instance.
+///
+/// # Example
+///
+/// ```
+/// use prellblock::peer::{Calculator, Receiver};
+/// use std::{net::TcpListener, sync::Arc};
+///
+/// let calculator = Calculator::new();
+/// let calculator = Arc::new(calculator.into());
+/// let bind_addr = "127.0.0.1:1234";
+///
+/// let listener = TcpListener::bind(bind_addr).unwrap();
+/// let receiver = Receiver::new(calculator);
+/// std::thread::spawn(move || {
+///     receiver.serve(&listener).unwrap();
+/// });
+/// ```
 #[derive(Clone)]
 pub struct Receiver {
     calculator: ArcMut<Calculator>,
@@ -82,10 +99,13 @@ impl Receiver {
             let size = size.to_le_bytes();
             stream.write_all(&size)?;
             stream.write_all(&data)?;
+            // TODO: Test this.
+            // stream.shutdown(Shutdown::Both)?;
+            // log::warn!("I just dropped the mic.");
+            // break;
         }
         Ok(())
     }
-
     fn handle_request(&self, addr: &SocketAddr, req: &[u8]) -> Result<serde_json::Value, BoxError> {
         // TODO: Remove this.
         let _ = self;
