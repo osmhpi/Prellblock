@@ -4,18 +4,28 @@ use std::{
     convert::TryInto,
     io::{self, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
-    time::Duration,
+    sync::{Arc, Mutex},
 };
 
-use super::{client, Ping, Pong, Request, RequestData};
+use super::{Calculator, Pong, Request, RequestData};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-/// A server instance.
-#[derive(Clone)]
-pub struct Server {}
+type ArcMut<T> = Arc<Mutex<T>>;
 
-impl Server {
+/// A receiver (server) instance.
+#[derive(Clone)]
+pub struct Receiver {
+    calculator: ArcMut<Calculator>,
+}
+
+impl Receiver {
+    /// Create a new receiver instance.
+    #[must_use]
+    pub fn new(calculator: ArcMut<Calculator>) -> Self {
+        Self { calculator }
+    }
+
     /// The main server loop.
     pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
         log::info!(
@@ -84,29 +94,24 @@ impl Server {
         log::trace!("Received request from {}: {:?}", addr, req);
         // handle the actual request
         let res = match req {
-            RequestData::Add(params) => params.handle(|params| params.0 + params.1),
-            RequestData::Sub(params) => params.handle(|params| params.0 - params.1),
-            RequestData::Ping(params) => params.handle(|_| {
-                let mut addr = *addr;
-                // TODO: Remove this.
-                addr.set_port(2480);
-                std::thread::spawn(move || {
-                    std::thread::sleep(Duration::from_millis(100));
-                    let mut client = client::Client::new(addr);
-                    match client.send_request(Ping()) {
-                        Err(err) => log::error!("Failed to send Ping: {}.", err),
-                        Ok(res) => log::debug!("Ping response: {:?}", res),
-                    }
-                });
-                Pong
-            }),
+            RequestData::Add(params) => {
+                params.handle(|params| self.calculator.lock().unwrap().add(params.0, params.1))
+            }
+            RequestData::Sub(params) => {
+                params.handle(|params| self.calculator.lock().unwrap().sub(params.0, params.1))
+            }
+            RequestData::Ping(params) => params.handle(|_| Pong),
         };
+        log::debug!(
+            "The calculator's last resort is: {}.",
+            self.calculator.lock().unwrap().last_result()
+        );
         log::trace!("Send response to {}: {:?}", addr, res);
         Ok(res?)
     }
 }
 
-trait ServerRequest: Request + Sized {
+trait ReceiverRequest: Request + Sized {
     fn handle(
         self,
         handler: impl FnOnce(Self) -> Self::Response,
@@ -116,4 +121,4 @@ trait ServerRequest: Request + Sized {
     }
 }
 
-impl<T> ServerRequest for T where T: Request {}
+impl<T> ReceiverRequest for T where T: Request {}

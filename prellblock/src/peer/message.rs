@@ -1,29 +1,7 @@
-//! Message types that can be used to communicate between RPUs.
+//! All message types that can be sent between RPUs.
 
-// TODO: Define and use a macro to create the api spec boiler plate. (macro_rules!)
-// See https://doc.rust-lang.org/book/ch19-06-macros.html
-// and https://rustbyexample.com/macros.html
-
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::fmt::Debug;
-
-pub mod client;
-pub mod server;
-
-/// A request to the API always has a specific response type.
-pub trait Request: Serialize + Into<RequestData> + Debug {
-    /// The type of the response.
-    type Response: Serialize + DeserializeOwned + Debug;
-}
-
-/// One of the requests.
-#[allow(missing_docs)]
-#[derive(Debug, Serialize, Deserialize)]
-pub enum RequestData {
-    Add(Add),
-    Sub(Sub),
-    Ping(Ping),
-}
+use super::{Request, RequestData};
+use serde::{Deserialize, Serialize};
 
 /// Add two numbers.
 #[derive(Debug, Serialize, Deserialize)]

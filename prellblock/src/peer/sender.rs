@@ -10,23 +10,23 @@ use std::{
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-/// A client instance.
-pub struct Client {
+/// A sender instance.
+pub struct Sender {
     addr: SocketAddr,
     stream: Option<TcpStream>,
     timeout: Duration,
 }
 
-impl Client {
-    /// Create a new client instance.
+impl Sender {
+    /// Create a new sender instance.
     ///
     /// # Example
     ///
     /// ```
-    /// use prellblock::api::client::Client;
+    /// use prellblock::peer::Sender;
     ///
     /// let addr = "127.0.0.1:2480".parse().unwrap();
-    /// let client = Client::new(addr);
+    /// let sender = Sender::new(addr);
     /// ```
     #[must_use]
     pub const fn new(addr: SocketAddr) -> Self {
