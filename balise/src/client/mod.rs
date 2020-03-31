@@ -6,10 +6,11 @@ use super::Request;
 use serde::Serialize;
 use std::{
     convert::TryInto,
-    io::{Read, Write},
+    io::{self, Read, Write},
     marker::PhantomData,
     net::SocketAddr,
     ops::DerefMut,
+    time::{Duration, Instant},
 };
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -48,8 +49,7 @@ impl<T> Client<T> {
         Req: Request<T>,
         T: Serialize,
     {
-        let mut stream = connection_pool::POOL.stream(self.addr)?;
-        let addr = stream.peer_addr()?;
+        let (mut stream, addr) = self.stream()?;
 
         log::trace!("Sending request to {}: {:?}", addr, req);
         let res = send_request(stream.deref_mut(), req)?;
@@ -57,6 +57,51 @@ impl<T> Client<T> {
         log::trace!("Received response from {}: {:?}", addr, res);
         stream.done();
         Ok(res?)
+    }
+
+    /// Get a working TCP stream.
+    ///
+    /// A stream could be closed by the receiver while being
+    /// in the pool. This is catched and a new stream will be
+    /// returned in this case.
+    fn stream(&self) -> Result<(connection_pool::StreamGuard, SocketAddr), BoxError> {
+        let deadline = Instant::now() + Duration::from_secs(60);
+
+        let res = loop {
+            let stream = connection_pool::POOL.stream(self.addr)?;
+            let addr = stream.peer_addr()?;
+
+            if Instant::now() > deadline {
+                return Err("Timeout: Could not send request.".into());
+            }
+
+            // check TCP connection functional
+            stream.set_nonblocking(true)?;
+
+            //read one byte without removing from message queue
+            let mut buf = [0; 1];
+            match stream.peek(&mut buf) {
+                Ok(n) => {
+                    if n > 0 {
+                        log::warn!("The Receiver is not working correctly!");
+                    }
+                    // no connection
+                    let local_addr = stream.local_addr().unwrap();
+                    log::trace!(
+                        "TCP connection from {} to {} seems to be broken.",
+                        local_addr,
+                        addr
+                    );
+                }
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    // blocking means stream is ok
+                    stream.set_nonblocking(false)?;
+                    break (stream, addr);
+                }
+                Err(e) => return Err(e.into()),
+            }
+        };
+        Ok(res)
     }
 }
 

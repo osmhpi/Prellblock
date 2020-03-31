@@ -106,9 +106,9 @@ where
             let size = size.to_le_bytes();
             stream.write_all(&size)?;
             stream.write_all(&data)?;
-            // TODO: Test this.
-            // stream.shutdown(Shutdown::Both)?;
-            // log::warn!("I just dropped the mic.");
+
+            // Simulate connection drop
+            // let _ = stream.shutdown(std::net::Shutdown::Both);
             // break;
         }
         Ok(())
