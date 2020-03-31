@@ -9,7 +9,10 @@
 //! By using an execute-order-validate procedure it is assured, that data will be saved, even in case of a total failure of all but one redundant processing unit.
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
-use prellblock::peer::{message, Calculator, Receiver, Sender};
+use prellblock::{
+    peer::{message, Calculator, Receiver, Sender},
+    turi::Turi,
+};
 use std::{
     net::{SocketAddr, TcpListener},
     sync::Arc,
@@ -26,6 +29,8 @@ struct Opt {
 
     #[structopt(short, long)]
     peer: Option<SocketAddr>,
+    #[structopt(short, long)]
+    turi: Option<SocketAddr>,
 }
 
 fn main() {
@@ -34,6 +39,15 @@ fn main() {
 
     let opt = Opt::from_args();
     log::debug!("Command line arguments: {:#?}", opt);
+
+    // execute the server in a new thread
+    let turi_handle = opt.turi.map(|turi_addr| {
+        std::thread::spawn(move || {
+            let listener = TcpListener::bind(turi_addr).unwrap();
+            let turi = Turi::new();
+            turi.serve(&listener).unwrap();
+        })
+    });
 
     let calculator = Calculator::new();
     let calculator = Arc::new(calculator.into());
@@ -59,6 +73,14 @@ fn main() {
             "The second sum is {:?}",
             client.send_request(message::Add(10, 2))
         );
+    }
+
+    // wait for the turi thread
+    if let Some(turi_handle) = turi_handle {
+        match turi_handle.join() {
+            Err(err) => log::error!("Turi error occured: {:?}", err),
+            Ok(()) => log::info!("No error occured. Going to hunt some mice. I meant *NICE*. Bye."),
+        };
     }
 
     // wait for the server thread

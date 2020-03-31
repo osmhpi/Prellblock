@@ -1,19 +1,13 @@
 //! A server for communicating between RPUs.
 
-use std::{
-    net::{SocketAddr, TcpListener},
-    sync::{Arc, Mutex},
-};
-
-use super::{Calculator, Pong, RequestData};
 use balise::{
     server::{Handler, Server},
     Request,
 };
+use client_api::{message::Pong, RequestData};
+use std::net::{SocketAddr, TcpListener};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
-
-type ArcMut<T> = Arc<Mutex<T>>;
 
 /// A receiver (server) instance.
 ///
@@ -34,15 +28,13 @@ type ArcMut<T> = Arc<Mutex<T>>;
 /// });
 /// ```
 #[derive(Clone)]
-pub struct Receiver {
-    calculator: ArcMut<Calculator>,
-}
+pub struct Turi {}
 
-impl Receiver {
+impl Turi {
     /// Create a new receiver instance.
     #[must_use]
-    pub fn new(calculator: ArcMut<Calculator>) -> Self {
-        Self { calculator }
+    pub const fn new() -> Self {
+        Self {}
     }
 
     /// The main server loop.
@@ -52,27 +44,17 @@ impl Receiver {
     }
 }
 
-impl Handler<RequestData> for Receiver {
+impl Handler<RequestData> for Turi {
     fn handle(&self, _addr: &SocketAddr, req: RequestData) -> Result<serde_json::Value, BoxError> {
         // handle the actual request
         let res = match req {
-            RequestData::Add(params) => {
-                params.handle(|params| self.calculator.lock().unwrap().add(params.0, params.1))
-            }
-            RequestData::Sub(params) => {
-                params.handle(|params| self.calculator.lock().unwrap().sub(params.0, params.1))
-            }
             RequestData::Ping(params) => params.handle(|_| Pong),
         };
-        log::debug!(
-            "The calculator's last resort is: {}.",
-            self.calculator.lock().unwrap().last_result()
-        );
         Ok(res?)
     }
 }
 
-trait ReceiverRequest: Request<RequestData> + Sized {
+trait TuriRequest: Request<RequestData> + Sized {
     fn handle(
         self,
         handler: impl FnOnce(Self) -> Self::Response,
@@ -82,4 +64,4 @@ trait ReceiverRequest: Request<RequestData> + Sized {
     }
 }
 
-impl<T> ReceiverRequest for T where T: Request<RequestData> {}
+impl<T> TuriRequest for T where T: Request<RequestData> {}
