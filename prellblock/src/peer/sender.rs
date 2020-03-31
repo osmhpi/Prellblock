@@ -6,6 +6,7 @@ use std::{
     io::{self, Read, Write},
     net::SocketAddr,
     ops::DerefMut,
+    time::{Duration, Instant},
 };
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -168,25 +169,27 @@ impl Sender {
     /// in the pool. This is catched and a new stream will be
     /// returned in this case.
     fn stream(&self) -> Result<(connection_pool::StreamGuard, SocketAddr), BoxError> {
-        let mut retries = 2;
+        let deadline = Instant::now() + Duration::from_secs(60);
 
         let res = loop {
             let stream = connection_pool::POOL.stream(self.addr)?;
             let addr = stream.peer_addr()?;
 
-            if retries == 0 {
-                return Err("Could not send request.".into());
+            if Instant::now() > deadline {
+                return Err("Timeout: Could not send request.".into());
             }
 
             // check TCP connection functional
-            stream
-                .set_nonblocking(true)
-                .expect("set_nonblocking to nonblocking call failed");
+            stream.set_nonblocking(true)?;
+
+            //read one byte without removing from message queue
             let mut buf = [0; 1];
             match stream.peek(&mut buf) {
-                Ok(_) => {
+                Ok(n) => {
+                    if n > 0 {
+                        log::warn!("The Receiver is not working correctly!");
+                    }
                     // no connection
-                    retries = retries - 1;
                     let local_addr = stream.local_addr().unwrap();
                     log::trace!(
                         "TCP connection from {} to {} seems to be broken.",
@@ -196,12 +199,10 @@ impl Sender {
                 }
                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                     // blocking means stream is ok
-                    stream
-                        .set_nonblocking(false)
-                        .expect("set_nonblocking to blocking call failed");
+                    stream.set_nonblocking(false)?;
                     break (stream, addr);
                 }
-                Err(e) => panic!("encountered IO error: {}", e),
+                Err(e) => return Err(e.into()),
             }
         };
         Ok(res)

@@ -3,7 +3,7 @@
 use std::{
     convert::TryInto,
     io::{self, Read, Write},
-    net::{Shutdown, SocketAddr, TcpListener, TcpStream},
+    net::{SocketAddr, TcpListener, TcpStream},
     sync::{Arc, Mutex},
 };
 
@@ -99,8 +99,9 @@ impl Receiver {
             let size = size.to_le_bytes();
             stream.write_all(&size)?;
             stream.write_all(&data)?;
-            stream.shutdown(Shutdown::Both);
-            break;
+            // Simulate connection drop
+            // stream.shutdown(Shutdown::Both);
+            // break;
         }
         Ok(())
     }
