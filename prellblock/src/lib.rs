@@ -10,3 +10,4 @@
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
 pub mod peer;
+pub mod turi;

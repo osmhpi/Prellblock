@@ -43,14 +43,8 @@ use message::*;
 pub use receiver::Receiver;
 pub use sender::Sender;
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-
-/// A request to the API always has a specific response type.
-pub trait Request: Serialize + Into<RequestData> + Debug {
-    /// The type of the response.
-    type Response: Serialize + DeserializeOwned + Debug;
-}
 
 /// One of the requests.
 #[allow(missing_docs)]

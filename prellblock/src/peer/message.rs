@@ -1,13 +1,14 @@
 //! All message types that can be sent between RPUs.
 
-use super::{Request, RequestData};
+use super::RequestData;
+use balise::Request;
 use serde::{Deserialize, Serialize};
 
 /// Add two numbers.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Add(pub usize, pub usize);
 
-impl Request for Add {
+impl Request<RequestData> for Add {
     type Response = usize;
 }
 
@@ -28,7 +29,7 @@ impl From<Add> for RequestData {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Sub(pub usize, pub usize);
 
-impl Request for Sub {
+impl Request<RequestData> for Sub {
     type Response = usize;
 }
 
@@ -46,7 +47,7 @@ pub struct Ping;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Pong;
 
-impl Request for Ping {
+impl Request<RequestData> for Ping {
     type Response = Pong;
 }
 
