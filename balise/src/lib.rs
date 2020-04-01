@@ -19,8 +19,20 @@ pub use stream::Stream;
 use serde::{de::DeserializeOwned, Serialize};
 use std::fmt::Debug;
 
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
 /// A request to the API always has a specific response type.
 pub trait Request<T>: Serialize + Into<T> + Debug {
     /// The type of the response.
     type Response: Serialize + DeserializeOwned + Debug;
+
+    /// Call the request handler and encode the response.
+    #[cfg(feature = "server")]
+    fn handle(
+        self,
+        handler: impl FnOnce(Self) -> Self::Response,
+    ) -> Result<server::Response, BoxError> {
+        let res = handler(self);
+        Ok(server::Response(serde_json::to_value(&res)?))
+    }
 }

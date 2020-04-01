@@ -7,7 +7,7 @@ use std::{
 
 use super::{Calculator, Pong, RequestData};
 use balise::{
-    server::{Handler, Server},
+    server::{Handler, Response, Server},
     Request,
 };
 
@@ -53,7 +53,7 @@ impl Receiver {
 }
 
 impl Handler<RequestData> for Receiver {
-    fn handle(&self, _addr: &SocketAddr, req: RequestData) -> Result<serde_json::Value, BoxError> {
+    fn handle(&self, _addr: &SocketAddr, req: RequestData) -> Result<Response, BoxError> {
         // handle the actual request
         let res = match req {
             RequestData::Add(params) => {
@@ -71,15 +71,3 @@ impl Handler<RequestData> for Receiver {
         Ok(res?)
     }
 }
-
-trait ReceiverRequest: Request<RequestData> + Sized {
-    fn handle(
-        self,
-        handler: impl FnOnce(Self) -> Self::Response,
-    ) -> Result<serde_json::Value, BoxError> {
-        let res = handler(self);
-        Ok(serde_json::to_value(&res)?)
-    }
-}
-
-impl<T> ReceiverRequest for T where T: Request<RequestData> {}

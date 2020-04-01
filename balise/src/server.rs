@@ -1,6 +1,6 @@
 //! A server for communicating between RPUs.
 
-use super::Request;
+use super::BoxError;
 use serde::de::DeserializeOwned;
 use std::{
     convert::TryInto,
@@ -10,7 +10,10 @@ use std::{
     net::{SocketAddr, TcpListener, TcpStream},
 };
 
-type BoxError = Box<dyn std::error::Error + Send + Sync>;
+/// A transparent response to a `Request`.
+///
+/// Use the `handle` method to create a matching response.
+pub struct Response(pub(crate) serde_json::Value);
 
 /// A Server (server) instance.
 pub struct Server<T, H> {
@@ -121,7 +124,7 @@ where
         let req: T = serde_json::from_slice(req)?;
         log::trace!("Received request from {}: {:?}", addr, req);
         // handle the actual request
-        let res = self.handler.handle(addr, req);
+        let res = self.handler.handle(addr, req).map(|response| response.0);
         log::trace!("Send response to {}: {:?}", addr, res);
         Ok(res?)
     }
@@ -130,17 +133,5 @@ where
 /// Handles a request and returns the corresponding response.
 pub trait Handler<T> {
     /// Handle the request.
-    fn handle(&self, addr: &SocketAddr, req: T) -> Result<serde_json::Value, BoxError>;
+    fn handle(&self, addr: &SocketAddr, req: T) -> Result<Response, BoxError>;
 }
-
-trait ServerRequest<T>: Request<T> + Sized {
-    fn handle(
-        self,
-        handler: impl FnOnce(Self) -> Self::Response,
-    ) -> Result<serde_json::Value, BoxError> {
-        let res = handler(self);
-        Ok(serde_json::to_value(&res)?)
-    }
-}
-
-impl<R, T> ServerRequest<T> for R where R: Request<T> {}

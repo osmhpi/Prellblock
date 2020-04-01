@@ -1,7 +1,7 @@
 //! A server for communicating between RPUs.
 
 use balise::{
-    server::{Handler, Server},
+    server::{Handler, Response, Server},
     Request,
 };
 use client_api::{message::Pong, RequestData};
@@ -45,7 +45,7 @@ impl Turi {
 }
 
 impl Handler<RequestData> for Turi {
-    fn handle(&self, _addr: &SocketAddr, req: RequestData) -> Result<serde_json::Value, BoxError> {
+    fn handle(&self, _addr: &SocketAddr, req: RequestData) -> Result<Response, BoxError> {
         // handle the actual request
         let res = match req {
             RequestData::Ping(params) => params.handle(|_| Pong),
@@ -53,15 +53,3 @@ impl Handler<RequestData> for Turi {
         Ok(res?)
     }
 }
-
-trait TuriRequest: Request<RequestData> + Sized {
-    fn handle(
-        self,
-        handler: impl FnOnce(Self) -> Self::Response,
-    ) -> Result<serde_json::Value, BoxError> {
-        let res = handler(self);
-        Ok(serde_json::to_value(&res)?)
-    }
-}
-
-impl<T> TuriRequest for T where T: Request<RequestData> {}
