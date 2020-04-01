@@ -4,7 +4,7 @@ use balise::{
     server::{Handler, Response, Server},
     Request,
 };
-use client_api::{message::Pong, RequestData};
+use prellblock_client_api::{ClientMessage, Pong};
 use std::net::{SocketAddr, TcpListener};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -44,11 +44,11 @@ impl Turi {
     }
 }
 
-impl Handler<RequestData> for Turi {
-    fn handle(&self, _addr: &SocketAddr, req: RequestData) -> Result<Response, BoxError> {
+impl Handler<ClientMessage> for Turi {
+    fn handle(&self, _addr: &SocketAddr, req: ClientMessage) -> Result<Response, BoxError> {
         // handle the actual request
         let res = match req {
-            RequestData::Ping(params) => params.handle(|_| Pong),
+            ClientMessage::Ping(params) => params.handle(|_| Pong),
         };
         Ok(res?)
     }

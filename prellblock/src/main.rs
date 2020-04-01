@@ -40,26 +40,34 @@ fn main() {
     let opt = Opt::from_args();
     log::debug!("Command line arguments: {:#?}", opt);
 
-    // execute the server in a new thread
-    let turi_handle = opt.turi.map(|turi_addr| {
-        std::thread::spawn(move || {
-            let listener = TcpListener::bind(turi_addr).unwrap();
-            let turi = Turi::new();
-            turi.serve(&listener).unwrap();
-        })
-    });
+    let mut thread_join_handles = Vec::new();
+
+    // execute the external Turi server in a new thread
+    if let Some(turi_addr) = opt.turi {
+        thread_join_handles.push((
+            format!("Turi ({})", turi_addr),
+            std::thread::spawn(move || {
+                let listener = TcpListener::bind(turi_addr).unwrap();
+                let turi = Turi::new();
+                turi.serve(&listener).unwrap();
+            }),
+        ))
+    }
 
     let calculator = Calculator::new();
     let calculator = Arc::new(calculator.into());
 
     // execute the server in a new thread
-    let server_handle = opt.bind.map(|bind_addr| {
-        std::thread::spawn(move || {
-            let listener = TcpListener::bind(bind_addr).unwrap();
-            let server = Receiver::new(calculator);
-            server.serve(&listener).unwrap();
-        })
-    });
+    if let Some(bind_addr) = opt.bind {
+        thread_join_handles.push((
+            format!("Peer Receiver ({})", bind_addr),
+            std::thread::spawn(move || {
+                let listener = TcpListener::bind(bind_addr).unwrap();
+                let receiver = Receiver::new(calculator);
+                receiver.serve(&listener).unwrap();
+            }),
+        ))
+    }
 
     // execute the test client
     if let Some(peer_addr) = opt.peer {
@@ -75,19 +83,12 @@ fn main() {
         );
     }
 
-    // wait for the turi thread
-    if let Some(turi_handle) = turi_handle {
-        match turi_handle.join() {
-            Err(err) => log::error!("Turi error occured: {:?}", err),
-            Ok(()) => log::info!("No error occured. Going to hunt some mice. I meant *NICE*. Bye."),
+    // wait for all threads
+    for (name, join_handle) in thread_join_handles {
+        match join_handle.join() {
+            Err(err) => log::error!("Error occured waiting for {}: {:?}", name, err),
+            Ok(()) => log::info!("Ended {}.", name),
         };
     }
-
-    // wait for the server thread
-    if let Some(server_handle) = server_handle {
-        match server_handle.join() {
-            Err(err) => log::error!("Server error occured: {:?}", err),
-            Ok(()) => log::info!("No error occured. Going to hunt some mice. I meant *NICE*. Bye."),
-        };
-    }
+    log::info!("Going to hunt some mice. I meant *NICE*. Bye.");
 }

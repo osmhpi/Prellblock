@@ -67,25 +67,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "client"
-version = "0.1.0"
-dependencies = [
- "balise",
- "client-api",
- "log",
- "pretty_env_logger",
- "structopt",
-]
-
-[[package]]
-name = "client-api"
-version = "0.1.0"
-dependencies = [
- "balise",
- "serde",
-]
-
-[[package]]
 name = "env_logger"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -163,12 +144,31 @@ name = "prellblock"
 version = "0.1.0"
 dependencies = [
  "balise",
- "client-api",
  "lazy_static",
  "log",
+ "prellblock-client-api",
  "pretty_env_logger",
  "serde",
  "structopt",
+]
+
+[[package]]
+name = "prellblock-client"
+version = "0.1.0"
+dependencies = [
+ "balise",
+ "log",
+ "prellblock-client-api",
+ "pretty_env_logger",
+ "structopt",
+]
+
+[[package]]
+name = "prellblock-client-api"
+version = "0.1.0"
+dependencies = [
+ "balise",
+ "serde",
 ]
 
 [[package]]

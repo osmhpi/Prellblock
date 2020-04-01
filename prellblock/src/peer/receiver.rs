@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use super::{Calculator, Pong, RequestData};
+use super::{Calculator, PeerMessage, Pong};
 use balise::{
     server::{Handler, Response, Server},
     Request,
@@ -52,17 +52,17 @@ impl Receiver {
     }
 }
 
-impl Handler<RequestData> for Receiver {
-    fn handle(&self, _addr: &SocketAddr, req: RequestData) -> Result<Response, BoxError> {
+impl Handler<PeerMessage> for Receiver {
+    fn handle(&self, _addr: &SocketAddr, req: PeerMessage) -> Result<Response, BoxError> {
         // handle the actual request
         let res = match req {
-            RequestData::Add(params) => {
+            PeerMessage::Add(params) => {
                 params.handle(|params| self.calculator.lock().unwrap().add(params.0, params.1))
             }
-            RequestData::Sub(params) => {
+            PeerMessage::Sub(params) => {
                 params.handle(|params| self.calculator.lock().unwrap().sub(params.0, params.1))
             }
-            RequestData::Ping(params) => params.handle(|_| Pong),
+            PeerMessage::Ping(params) => params.handle(|_| Pong),
         };
         log::debug!(
             "The calculator's last resort is: {}.",
