@@ -19,7 +19,7 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 ///
 /// let calculator = Calculator::new();
 /// let calculator = Arc::new(calculator.into());
-/// let bind_addr = "127.0.0.1:1234";
+/// let bind_addr = "127.0.0.1:0"; // replace 0 with a real port
 ///
 /// let listener = TcpListener::bind(bind_addr).unwrap();
 /// let receiver = Receiver::new(calculator);
