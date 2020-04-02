@@ -3,8 +3,8 @@
 
 //! An example client used to simulate clients.
 
-use client::client::Client;
-use client_api::message;
+use prellblock_client::Client;
+use prellblock_client_api::message;
 use std::net::SocketAddr;
 use structopt::StructOpt;
 
@@ -16,7 +16,7 @@ struct Opt {
 
 fn main() {
     pretty_env_logger::init();
-    log::info!("Kitty =^.^=");
+    log::info!("Little Kitty =^.^=");
 
     let opt = Opt::from_args();
     log::debug!("Command line arguments: {:#?}", opt);

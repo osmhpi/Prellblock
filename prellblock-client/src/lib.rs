@@ -3,4 +3,6 @@
 
 //! A Library Crate for external Clients - Malte (TM)
 
-pub mod client;
+mod client;
+
+pub use client::Client;

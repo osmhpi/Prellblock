@@ -2,7 +2,7 @@
 
 mod connection_pool;
 
-use super::Request;
+use super::{BoxError, Request};
 use serde::Serialize;
 use std::{
     convert::TryInto,
@@ -12,8 +12,6 @@ use std::{
     ops::DerefMut,
     time::{Duration, Instant},
 };
-
-type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 /// A client instance.
 ///

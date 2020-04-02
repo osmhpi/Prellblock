@@ -31,26 +31,34 @@
 // See https://doc.rust-lang.org/book/ch19-06-macros.html
 // and https://rustbyexample.com/macros.html
 
-#![allow(clippy::wildcard_imports)]
-
 mod calculator;
-pub mod message;
 mod receiver;
 mod sender;
 
 pub use calculator::Calculator;
-use message::*;
 pub use receiver::Receiver;
 pub use sender::Sender;
 
+use balise::define_api;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-/// One of the requests.
-#[allow(missing_docs)]
+/// Play ping pong. See [`Ping`](message/struct.Ping.html).
 #[derive(Debug, Serialize, Deserialize)]
-pub enum RequestData {
-    Add(Add),
-    Sub(Sub),
-    Ping(Ping),
+pub struct Pong;
+
+define_api! {
+    /// The message API module for communication between RPUs.
+    mod message;
+    /// One of the requests.
+    pub enum PeerMessage {
+        /// Add two numbers.
+        Add(usize, usize) => usize,
+
+        /// Subtract two numbers.
+        Sub(usize, usize) => usize,
+
+        /// Ping Message. See [`Pong`](../struct.Pong.html).
+        Ping => Pong,
+    }
 }
