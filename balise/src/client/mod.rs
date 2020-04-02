@@ -69,24 +69,24 @@ impl<T> Client<T> {
 
         let res = loop {
             let stream = connection_pool::POOL.stream(self.addr)?;
-            let addr = stream.peer_addr()?;
+            let addr = stream.tcp_stream().peer_addr()?;
 
             if Instant::now() > deadline {
                 return Err("Timeout: Could not send request.".into());
             }
 
             // check TCP connection functional
-            stream.set_nonblocking(true)?;
+            stream.tcp_stream().set_nonblocking(true)?;
 
             //read one byte without removing from message queue
             let mut buf = [0; 1];
-            match stream.peek(&mut buf) {
+            match stream.tcp_stream().peek(&mut buf) {
                 Ok(n) => {
                     if n > 0 {
                         log::warn!("The Receiver is not working correctly!");
                     }
                     // no connection
-                    let local_addr = stream.local_addr().unwrap();
+                    let local_addr = stream.tcp_stream().local_addr().unwrap();
                     log::trace!(
                         "TCP connection from {} to {} seems to be broken.",
                         local_addr,
@@ -95,7 +95,7 @@ impl<T> Client<T> {
                 }
                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                     // blocking means stream is ok
-                    stream.set_nonblocking(false)?;
+                    stream.tcp_stream().set_nonblocking(false)?;
                     break (stream, addr);
                 }
                 Err(e) => return Err(e.into()),

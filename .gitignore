@@ -1,4 +1,6 @@
 /target
+*.pem
+*.pfx
 
 # macOS :(
 .DS_Store
