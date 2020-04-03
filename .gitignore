@@ -1,6 +1,7 @@
 /target
-*.pem
-*.pfx
 
 # macOS :(
 .DS_Store
+
+# Certificates and stuff
+/crypto

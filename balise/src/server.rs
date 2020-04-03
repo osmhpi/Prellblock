@@ -7,15 +7,30 @@ use std::{
     fmt::Debug,
     io::{self, Read, Write},
     marker::PhantomData,
-    net::{SocketAddr, TcpListener, TcpStream},
+    net::{SocketAddr, TcpListener},
+    sync::Arc,
 };
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
+#[cfg(feature = "tls")]
+use native_tls::{Identity, Protocol, TlsAcceptor};
+
+#[cfg(not(feature = "tls"))]
+struct TlsAcceptor;
+
+#[cfg(not(feature = "tls"))]
+impl TlsAcceptor {
+    fn accept<T>(&self, stream: T) -> Result<T, String> {
+        Ok(stream)
+    }
+}
 
 /// A Server (server) instance.
 pub struct Server<T, H> {
     request_data: PhantomData<T>,
     handler: H,
+    acceptor: Arc<TlsAcceptor>,
 }
 
 impl<T, H> Clone for Server<T, H>
@@ -26,6 +41,7 @@ where
         Self {
             request_data: PhantomData,
             handler: self.handler.clone(),
+            acceptor: self.acceptor.clone(),
         }
     }
 }
@@ -39,11 +55,36 @@ where
     ///
     /// The `handler` needs to provide a `handle` callback script to handle requests on the server.
     #[must_use]
+    #[cfg(not(feature = "tls"))]
     pub fn new(handler: H) -> Self {
         Self {
             request_data: PhantomData,
             handler,
+            acceptor: Arc::new(TlsAcceptor),
         }
+    }
+
+    /// Create a new TLS server instance.
+    ///
+    /// The `handler` needs to provide a `handle` callback script to handle requests on the server.
+    /// The `identity_path` is a file path to a `.pfx` file containing the server's identity.
+    #[must_use]
+    #[cfg(feature = "tls")]
+    pub fn new(handler: H, identity_path: String, password: String) -> Result<Self, BoxError> {
+        log::trace!("Load server identity from {}.", identity_path);
+        let identity = std::fs::read(identity_path)?;
+        let identity = Identity::from_pkcs12(&identity, &password)?;
+
+        let acceptor = TlsAcceptor::builder(identity)
+            .min_protocol_version(Some(Protocol::Tlsv12))
+            .build()?;
+        let acceptor = Arc::new(acceptor);
+
+        Ok(Self {
+            request_data: PhantomData,
+            handler,
+            acceptor,
+        })
     }
 
     /// The main server loop.
@@ -64,9 +105,15 @@ where
 
             // handle the client in a new thread
             std::thread::spawn(move || {
-                let peer_addr = stream.peer_addr().unwrap();
+                let peer_addr = stream.peer_addr().expect("Peer address");
                 log::info!("Connected: {}", peer_addr);
-                match clone_self.handle_client(stream) {
+
+                let result = clone_self
+                    .acceptor
+                    .accept(stream)
+                    .map_err(Into::into) //rust is geil.
+                    .and_then(|stream| clone_self.handle_client(peer_addr, stream));
+                match result {
                     Ok(()) => log::info!("Disconnected"),
                     Err(err) => log::warn!("Server error: {:?}", err),
                 }
@@ -75,8 +122,10 @@ where
         Ok(())
     }
 
-    fn handle_client(self, mut stream: TcpStream) -> Result<(), BoxError> {
-        let addr = stream.peer_addr().expect("Peer address");
+    fn handle_client<S>(self, addr: SocketAddr, mut stream: S) -> Result<(), BoxError>
+    where
+        S: Read + Write,
+    {
         loop {
             // read message length
             let mut len_buf = [0; 4];
@@ -142,5 +191,33 @@ trait ServerRequest<T>: Request<T> + Sized {
         Ok(serde_json::to_value(&res)?)
     }
 }
+
+// fn serve() {
+//     let identiy = File::Read("identity.pfx")?;
+//     let identity = Identity::from_pkcs12(&identity, "").unwrap();
+
+//     let listener = TcpListener::bind("127.0.0.1:8443").unwrap();
+//     let acceptor = TlsAcceptor::new(identity).unwrap();
+//     let acceptor = Arc::new(acceptor);
+
+//     fn handle_client(stream: TlsStream<TcpStream>) {
+//         log::info!("Connected to Client");
+//         // ...
+//         thread::sleep(Duration::new(2, 0));
+//     }
+//     log::info!("Starting to listen for incoming Streams");
+//     for stream in listener.incoming() {
+//         match stream {
+//             Ok(stream) => {
+//                 let acceptor = acceptor.clone();
+//                 thread::spawn(move || {
+//                     let stream = acceptor.accept(stream).unwrap();
+//                     handle_client(stream);
+//                 });
+//             }
+//             Err(_e) => { /* connection failed */ }
+//         }
+//     }
+// }
 
 impl<R, T> ServerRequest<T> for R where R: Request<T> {}

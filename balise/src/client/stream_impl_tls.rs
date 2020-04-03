@@ -15,7 +15,9 @@ impl<'a> super::StreamGuard<'a> {
 
 pub fn connect(addr: &SocketAddr) -> Result<StreamImpl, BoxError> {
     // open certificate file
-    let buffer = fs::read("cert.pem")?;
+    let buffer = fs::read("../crypto/ca_127.0.0.1.cert")?;
+
+    log::trace!("{}", String::from_utf8_lossy(&buffer));
 
     //load certificate from file
     let cert = Certificate::from_pem(&buffer)?;
@@ -23,7 +25,7 @@ pub fn connect(addr: &SocketAddr) -> Result<StreamImpl, BoxError> {
     // new builder with trusted root cert
     let mut builder = TlsConnector::builder();
     builder.add_root_certificate(cert);
-    let connector = builder.build().unwrap();
+    let connector = builder.build()?;
 
     // connect with tcp stream
     let stream = TcpStream::connect(addr)?;
