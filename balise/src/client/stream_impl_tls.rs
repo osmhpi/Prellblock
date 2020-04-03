@@ -15,7 +15,7 @@ impl<'a> super::StreamGuard<'a> {
 
 pub fn connect(addr: &SocketAddr) -> Result<StreamImpl, BoxError> {
     // open certificate file
-    let buffer = fs::read("../crypto/ca_127.0.0.1.cert")?;
+    let buffer = fs::read("../crypto/turi.cert.pem")?;
 
     log::trace!("{}", String::from_utf8_lossy(&buffer));
 

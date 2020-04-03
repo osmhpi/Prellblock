@@ -2,7 +2,7 @@
 
 # CONFIGURATION
 crypto_folder="crypto"
-ca_common_name="127.0.0.1"
+ca_common_name="localhost"
 country=DE
 days=3562
 password=prellblock
@@ -26,11 +26,13 @@ if [ ! -f "$ca.cert" ]; then
 fi
 
 # Generate server key
-openssl ecparam -genkey -name secp384r1 -noout -out "$server.key"
-# openssl genrsa 4096 > "$server.key"
+# openssl ecparam -genkey -name secp384r1 -noout -out "$server.key"
+openssl genrsa 4096 > "$server.pem"
 # Generate signing request
-openssl req -new -sha512 -nodes -key "$server.key" -subj "/CN=$cn/C=$country" -out "$server.csr"
+#openssl req -new -sha512 -nodes -key "$server.key" -subj "/CN=$cn/C=$country" -out "$server.csr"
 # Sign with CA
-openssl x509 -req -sha512 -days "$days" -in "$server.csr" -CA "$ca.cert" -CAkey "$ca.key" -CAcreateserial -out "$server.cert"
+# openssl x509 -req -sha512 -days "$days" -in "$server.csr" -CA "$ca.cert" -CAkey "$ca.key" -CAcreateserial -out "$server.cert"
+openssl req -x509 -new -key "$server.pem" -out "$server.cert.pem" -subj "/CN=127.0.0.1/C=DE"
 # Convert to pfx
-openssl pkcs12 -export -in "$server.cert" -inkey "$server.key" -out "$server.pfx" -certfile "$ca.cert" -passout "pass:$password"
+# openssl pkcs12 -export -in "$server.cert" -inkey "$server.key" -out "$server.pfx" -certfile "$ca.cert" -passout "pass:$password"
+openssl pkcs12 -export -in "$server.cert.pem" -inkey "$server.pem" -out "$server.pfx" -passout pass:$password

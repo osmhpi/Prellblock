@@ -41,7 +41,7 @@ impl Turi {
     pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
         let server = Server::new(
             self,
-            "crypto/ca_127.0.0.1.pfx".to_string(),
+            "crypto/turi.pfx".to_string(),
             "prellblock".to_string(),
         )?;
         server.serve(listener)
