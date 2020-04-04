@@ -68,12 +68,11 @@ where
     ///
     /// The `handler` needs to provide a `handle` callback script to handle requests on the server.
     /// The `identity_path` is a file path to a `.pfx` file containing the server's identity.
-    #[must_use]
     #[cfg(feature = "tls")]
-    pub fn new(handler: H, identity_path: String, password: String) -> Result<Self, BoxError> {
-        log::trace!("Load server identity from {}.", identity_path);
+    pub fn new(handler: H, identity_path: String, password: &str) -> Result<Self, BoxError> {
+        log::trace!("Loading server identity from {}.", identity_path);
         let identity = std::fs::read(identity_path)?;
-        let identity = Identity::from_pkcs12(&identity, &password)?;
+        let identity = Identity::from_pkcs12(&identity, password)?;
 
         let acceptor = TlsAcceptor::builder(identity)
             .min_protocol_version(Some(Protocol::Tlsv12))
