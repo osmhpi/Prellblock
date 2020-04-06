@@ -16,7 +16,6 @@ impl<'a> super::StreamGuard<'a> {
 pub fn connect(addr: &SocketAddr) -> Result<StreamImpl, BoxError> {
     // open certificate file
     let buffer = fs::read("./certificates/ca/ca_prellblock-ca.cert")?;
-    log::trace!("{}", String::from_utf8_lossy(&buffer));
     //load certificate from file
     let cert = Certificate::from_pem(&buffer)?;
     // new builder with trusted root cert

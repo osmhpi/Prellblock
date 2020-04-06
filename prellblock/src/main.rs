@@ -24,13 +24,29 @@ use structopt::StructOpt;
 #[derive(StructOpt, Debug)]
 struct Opt {
     /// The address on which to open the RPU communication server.
-    #[structopt(short, long)]
+    #[structopt(
+        short,
+        long,
+        help = "The Address and port on which to bind the RPU Receiver."
+    )]
     bind: Option<SocketAddr>,
 
-    #[structopt(short, long)]
+    #[structopt(
+        short,
+        long,
+        help = "The peer to communicate with through the RPU Sender."
+    )]
     peer: Option<SocketAddr>,
-    #[structopt(short, long)]
+
+    #[structopt(long, help = "The address and port on which to bind the Turi.")]
     turi: Option<SocketAddr>,
+
+    #[structopt(
+        short = "c",
+        long = "cert",
+        help = "Path to a .pfx certificate identity signed by the CA."
+    )]
+    tls_identity: Option<String>,
 }
 
 fn main() {
@@ -40,26 +56,41 @@ fn main() {
     let opt = Opt::from_args();
     log::debug!("Command line arguments: {:#?}", opt);
 
-    // execute the server in a new thread
-    let turi_handle = opt.turi.map(|turi_addr| {
-        std::thread::spawn(move || {
-            let listener = TcpListener::bind(turi_addr).unwrap();
-            let turi = Turi::new();
-            turi.serve(&listener).unwrap();
-        })
-    });
+    // execute the turi in a new thread
+
+    let turi_handle = if let Some(turi_addr) = opt.turi {
+        if let Some(tls_identity) = opt.tls_identity.clone() {
+            Some(std::thread::spawn(move || {
+                let listener = TcpListener::bind(turi_addr).unwrap();
+                let turi = Turi::new(tls_identity);
+                turi.serve(&listener).unwrap();
+            }))
+        } else {
+            log::error!("No TLS identity given for Turi.");
+            None
+        }
+    } else {
+        None
+    };
 
     let calculator = Calculator::new();
     let calculator = Arc::new(calculator.into());
 
-    // execute the server in a new thread
-    let server_handle = opt.bind.map(|bind_addr| {
-        std::thread::spawn(move || {
-            let listener = TcpListener::bind(bind_addr).unwrap();
-            let server = Receiver::new(calculator);
-            server.serve(&listener).unwrap();
-        })
-    });
+    // execute the rpu server in a new thread
+    let server_handle = if let Some(bind_addr) = opt.bind {
+        if let Some(tls_identity) = opt.tls_identity.clone() {
+            Some(std::thread::spawn(move || {
+                let listener = TcpListener::bind(bind_addr).unwrap();
+                let server = Receiver::new(calculator, tls_identity);
+                server.serve(&listener).unwrap();
+            }))
+        } else {
+            log::error!("No TLS identity given for Receiver.");
+            None
+        }
+    } else {
+        None
+    };
 
     // execute the test client
     if let Some(peer_addr) = opt.peer {
