@@ -8,7 +8,7 @@
 //! as well as transmitting signalling information in a digital telegram to the train.
 //!
 //! ## Example
-//! ```
+//! ```no_run
 //! use serde::{Deserialize, Serialize};
 //!
 //! // ---------------- Define API definition ----------------
@@ -44,8 +44,19 @@
 //! impl PingAPIServer {
 //!     /// The main server loop.
 //!     pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
-//!         let server = Server::new(self);
-//!         server.serve(listener)
+//!         #[cfg(not(feature = "tls"))]
+//!         {
+//!             let server = Server::new(self);
+//!             server.serve(listener);
+//!         }
+//!
+//!         #[cfg(feature = "tls")]
+//!         {
+//!             match Server::new(self, "path_to.pfx".to_string(), "password") {
+//!                 Ok(server) => server.serve(listener),
+//!                 Err(err) => panic!("Could not start server: {}.", err),
+//!             }
+//!         }
 //!     }
 //! }
 //!

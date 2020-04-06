@@ -15,5 +15,5 @@ pretty_env_logger = "0.4.0"
 serde = { version = "1.0.105", features = ["derive"] }
 structopt = "0.3.12"
 lazy_static = "1.4.0"
-balise = { path = "../balise", features = ["server", "client"] }
+balise = { path = "../balise", features = ["server", "client", "tls"] }
 prellblock-client-api = { path = "../prellblock-client-api" }

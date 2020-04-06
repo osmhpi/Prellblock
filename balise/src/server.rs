@@ -7,7 +7,8 @@ use std::{
     fmt::Debug,
     io::{self, Read, Write},
     marker::PhantomData,
-    net::{SocketAddr, TcpListener, TcpStream},
+    net::{SocketAddr, TcpListener},
+    sync::Arc,
 };
 
 /// A transparent response to a `Request`.
@@ -15,10 +16,24 @@ use std::{
 /// Use the `handle` method to create a matching response.
 pub struct Response(pub(crate) serde_json::Value);
 
+#[cfg(feature = "tls")]
+use native_tls::{Identity, Protocol, TlsAcceptor};
+
+#[cfg(not(feature = "tls"))]
+struct TlsAcceptor;
+
+#[cfg(not(feature = "tls"))]
+impl TlsAcceptor {
+    fn accept<T>(&self, stream: T) -> Result<T, String> {
+        Ok(stream)
+    }
+}
+
 /// A Server (server) instance.
 pub struct Server<T, H> {
     request_data: PhantomData<T>,
     handler: H,
+    acceptor: Arc<TlsAcceptor>,
 }
 
 impl<T, H> Clone for Server<T, H>
@@ -29,6 +44,7 @@ where
         Self {
             request_data: PhantomData,
             handler: self.handler.clone(),
+            acceptor: self.acceptor.clone(),
         }
     }
 }
@@ -42,11 +58,35 @@ where
     ///
     /// The `handler` needs to provide a `handle` callback script to handle requests on the server.
     #[must_use]
+    #[cfg(not(feature = "tls"))]
     pub fn new(handler: H) -> Self {
         Self {
             request_data: PhantomData,
             handler,
+            acceptor: Arc::new(TlsAcceptor),
         }
+    }
+
+    /// Create a new TLS server instance.
+    ///
+    /// The `handler` needs to provide a `handle` callback script to handle requests on the server.
+    /// The `identity_path` is a file path to a `.pfx` file containing the server's identity.
+    #[cfg(feature = "tls")]
+    pub fn new(handler: H, identity_path: String, password: &str) -> Result<Self, BoxError> {
+        log::trace!("Loading server identity from {}.", identity_path);
+        let identity = std::fs::read(identity_path)?;
+        let identity = Identity::from_pkcs12(&identity, password)?;
+
+        let acceptor = TlsAcceptor::builder(identity)
+            .min_protocol_version(Some(Protocol::Tlsv12))
+            .build()?;
+        let acceptor = Arc::new(acceptor);
+
+        Ok(Self {
+            request_data: PhantomData,
+            handler,
+            acceptor,
+        })
     }
 
     /// The main server loop.
@@ -67,9 +107,15 @@ where
 
             // handle the client in a new thread
             std::thread::spawn(move || {
-                let peer_addr = stream.peer_addr().unwrap();
+                let peer_addr = stream.peer_addr().expect("Peer address");
                 log::info!("Connected: {}", peer_addr);
-                match clone_self.handle_client(stream) {
+
+                let result = clone_self
+                    .acceptor
+                    .accept(stream)
+                    .map_err(Into::into) //rust is geil.
+                    .and_then(|stream| clone_self.handle_client(peer_addr, stream));
+                match result {
                     Ok(()) => log::info!("Disconnected"),
                     Err(err) => log::warn!("Server error: {:?}", err),
                 }
@@ -78,8 +124,10 @@ where
         Ok(())
     }
 
-    fn handle_client(self, mut stream: TcpStream) -> Result<(), BoxError> {
-        let addr = stream.peer_addr().expect("Peer address");
+    fn handle_client<S>(self, addr: SocketAddr, mut stream: S) -> Result<(), BoxError>
+    where
+        S: Read + Write,
+    {
         loop {
             // read message length
             let mut len_buf = [0; 4];

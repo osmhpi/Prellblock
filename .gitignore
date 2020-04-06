@@ -2,3 +2,7 @@
 
 # macOS :(
 .DS_Store
+
+# Certificates and stuff
+/certificates/*
+!/certificates/generate_certificate.sh

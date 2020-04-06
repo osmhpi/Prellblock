@@ -2,7 +2,7 @@
 //!
 //! # Example
 //!
-//! ```
+//! ```no_run
 //! use prellblock::peer::{message, Calculator, Receiver, Sender};
 //! use std::{net::TcpListener, sync::Arc};
 //!
@@ -15,7 +15,7 @@
 //! let peer_addr = listener.local_addr().unwrap(); // address with allocated port
 //!
 //! std::thread::spawn(move || {
-//!     let receiver = Receiver::new(calculator);
+//!     let receiver = Receiver::new(calculator, "path_to_pfx.pfx".to_string());
 //!     receiver.serve(&listener).unwrap();
 //! });
 //!
