@@ -28,7 +28,7 @@ type ArcMut<T> = Arc<Mutex<T>>;
 /// let bind_addr = "127.0.0.1:0"; // replace 0 with a real port
 ///
 /// let listener = TcpListener::bind(bind_addr).unwrap();
-/// let receiver = Receiver::new(calculator);
+/// let receiver = Receiver::new(calculator, "path_to_pfx.pfx".to_string());
 /// std::thread::spawn(move || {
 ///     receiver.serve(&listener).unwrap();
 /// });
@@ -36,18 +36,23 @@ type ArcMut<T> = Arc<Mutex<T>>;
 #[derive(Clone)]
 pub struct Receiver {
     calculator: ArcMut<Calculator>,
+    tls_identity: String,
 }
 
 impl Receiver {
     /// Create a new receiver instance.
     #[must_use]
-    pub fn new(calculator: ArcMut<Calculator>) -> Self {
-        Self { calculator }
+    pub fn new(calculator: ArcMut<Calculator>, tls_identity: String) -> Self {
+        Self {
+            calculator,
+            tls_identity,
+        }
     }
 
     /// The main server loop.
     pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
-        let server = Server::new(self);
+        let tls_identity = self.tls_identity.clone();
+        let server = Server::new(self, tls_identity, "prellblock")?;
         server.serve(listener)
     }
 }

@@ -1,15 +1,24 @@
+#[cfg(feature = "tls")]
+#[path = "stream_impl_tls.rs"]
+mod stream_impl;
+
+#[cfg(not(feature = "tls"))]
+#[path = "stream_impl_tcp.rs"]
+mod stream_impl;
+
 use super::BoxError;
 use lazy_static::lazy_static;
 use std::{
     collections::HashMap,
-    net::{SocketAddr, TcpStream},
+    net::SocketAddr,
     ops::{Deref, DerefMut},
     sync::Mutex,
     time::Duration,
 };
+use stream_impl::StreamImpl;
 
 pub struct ConnectionPool {
-    streams: Mutex<HashMap<SocketAddr, Vec<TcpStream>>>,
+    streams: Mutex<HashMap<SocketAddr, Vec<StreamImpl>>>,
     timeout: Duration,
 }
 
@@ -29,12 +38,13 @@ impl ConnectionPool {
             Some(streams) => match streams.pop() {
                 None => self.connect(&addr),
                 Some(stream) => {
-                    match stream.take_error() {
-                        Ok(None) => Ok(stream),
-                        // arbitrary error with the socket
-                        // or an error while retrieving the error
-                        _ => self.connect(&addr),
-                    }
+                    Ok(stream)
+                    // match stream.take_error() {
+                    //     Ok(None) => Ok(stream),
+                    //     // arbitrary error with the socket
+                    //     // or an error while retrieving the error
+                    //     _ => self.connect(&addr),
+                    // }
                 }
             },
             None => self.connect(&addr),
@@ -46,7 +56,7 @@ impl ConnectionPool {
         })
     }
 
-    fn add_stream(&self, addr: SocketAddr, stream: TcpStream) {
+    fn add_stream(&self, addr: SocketAddr, stream: StreamImpl) {
         let mut streams = self.streams.lock().unwrap();
         match streams.get_mut(&addr) {
             None => {
@@ -60,18 +70,19 @@ impl ConnectionPool {
         }
     }
 
-    fn connect(&self, addr: &SocketAddr) -> Result<TcpStream, BoxError> {
+    fn connect(&self, addr: &SocketAddr) -> Result<StreamImpl, BoxError> {
         let mut seconds = Duration::from_secs(0);
         let delay = Duration::from_secs(1);
         loop {
-            let stream = TcpStream::connect(addr);
+            let stream = stream_impl::connect(addr);
             if stream.is_ok() || seconds >= self.timeout {
                 break Ok(stream?);
             }
             log::warn!(
-                "Couldn't connect to server at {}, retrying in {:?}.",
+                "Couldn't connect to server at {}, retrying in {:?}: {}",
                 addr,
-                delay
+                delay,
+                stream.unwrap_err(),
             );
             std::thread::sleep(delay);
             seconds += delay;
@@ -80,7 +91,7 @@ impl ConnectionPool {
 }
 
 pub struct StreamGuard<'a> {
-    stream: TcpStream,
+    stream: StreamImpl,
     addr: SocketAddr,
     pool: &'a ConnectionPool,
 }
@@ -92,16 +103,16 @@ impl<'a> StreamGuard<'a> {
     }
 }
 
-/// This is needed for accessing `TcpStream`'s methods on `StreamGuard`.
+/// This is needed for accessing `StreamImpl`'s methods on `StreamGuard`.
 impl<'a> Deref for StreamGuard<'a> {
-    type Target = TcpStream;
-    fn deref(&self) -> &TcpStream {
+    type Target = StreamImpl;
+    fn deref(&self) -> &StreamImpl {
         &self.stream
     }
 }
 
 impl<'a> DerefMut for StreamGuard<'a> {
-    fn deref_mut(&mut self) -> &mut TcpStream {
+    fn deref_mut(&mut self) -> &mut StreamImpl {
         &mut self.stream
     }
 }
