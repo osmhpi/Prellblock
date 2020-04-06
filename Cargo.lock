@@ -405,8 +405,10 @@ version = "0.1.0"
 dependencies = [
  "balise",
  "log",
+ "pinxit",
  "prellblock-client-api",
  "pretty_env_logger",
+ "serde_json",
  "structopt",
 ]
 
@@ -415,7 +417,9 @@ name = "prellblock-client-api"
 version = "0.1.0"
 dependencies = [
  "balise",
+ "pinxit",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

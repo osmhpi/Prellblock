@@ -4,6 +4,7 @@
 //! Library Crate used for Communication between external Clients and internal RPUs.
 
 use balise::define_api;
+use pinxit::{PeerId, Signable, Signature};
 use serde::{Deserialize, Serialize};
 
 /// Play ping pong. See [`Ping`](message/struct.Ping.html).
@@ -17,5 +18,24 @@ define_api! {
     pub enum ClientMessage {
         /// Ping Message. See [`Pong`](../struct.Pong.html).
         Ping => Pong,
+        /// Simple transaction Message. Will write a key:value pair.
+        SetValue(PeerId, String,serde_json::Value, Signature) => (),
+    }
+}
+
+/// The transaction message for key:value creation.
+#[derive(Debug, Serialize)]
+pub struct TransactionMessage {
+    /// The key.
+    pub key: String,
+    /// The value.
+    pub value: serde_json::Value,
+}
+
+impl Signable for TransactionMessage {
+    type Message = String;
+    type Error = serde_json::error::Error;
+    fn message(&self) -> Result<Self::Message, Self::Error> {
+        serde_json::to_string(self)
     }
 }

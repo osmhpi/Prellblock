@@ -60,15 +60,14 @@ impl Receiver {
 impl Handler<PeerMessage> for Receiver {
     fn handle(&self, _addr: &SocketAddr, req: PeerMessage) -> Result<Response, BoxError> {
         // handle the actual request
-        let res = match req {
-            PeerMessage::Add(params) => {
-                params.handle(|params| self.calculator.lock().unwrap().add(params.0, params.1))
-            }
-            PeerMessage::Sub(params) => {
-                params.handle(|params| self.calculator.lock().unwrap().sub(params.0, params.1))
-            }
-            PeerMessage::Ping(params) => params.handle(|_| Pong),
-        };
+        let res =
+            match req {
+                PeerMessage::Add(params) => params
+                    .handle(|params| Ok(self.calculator.lock().unwrap().add(params.0, params.1))),
+                PeerMessage::Sub(params) => params
+                    .handle(|params| Ok(self.calculator.lock().unwrap().sub(params.0, params.1))),
+                PeerMessage::Ping(params) => params.handle(|_| Ok(Pong)),
+            };
         log::debug!(
             "The calculator's last resort is: {}.",
             self.calculator.lock().unwrap().last_result()
