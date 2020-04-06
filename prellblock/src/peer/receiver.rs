@@ -47,7 +47,7 @@ impl Receiver {
 
     /// The main server loop.
     pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
-        let server = Server::new(self);
+        let server = Server::new(self, "crypto/peer.pfx".to_string(), "prellblock")?;
         server.serve(listener)
     }
 }

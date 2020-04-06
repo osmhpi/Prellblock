@@ -79,9 +79,10 @@ impl ConnectionPool {
                 break Ok(stream?);
             }
             log::warn!(
-                "Couldn't connect to server at {}, retrying in {:?}.",
+                "Couldn't connect to server at {}, retrying in {:?}: {}",
                 addr,
-                delay
+                delay,
+                stream.unwrap_err(),
             );
             std::thread::sleep(delay);
             seconds += delay;

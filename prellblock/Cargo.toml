@@ -16,5 +16,5 @@ serde = { version = "1.0.105", features = ["derive"] }
 serde_json = "1.0.48"
 structopt = "0.3.12"
 lazy_static = "1.4.0"
-balise = { path = "../balise", features = ["server", "client"] }
+balise = { path = "../balise", features = ["server", "client", "tls"] }
 client-api = { path = "../client-api" }
