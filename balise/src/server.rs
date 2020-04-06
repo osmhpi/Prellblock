@@ -1,6 +1,6 @@
 //! A server for communicating between RPUs.
 
-use super::Request;
+use super::BoxError;
 use serde::de::DeserializeOwned;
 use std::{
     convert::TryInto,
@@ -11,7 +11,10 @@ use std::{
     sync::Arc,
 };
 
-type BoxError = Box<dyn std::error::Error + Send + Sync>;
+/// A transparent response to a `Request`.
+///
+/// Use the `handle` method to create a matching response.
+pub struct Response(pub(crate) serde_json::Value);
 
 #[cfg(feature = "tls")]
 use native_tls::{Identity, Protocol, TlsAcceptor};
@@ -169,7 +172,7 @@ where
         let req: T = serde_json::from_slice(req)?;
         log::trace!("Received request from {}: {:?}", addr, req);
         // handle the actual request
-        let res = self.handler.handle(addr, req);
+        let res = self.handler.handle(addr, req).map(|response| response.0);
         log::trace!("Send response to {}: {:?}", addr, res);
         Ok(res?)
     }
@@ -178,45 +181,5 @@ where
 /// Handles a request and returns the corresponding response.
 pub trait Handler<T> {
     /// Handle the request.
-    fn handle(&self, addr: &SocketAddr, req: T) -> Result<serde_json::Value, BoxError>;
+    fn handle(&self, addr: &SocketAddr, req: T) -> Result<Response, BoxError>;
 }
-
-trait ServerRequest<T>: Request<T> + Sized {
-    fn handle(
-        self,
-        handler: impl FnOnce(Self) -> Self::Response,
-    ) -> Result<serde_json::Value, BoxError> {
-        let res = handler(self);
-        Ok(serde_json::to_value(&res)?)
-    }
-}
-
-// fn serve() {
-//     let identiy = File::Read("identity.pfx")?;
-//     let identity = Identity::from_pkcs12(&identity, "").unwrap();
-
-//     let listener = TcpListener::bind("127.0.0.1:8443").unwrap();
-//     let acceptor = TlsAcceptor::new(identity).unwrap();
-//     let acceptor = Arc::new(acceptor);
-
-//     fn handle_client(stream: TlsStream<TcpStream>) {
-//         log::info!("Connected to Client");
-//         // ...
-//         thread::sleep(Duration::new(2, 0));
-//     }
-//     log::info!("Starting to listen for incoming Streams");
-//     for stream in listener.incoming() {
-//         match stream {
-//             Ok(stream) => {
-//                 let acceptor = acceptor.clone();
-//                 thread::spawn(move || {
-//                     let stream = acceptor.accept(stream).unwrap();
-//                     handle_client(stream);
-//                 });
-//             }
-//             Err(_e) => { /* connection failed */ }
-//         }
-//     }
-// }
-
-impl<R, T> ServerRequest<T> for R where R: Request<T> {}

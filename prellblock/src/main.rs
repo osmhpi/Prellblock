@@ -56,40 +56,40 @@ fn main() {
     let opt = Opt::from_args();
     log::debug!("Command line arguments: {:#?}", opt);
 
-    // execute the turi in a new thread
+    let mut thread_join_handles = Vec::new();
 
-    let turi_handle = if let Some(turi_addr) = opt.turi {
+    // execute the turi in a new thread
+    if let Some(turi_addr) = opt.turi {
         if let Some(tls_identity) = opt.tls_identity.clone() {
-            Some(std::thread::spawn(move || {
-                let listener = TcpListener::bind(turi_addr).unwrap();
-                let turi = Turi::new(tls_identity);
-                turi.serve(&listener).unwrap();
-            }))
+            thread_join_handles.push((
+                format!("Turi ({})", turi_addr),
+                std::thread::spawn(move || {
+                    let listener = TcpListener::bind(turi_addr).unwrap();
+                    let turi = Turi::new(tls_identity);
+                    turi.serve(&listener).unwrap();
+                }),
+            ))
         } else {
             log::error!("No TLS identity given for Turi.");
-            None
         }
-    } else {
-        None
     };
 
     let calculator = Calculator::new();
     let calculator = Arc::new(calculator.into());
-
-    // execute the rpu server in a new thread
-    let server_handle = if let Some(bind_addr) = opt.bind {
+    // execute the receiver in a new thread
+    if let Some(bind_addr) = opt.bind {
         if let Some(tls_identity) = opt.tls_identity.clone() {
-            Some(std::thread::spawn(move || {
-                let listener = TcpListener::bind(bind_addr).unwrap();
-                let server = Receiver::new(calculator, tls_identity);
-                server.serve(&listener).unwrap();
-            }))
+            thread_join_handles.push((
+                format!("Peer Receiver ({})", bind_addr),
+                std::thread::spawn(move || {
+                    let listener = TcpListener::bind(bind_addr).unwrap();
+                    let receiver = Receiver::new(calculator, tls_identity);
+                    receiver.serve(&listener).unwrap();
+                }),
+            ))
         } else {
-            log::error!("No TLS identity given for Receiver.");
-            None
+            log::error!("No TLS identity given for Peer Receiver.");
         }
-    } else {
-        None
     };
 
     // execute the test client
@@ -106,19 +106,12 @@ fn main() {
         );
     }
 
-    // wait for the turi thread
-    if let Some(turi_handle) = turi_handle {
-        match turi_handle.join() {
-            Err(err) => log::error!("Turi error occured: {:?}", err),
-            Ok(()) => log::info!("No error occured. Going to hunt some mice. I meant *NICE*. Bye."),
+    // wait for all threads
+    for (name, join_handle) in thread_join_handles {
+        match join_handle.join() {
+            Err(err) => log::error!("Error occured waiting for {}: {:?}", name, err),
+            Ok(()) => log::info!("Ended {}.", name),
         };
     }
-
-    // wait for the server thread
-    if let Some(server_handle) = server_handle {
-        match server_handle.join() {
-            Err(err) => log::error!("Server error occured: {:?}", err),
-            Ok(()) => log::info!("No error occured. Going to hunt some mice. I meant *NICE*. Bye."),
-        };
-    }
+    log::info!("Going to hunt some mice. I meant *NICE*. Bye.");
 }

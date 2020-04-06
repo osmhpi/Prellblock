@@ -5,9 +5,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use super::{Calculator, Pong, RequestData};
+use super::{Calculator, PeerMessage, Pong};
 use balise::{
-    server::{Handler, Server},
+    server::{Handler, Response, Server},
     Request,
 };
 
@@ -25,7 +25,7 @@ type ArcMut<T> = Arc<Mutex<T>>;
 ///
 /// let calculator = Calculator::new();
 /// let calculator = Arc::new(calculator.into());
-/// let bind_addr = "127.0.0.1:1234";
+/// let bind_addr = "127.0.0.1:0"; // replace 0 with a real port
 ///
 /// let listener = TcpListener::bind(bind_addr).unwrap();
 /// let receiver = Receiver::new(calculator, "path_to_pfx.pfx".to_string());
@@ -57,17 +57,17 @@ impl Receiver {
     }
 }
 
-impl Handler<RequestData> for Receiver {
-    fn handle(&self, _addr: &SocketAddr, req: RequestData) -> Result<serde_json::Value, BoxError> {
+impl Handler<PeerMessage> for Receiver {
+    fn handle(&self, _addr: &SocketAddr, req: PeerMessage) -> Result<Response, BoxError> {
         // handle the actual request
         let res = match req {
-            RequestData::Add(params) => {
+            PeerMessage::Add(params) => {
                 params.handle(|params| self.calculator.lock().unwrap().add(params.0, params.1))
             }
-            RequestData::Sub(params) => {
+            PeerMessage::Sub(params) => {
                 params.handle(|params| self.calculator.lock().unwrap().sub(params.0, params.1))
             }
-            RequestData::Ping(params) => params.handle(|_| Pong),
+            PeerMessage::Ping(params) => params.handle(|_| Pong),
         };
         log::debug!(
             "The calculator's last resort is: {}.",
@@ -76,15 +76,3 @@ impl Handler<RequestData> for Receiver {
         Ok(res?)
     }
 }
-
-trait ReceiverRequest: Request<RequestData> + Sized {
-    fn handle(
-        self,
-        handler: impl FnOnce(Self) -> Self::Response,
-    ) -> Result<serde_json::Value, BoxError> {
-        let res = handler(self);
-        Ok(serde_json::to_value(&res)?)
-    }
-}
-
-impl<T> ReceiverRequest for T where T: Request<RequestData> {}

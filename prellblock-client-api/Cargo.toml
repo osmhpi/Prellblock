@@ -1,5 +1,5 @@
 [package]
-name = "client"
+name = "prellblock-client-api"
 version = "0.1.0"
 authors = [
     "Benedikt Schenkel <benedikt.schenkel@student.hpi.de>",
@@ -10,8 +10,5 @@ authors = [
 edition = "2018"
 
 [dependencies]
-balise = { path= "../balise", features = ["client", "tls"] }
-client-api = { path = "../client-api" }
-log = "0.4.8"
-pretty_env_logger = "0.4.0"
-structopt = "0.3.12"
+balise = { path = "../balise" }
+serde = { version = "1.0.105", features = ["derive"] }

@@ -2,6 +2,6 @@
 members = [
     "prellblock",
     "balise",
-    "client",
-    "client-api",
+    "prellblock-client",
+    "prellblock-client-api",
 ]
