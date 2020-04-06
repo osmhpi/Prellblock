@@ -10,15 +10,15 @@ type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 #[non_exhaustive]
 pub enum Error {
     /// An invalid hexadecimal value vas used.
-    #[error(display = "invalid hex: {}", 0)]
+    #[error(display = "Invalid hex: {}", 0)]
     HexError(#[error(from)] hex::FromHexError),
 
     /// An invalid signature was used.
-    #[error(display = "invalid signature: {}", 0)]
+    #[error(display = "Invalid signature: {}", 0)]
     SignatureError(#[error(from)] ed25519_dalek::SignatureError),
 
     /// A `Signable` failed to create a message.
-    #[error(display = "unable to create signable message: {}", 0)]
+    #[error(display = "Unable to create signable message: {}", 0)]
     SignableError(BoxError),
 }
 
