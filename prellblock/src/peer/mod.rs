@@ -2,7 +2,7 @@
 //!
 //! # Example
 //!
-//! ```
+//! ```no_run
 //! use prellblock::peer::{message, Calculator, Receiver, Sender};
 //! use std::{net::TcpListener, sync::Arc};
 //!

@@ -8,7 +8,7 @@
 //! as well as transmitting signalling information in a digital telegram to the train.
 //!
 //! ## Example
-//! ```
+//! ```no_run
 //! use serde::{Deserialize, Serialize};
 //!
 //! // ---------------- Define API definition ----------------

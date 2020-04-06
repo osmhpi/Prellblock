@@ -13,7 +13,7 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use prellblock::turi::Turi;
 /// use std::{net::TcpListener, sync::Arc};
 ///
