@@ -14,6 +14,9 @@ password=prellblock # The password for identity files.
 
 # CAN'T TOUCH THIS... DUM DUDUDUMM
 
+folder="$(dirname "$0")"
+cd "$folder"
+
 ca_folder="ca"
 mkdir -p "$ca_folder"
 ca="$ca_folder/ca_$ca_common_name"
@@ -24,7 +27,6 @@ server="$server_cn/$1"
 
 # Create server folder folder
 mkdir -p "$server_cn"
-
 
 # Generate CA cert
 if [ ! -f "$ca.cert" ]; then
@@ -53,7 +55,7 @@ CN=$server_cn
 EOF
 
 # Generate signing request
-openssl req -new -sha512 -nodes -out "$server.csr" -key "$server.key" -config <( cat "$server.csr.cnf" )
+openssl req -new -sha512 -nodes -out "$server.csr" -key "$server.key" -config "$server.csr.cnf"
 
 # Generate signing extension file
 
@@ -71,6 +73,6 @@ EOF
 
 # Sign with CA
 openssl x509 -req -in "$server.csr" -CA "$ca.cert" -CAkey "$ca.key" -CAcreateserial -out "$server.cert" -days $days -sha512 -extfile "$server.v3.ext"
+
 # Convert to pfx
-# openssl pkcs12 -export -in "$server.cert" -inkey "$server.key" -out "$server.pfx" -certfile "$ca.cert" -passout "pass:$password"
 openssl pkcs12 -export -in "$server.cert" -inkey "$server.key" -out "$server.pfx" -passout pass:$password

@@ -39,7 +39,7 @@ impl Turi {
 
     /// The main server loop.
     pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
-        let server = Server::new(self, "certificates/rpu1/turi.pfx".to_string(), "prellblock")?;
+        let server = Server::new(self, "certificates/turi/turi.pfx".to_string(), "prellblock")?;
         server.serve(listener)
     }
 }
