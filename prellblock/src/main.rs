@@ -10,9 +10,11 @@
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
 use prellblock::{
+    datastorage::DataStorage,
     peer::{message, Calculator, Receiver, Sender},
     turi::Turi,
 };
+use serde_json::json;
 use std::{
     net::{SocketAddr, TcpListener},
     sync::Arc,
@@ -55,6 +57,15 @@ fn main() {
 
     let opt = Opt::from_args();
     log::debug!("Command line arguments: {:#?}", opt);
+
+    log::trace!("Save some data.");
+    let store = DataStorage::new("./datastorage-db").unwrap();
+    let peer_id = pinxit::PeerId::from_hex(
+        "6a12b22445de46eb13ab146e2523ca4c7d7b3471f8b28bffb6e21175ad95716f",
+    )
+    .unwrap();
+    store.write(&peer_id, "speed", &json!(1234)).unwrap();
+    log::trace!("Saved some data.");
 
     let mut thread_join_handles = Vec::new();
 
