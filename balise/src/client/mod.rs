@@ -63,15 +63,28 @@ impl<T> Client<T> {
     /// in the pool. This is catched and a new stream will be
     /// returned in this case.
     fn stream(&self) -> Result<(connection_pool::StreamGuard, SocketAddr), BoxError> {
-        let deadline = Instant::now() + Duration::from_secs(60);
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let delay = Duration::from_secs(1);
 
         let res = loop {
-            let stream = connection_pool::POOL.stream(self.addr)?;
-            let addr = stream.tcp_stream().peer_addr()?;
-
             if Instant::now() > deadline {
                 return Err("Timeout: Could not send request.".into());
             }
+
+            let stream = match connection_pool::POOL.stream(self.addr) {
+                Ok(stream) => stream,
+                Err(err) => {
+                    log::warn!(
+                        "Couldn't connect to server at {}, retrying in {:?}: {}",
+                        self.addr,
+                        delay,
+                        err
+                    );
+                    std::thread::sleep(delay);
+                    continue;
+                }
+            };
+            let addr = stream.tcp_stream().peer_addr()?;
 
             // check TCP connection functional
             stream.tcp_stream().set_nonblocking(true)?;
