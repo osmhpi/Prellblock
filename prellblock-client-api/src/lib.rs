@@ -25,14 +25,14 @@ define_api! {
 
 /// The transaction message for key:value creation.
 #[derive(Debug, Serialize)]
-pub struct TransactionMessage {
+pub struct TransactionMessage<'a> {
     /// The key.
-    pub key: String,
+    pub key: &'a str,
     /// The value.
-    pub value: serde_json::Value,
+    pub value: &'a serde_json::Value,
 }
 
-impl Signable for TransactionMessage {
+impl<'a> Signable for TransactionMessage<'a> {
     type Message = String;
     type Error = serde_json::error::Error;
     fn message(&self) -> Result<Self::Message, Self::Error> {

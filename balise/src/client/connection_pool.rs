@@ -13,13 +13,11 @@ use std::{
     net::SocketAddr,
     ops::{Deref, DerefMut},
     sync::Mutex,
-    time::Duration,
 };
 use stream_impl::StreamImpl;
 
 pub struct ConnectionPool {
     streams: Mutex<HashMap<SocketAddr, Vec<StreamImpl>>>,
-    timeout: Duration,
 }
 
 impl ConnectionPool {
@@ -28,27 +26,18 @@ impl ConnectionPool {
     fn new() -> Self {
         Self {
             streams: HashMap::new().into(),
-            timeout: Duration::from_secs(30),
         }
     }
 
     pub fn stream(&self, addr: SocketAddr) -> Result<StreamGuard, BoxError> {
         let mut streams = self.streams.lock().unwrap();
-        let stream = match streams.get_mut(&addr) {
-            Some(streams) => match streams.pop() {
-                None => self.connect(&addr),
-                Some(stream) => {
-                    Ok(stream)
-                    // match stream.take_error() {
-                    //     Ok(None) => Ok(stream),
-                    //     // arbitrary error with the socket
-                    //     // or an error while retrieving the error
-                    //     _ => self.connect(&addr),
-                    // }
-                }
-            },
-            None => self.connect(&addr),
-        }?;
+        let stream = streams.get_mut(&addr).and_then(Vec::pop);
+        drop(streams);
+
+        let stream = match stream {
+            Some(stream) => stream,
+            None => stream_impl::connect(&addr)?,
+        };
         Ok(StreamGuard {
             stream,
             addr,
@@ -67,25 +56,6 @@ impl ConnectionPool {
                     stream_vec.push(stream)
                 }
             }
-        }
-    }
-
-    fn connect(&self, addr: &SocketAddr) -> Result<StreamImpl, BoxError> {
-        let mut seconds = Duration::from_secs(0);
-        let delay = Duration::from_secs(1);
-        loop {
-            let stream = stream_impl::connect(addr);
-            if stream.is_ok() || seconds >= self.timeout {
-                break Ok(stream?);
-            }
-            log::warn!(
-                "Couldn't connect to server at {}, retrying in {:?}: {}",
-                addr,
-                delay,
-                stream.unwrap_err(),
-            );
-            std::thread::sleep(delay);
-            seconds += delay;
         }
     }
 }

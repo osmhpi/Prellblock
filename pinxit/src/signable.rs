@@ -1,3 +1,4 @@
+use crate::{Error, PeerId, Signature};
 use std::error::Error as StdError;
 
 /// A `Signable` is something that can be signed.
@@ -57,6 +58,14 @@ pub trait Signable {
 
     /// Create a message from self.
     fn message(&self) -> Result<Self::Message, Self::Error>;
+
+    /// Verify a `signature` of a `message` that implements `Signable`.
+    fn verify(&self, peer_id: &PeerId, signature: &Signature) -> Result<(), Error>
+    where
+        Self: Sized,
+    {
+        peer_id.verify(self, signature)
+    }
 }
 
 impl<'a, S> Signable for &'a S

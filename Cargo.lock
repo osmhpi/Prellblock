@@ -542,6 +542,7 @@ dependencies = [
  "serde_json",
  "sled",
  "structopt",
+ "toml",
 ]
 
 [[package]]
@@ -553,8 +554,11 @@ dependencies = [
  "pinxit",
  "prellblock-client-api",
  "pretty_env_logger",
+ "rand",
+ "serde",
  "serde_json",
  "structopt",
+ "toml",
 ]
 
 [[package]]
@@ -942,6 +946,15 @@ dependencies = [
  "libc",
  "redox_syscall",
  "winapi",
+]
+
+[[package]]
+name = "toml"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffc92d160b1eef40665be3a05630d003936a3bc7da7421277846c2613e92c71a"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

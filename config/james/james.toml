@@ -1,0 +1,2 @@
+identity = "./config/james/james.key"
+tls_id = "./certificates/james/james.pfx"

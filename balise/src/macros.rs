@@ -27,7 +27,7 @@ macro_rules! request_and_response {
         }
     ) => {
         $(#[$inner])*
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Clone, Serialize, Deserialize)]
         pub struct $request_name($(pub $type),*);
 
         $crate::request_response_inner!($enum_name, $request_name, $response);
@@ -45,7 +45,7 @@ macro_rules! request_and_response {
             $($tail:tt)*
         }
     ) => {
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Clone, Serialize, Deserialize)]
         $(#[$inner])*
         pub struct $request_name;
 
@@ -119,7 +119,7 @@ macro_rules! request_enum {
     ) => {
         $(#[$outer])*
         #[allow(clippy::large_enum_variant)]
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Clone, Serialize, Deserialize)]
         $vis enum $enum_name {
             $($enum_variants)*
         }

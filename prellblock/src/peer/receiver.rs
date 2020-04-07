@@ -5,11 +5,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use super::{Calculator, PeerMessage, Pong};
+use super::{message, Calculator, PeerMessage, Pong};
 use balise::{
     server::{Handler, Response, Server},
     Request,
 };
+use pinxit::Signable;
+use prellblock_client_api::TransactionMessage;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -55,23 +57,40 @@ impl Receiver {
         let server = Server::new(self, tls_identity, "prellblock")?;
         server.serve(listener)
     }
+
+    fn handle_set_value(&self, params: message::SetValue) -> Result<(), BoxError> {
+        let message::SetValue(peer_id, key, value, signature) = params;
+        // Check validity of message signature.
+        TransactionMessage {
+            key: &key,
+            value: &value,
+        }
+        .verify(&peer_id, &signature)?;
+        log::info!(
+            "Client {} set {} to {} (via another RPU)",
+            peer_id,
+            key,
+            value
+        );
+
+        let _ = self;
+        Ok(())
+    }
 }
 
 impl Handler<PeerMessage> for Receiver {
     fn handle(&self, _addr: &SocketAddr, req: PeerMessage) -> Result<Response, BoxError> {
         // handle the actual request
-        let res =
-            match req {
-                PeerMessage::Add(params) => params
-                    .handle(|params| Ok(self.calculator.lock().unwrap().add(params.0, params.1))),
-                PeerMessage::Sub(params) => params
-                    .handle(|params| Ok(self.calculator.lock().unwrap().sub(params.0, params.1))),
-                PeerMessage::Ping(params) => params.handle(|_| Ok(Pong)),
-            };
-        log::debug!(
-            "The calculator's last resort is: {}.",
-            self.calculator.lock().unwrap().last_result()
-        );
+        let res = match req {
+            PeerMessage::Add(params) => {
+                params.handle(|params| Ok(self.calculator.lock().unwrap().add(params.0, params.1)))
+            }
+            PeerMessage::Sub(params) => {
+                params.handle(|params| Ok(self.calculator.lock().unwrap().sub(params.0, params.1)))
+            }
+            PeerMessage::Ping(params) => params.handle(|_| Ok(Pong)),
+            PeerMessage::SetValue(params) => params.handle(|params| self.handle_set_value(params)),
+        };
         Ok(res?)
     }
 }

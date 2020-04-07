@@ -1,9 +1,11 @@
 //! A server for communicating between RPUs.
 
+use crate::peer::Sender;
 use balise::{
     server::{Handler, Response, Server},
     Request,
 };
+use pinxit::Signable;
 use prellblock_client_api::{message, ClientMessage, Pong, TransactionMessage};
 use std::net::{SocketAddr, TcpListener};
 
@@ -20,7 +22,8 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// let bind_addr = "127.0.0.1:0"; // replace 0 with a real port
 ///
 /// let listener = TcpListener::bind(bind_addr).unwrap();
-/// let turi = Turi::new("path_to_pfx.pfx".to_string());
+/// let peer_addresses = vec!["127.0.0.1:2480".parse().unwrap()]; // The ip addresses + ports of all other peers.
+/// let turi = Turi::new("path_to_pfx.pfx".to_string(), peer_addresses);
 /// std::thread::spawn(move || {
 ///     turi.serve(&listener).unwrap();
 /// });
@@ -28,6 +31,7 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Clone)]
 pub struct Turi {
     tls_identity: String,
+    peer_addresses: Vec<SocketAddr>,
 }
 
 impl Turi {
@@ -35,8 +39,11 @@ impl Turi {
     ///
     /// The `identity` is a path to a `.pfx` file.
     #[must_use]
-    pub const fn new(tls_identity: String) -> Self {
-        Self { tls_identity }
+    pub const fn new(tls_identity: String, peer_addresses: Vec<SocketAddr>) -> Self {
+        Self {
+            tls_identity,
+            peer_addresses,
+        }
     }
 
     /// The main server loop.
@@ -45,6 +52,45 @@ impl Turi {
         let server = Server::new(self, tls_identity, "prellblock")?;
         server.serve(listener)
     }
+
+    fn handle_set_value(&self, params: message::SetValue) -> Result<(), BoxError> {
+        let message::SetValue(peer_id, key, value, signature) = params;
+        // Check validity of transaction signature.
+        TransactionMessage {
+            key: &key,
+            value: &value,
+        }
+        .verify(&peer_id, &signature)?;
+        log::info!("Client {} set {} to {}", peer_id, key, value);
+
+        let message = crate::peer::message::SetValue(peer_id, key, value, signature);
+
+        let mut thread_join_handles = Vec::new();
+
+        // Broadcast transaction to all RPUs.
+        for &peer_address in &self.peer_addresses {
+            let message = message.clone();
+            thread_join_handles.push((
+                format!("Sender ({})", peer_address),
+                std::thread::spawn(move || {
+                    let mut sender = Sender::new(peer_address);
+                    match sender.send_request(message) {
+                        Ok(()) => log::debug!("Successfully sent message to peer {}", peer_address),
+                        Err(err) => {
+                            log::error!("Failed sending message to peer {}: {}", peer_address, err)
+                        }
+                    }
+                }),
+            ));
+        }
+        for (name, join_handle) in thread_join_handles {
+            match join_handle.join() {
+                Err(err) => log::error!("Error occurred waiting for {}: {:?}", name, err),
+                Ok(()) => log::info!("Ended {}.", name),
+            };
+        }
+        Ok(())
+    }
 }
 
 impl Handler<ClientMessage> for Turi {
@@ -52,16 +98,9 @@ impl Handler<ClientMessage> for Turi {
         // handle the actual request
         let res = match req {
             ClientMessage::Ping(params) => params.handle(|_| Ok(Pong)),
-            ClientMessage::SetValue(params) => params.handle(|params| {
-                let message::SetValue(peer_id, key, value, signature) = params;
-                let t_message = TransactionMessage {
-                    key: key.clone(),
-                    value: value.clone(),
-                };
-                peer_id.verify(t_message, &signature)?;
-                log::info!("Peer {} set {} to {}", peer_id, key, value);
-                Ok(())
-            }),
+            ClientMessage::SetValue(params) => {
+                params.handle(|params| self.handle_set_value(params))
+            }
         };
         Ok(res?)
     }
