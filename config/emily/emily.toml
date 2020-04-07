@@ -1,0 +1,2 @@
+identity = "./config/emily/emily.key"
+cert = "./certificates/emily/emily.pfx"

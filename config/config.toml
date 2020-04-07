@@ -1,0 +1,23 @@
+[[rpu]]
+name = "emily"
+identity = "./config/emily/emily.pub"
+peer_address = "127.0.0.1:2480"
+turi_address = "127.0.0.1:3130"
+
+[[rpu]]
+name = "james"
+identity = "./config/james/james.pub"
+peer_address = "127.0.0.1:2481"
+turi_address = "127.0.0.1:3131"
+
+[[rpu]]
+name = "percy"
+identity = "./config/percy/percy.pub"
+peer_address = "127.0.0.1:2482"
+turi_address = "127.0.0.1:3132"
+
+[[rpu]]
+name = "thomas"
+identity = "./config/thomas/thomas.pub"
+peer_address = "127.0.0.1:2483"
+turi_address = "127.0.0.1:3133"

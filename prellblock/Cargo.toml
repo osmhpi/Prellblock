@@ -17,3 +17,4 @@ structopt = "0.3.12"
 lazy_static = "1.4.0"
 balise = { path = "../balise", features = ["server", "client", "tls"] }
 prellblock-client-api = { path = "../prellblock-client-api" }
+toml = "0.5.6"

@@ -1,0 +1,2 @@
+identity = "./config/james/james.key"
+cert = "./certificates/james/james.pfx"

@@ -6,3 +6,7 @@
 # Certificates and stuff
 /certificates/*
 !/certificates/generate_certificate.sh
+
+# Identities and stuff
+/config/*/*.key
+/config/*/*.pub

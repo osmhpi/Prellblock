@@ -13,7 +13,9 @@ use prellblock::{
     peer::{message, Calculator, Receiver, Sender},
     turi::Turi,
 };
+use serde::Deserialize;
 use std::{
+    fs,
     net::{SocketAddr, TcpListener},
     sync::Arc,
 };
@@ -23,88 +25,90 @@ use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
 struct Opt {
-    /// The address on which to open the RPU communication server.
-    #[structopt(
-        short,
-        long,
-        help = "The Address and port on which to bind the RPU Receiver."
-    )]
-    bind: Option<SocketAddr>,
+    /// The identity name to load from config.toml file.
+    name: String,
+}
 
-    #[structopt(
-        short,
-        long,
-        help = "The peer to communicate with through the RPU Sender."
-    )]
-    peer: Option<SocketAddr>,
+#[derive(Debug, Clone, Deserialize)]
+struct Config {
+    rpu: Vec<RpuConfig>,
+}
 
-    #[structopt(long, help = "The address and port on which to bind the Turi.")]
-    turi: Option<SocketAddr>,
+#[derive(Debug, Clone, Deserialize)]
+struct RpuConfig {
+    name: String,
+    identity: String,
+    peer_address: SocketAddr,
+    turi_address: SocketAddr,
+}
 
-    #[structopt(
-        short = "c",
-        long = "cert",
-        help = "Path to a .pfx certificate identity signed by the CA."
-    )]
-    tls_identity: Option<String>,
+#[derive(Debug, Clone, Deserialize)]
+struct RpuPrivateConfig {
+    identity: String,
+    cert: String,
 }
 
 fn main() {
-    pretty_env_logger::init();
     log::info!("Kitty =^.^=");
 
     let opt = Opt::from_args();
     log::debug!("Command line arguments: {:#?}", opt);
 
+    // load and parse config
+    let config_data = fs::read_to_string("./config/config.toml").unwrap();
+    let config: Config = toml::from_str(&config_data).unwrap();
+
+    let public_config = config
+        .rpu
+        .iter()
+        .find(|rpu_config| rpu_config.name == opt.name)
+        .unwrap()
+        .clone();
+    let private_config_data =
+        fs::read_to_string(format!("./config/{0}/{0}.toml", opt.name)).unwrap();
+    let private_config: RpuPrivateConfig = toml::from_str(&private_config_data).unwrap();
     let mut thread_join_handles = Vec::new();
 
     // execute the turi in a new thread
-    if let Some(turi_addr) = opt.turi {
-        if let Some(tls_identity) = opt.tls_identity.clone() {
-            thread_join_handles.push((
-                format!("Turi ({})", turi_addr),
-                std::thread::spawn(move || {
-                    let listener = TcpListener::bind(turi_addr).unwrap();
-                    let turi = Turi::new(tls_identity);
-                    turi.serve(&listener).unwrap();
-                }),
-            ))
-        } else {
-            log::error!("No TLS identity given for Turi.");
-        }
-    };
+    {
+        let public_config = public_config.clone();
+        let private_config = private_config.clone();
+        thread_join_handles.push((
+            format!("Turi ({})", public_config.turi_address),
+            std::thread::spawn(move || {
+                let listener = TcpListener::bind(public_config.turi_address).unwrap();
+                let turi = Turi::new(private_config.cert);
+                turi.serve(&listener).unwrap();
+            }),
+        ));
+    }
 
     let calculator = Calculator::new();
     let calculator = Arc::new(calculator.into());
-    // execute the receiver in a new thread
-    if let Some(bind_addr) = opt.bind {
-        if let Some(tls_identity) = opt.tls_identity.clone() {
-            thread_join_handles.push((
-                format!("Peer Receiver ({})", bind_addr),
-                std::thread::spawn(move || {
-                    let listener = TcpListener::bind(bind_addr).unwrap();
-                    let receiver = Receiver::new(calculator, tls_identity);
-                    receiver.serve(&listener).unwrap();
-                }),
-            ))
-        } else {
-            log::error!("No TLS identity given for Peer Receiver.");
-        }
-    };
 
-    // execute the test client
-    if let Some(peer_addr) = opt.peer {
-        let mut client = Sender::new(peer_addr);
-        match client.send_request(message::Ping) {
-            Err(err) => log::error!("Failed to send Ping: {}.", err),
-            Ok(res) => log::debug!("Ping response: {:?}", res),
-        }
-        log::info!("The sum is {:?}", client.send_request(message::Add(100, 2)));
-        log::info!(
-            "The second sum is {:?}",
-            client.send_request(message::Add(10, 2))
-        );
-    }
+    // execute the receiver in a new thread
+    thread_join_handles.push((
+        format!("Peer Receiver ({})", public_config.peer_address),
+        std::thread::spawn(move || {
+            let listener = TcpListener::bind(public_config.peer_address).unwrap();
+            let receiver = Receiver::new(calculator, private_config.cert);
+            receiver.serve(&listener).unwrap();
+        }),
+    ));
+
+    // // execute the test client
+    // if let Some(peer_addr) = opt.peer {
+    //     let mut client = Sender::new(peer_addr);
+    //     match client.send_request(message::Ping) {
+    //         Err(err) => log::error!("Failed to send Ping: {}.", err),
+    //         Ok(res) => log::debug!("Ping response: {:?}", res),
+    //     }
+    //     log::info!("The sum is {:?}", client.send_request(message::Add(100, 2)));
+    //     log::info!(
+    //         "The second sum is {:?}",
+    //         client.send_request(message::Add(10, 2))
+    //     );
+    // }
 
     // wait for all threads
     for (name, join_handle) in thread_join_handles {
