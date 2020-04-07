@@ -27,6 +27,7 @@ clippy:
 
 rustfmt:
   stage: test
+  cache: {}
   script:
     - rustup component add rustfmt
     - cargo fmt -- --check
