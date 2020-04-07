@@ -393,9 +393,11 @@ dependencies = [
  "balise",
  "lazy_static",
  "log",
+ "pinxit",
  "prellblock-client-api",
  "pretty_env_logger",
  "serde",
+ "serde_json",
  "structopt",
  "toml",
 ]
@@ -409,8 +411,11 @@ dependencies = [
  "pinxit",
  "prellblock-client-api",
  "pretty_env_logger",
+ "rand",
+ "serde",
  "serde_json",
  "structopt",
+ "toml",
 ]
 
 [[package]]

@@ -40,6 +40,7 @@ pub use receiver::Receiver;
 pub use sender::Sender;
 
 use balise::define_api;
+use pinxit::{PeerId, Signature};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -60,5 +61,8 @@ define_api! {
 
         /// Ping Message. See [`Pong`](../struct.Pong.html).
         Ping => Pong,
+
+        /// Simple transaction Message. Will write a key:value pair.
+        SetValue(PeerId, String,serde_json::Value, Signature) => (),
     }
 }

@@ -10,7 +10,7 @@
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
 use prellblock::{
-    peer::{message, Calculator, Receiver, Sender},
+    peer::{Calculator, Receiver},
     turi::Turi,
 };
 use serde::Deserialize;
@@ -37,18 +37,19 @@ struct Config {
 #[derive(Debug, Clone, Deserialize)]
 struct RpuConfig {
     name: String,
-    identity: String,
+    peer_id: String,
     peer_address: SocketAddr,
     turi_address: SocketAddr,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct RpuPrivateConfig {
-    identity: String,
-    cert: String,
+    identity: String, // pinxit::Identity (hex -> .key)
+    tls_id: String,   // native_tls::Identity (pkcs12 -> .pfx)
 }
 
 fn main() {
+    pretty_env_logger::init();
     log::info!("Kitty =^.^=");
 
     let opt = Opt::from_args();
@@ -67,17 +68,30 @@ fn main() {
     let private_config_data =
         fs::read_to_string(format!("./config/{0}/{0}.toml", opt.name)).unwrap();
     let private_config: RpuPrivateConfig = toml::from_str(&private_config_data).unwrap();
+
+    // join handles of all threads
     let mut thread_join_handles = Vec::new();
 
     // execute the turi in a new thread
     {
+        let peer_addresses = config
+            .rpu
+            .iter()
+            .filter_map(|rpu_config| {
+                if rpu_config.name == opt.name {
+                    None
+                } else {
+                    Some(rpu_config.peer_address)
+                }
+            })
+            .collect();
         let public_config = public_config.clone();
         let private_config = private_config.clone();
         thread_join_handles.push((
             format!("Turi ({})", public_config.turi_address),
             std::thread::spawn(move || {
                 let listener = TcpListener::bind(public_config.turi_address).unwrap();
-                let turi = Turi::new(private_config.cert);
+                let turi = Turi::new(private_config.tls_id, peer_addresses);
                 turi.serve(&listener).unwrap();
             }),
         ));
@@ -91,7 +105,7 @@ fn main() {
         format!("Peer Receiver ({})", public_config.peer_address),
         std::thread::spawn(move || {
             let listener = TcpListener::bind(public_config.peer_address).unwrap();
-            let receiver = Receiver::new(calculator, private_config.cert);
+            let receiver = Receiver::new(calculator, private_config.tls_id);
             receiver.serve(&listener).unwrap();
         }),
     ));
@@ -113,7 +127,7 @@ fn main() {
     // wait for all threads
     for (name, join_handle) in thread_join_handles {
         match join_handle.join() {
-            Err(err) => log::error!("Error occured waiting for {}: {:?}", name, err),
+            Err(err) => log::error!("Error occurred waiting for {}: {:?}", name, err),
             Ok(()) => log::info!("Ended {}.", name),
         };
     }

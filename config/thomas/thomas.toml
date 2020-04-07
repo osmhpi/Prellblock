@@ -1,2 +1,2 @@
 identity = "./config/thomas/thomas.key"
-cert = "../certificates/thomas/thomas.pfx"
+tls_id = "./certificates/thomas/thomas.pfx"

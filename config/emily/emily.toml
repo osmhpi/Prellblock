@@ -1,2 +1,2 @@
 identity = "./config/emily/emily.key"
-cert = "./certificates/emily/emily.pfx"
+tls_id = "./certificates/emily/emily.pfx"
