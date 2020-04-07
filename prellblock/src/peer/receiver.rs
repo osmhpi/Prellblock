@@ -6,6 +6,7 @@ use std::{
 };
 
 use super::{message, Calculator, PeerMessage, Pong};
+use crate::datastorage::DataStorage;
 use balise::{
     server::{Handler, Response, Server},
     Request,
@@ -37,17 +38,23 @@ type ArcMut<T> = Arc<Mutex<T>>;
 /// ```
 #[derive(Clone)]
 pub struct Receiver {
-    calculator: ArcMut<Calculator>,
     tls_identity: String,
+    calculator: ArcMut<Calculator>,
+    data_storage: Arc<DataStorage>,
 }
 
 impl Receiver {
     /// Create a new receiver instance.
     #[must_use]
-    pub fn new(calculator: ArcMut<Calculator>, tls_identity: String) -> Self {
+    pub fn new(
+        tls_identity: String,
+        calculator: ArcMut<Calculator>,
+        data_storage: Arc<DataStorage>,
+    ) -> Self {
         Self {
-            calculator,
             tls_identity,
+            calculator,
+            data_storage,
         }
     }
 
@@ -73,7 +80,9 @@ impl Receiver {
             value
         );
 
-        let _ = self;
+        // TODO: Continue with warning or error?
+        self.data_storage.write(&peer_id, key, &value)?;
+
         Ok(())
     }
 }

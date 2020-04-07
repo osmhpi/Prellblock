@@ -10,3 +10,6 @@
 # Identities and stuff
 /config/*/*.key
 /config/*/*.pub
+
+# Data storage
+/data/

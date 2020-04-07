@@ -59,7 +59,10 @@ fn main() {
             // execute the test client
             let mut client = Client::new(turi_address);
 
-            let identity = Identity::generate();
+            let identity = Identity::from_hex(
+                "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc",
+            )
+            .unwrap();
             let value = json!(value);
 
             let t_message = TransactionMessage {

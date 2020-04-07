@@ -20,11 +20,12 @@ impl DataStorage {
     /// Create a new `Store` at path.
     pub fn new(path: &str) -> Result<Self, BoxError> {
         let config = Config::default()
-            .path(path.to_owned())
+            .path(path)
             .cache_capacity(8_000_000)
             .flush_every_ms(Some(400))
             .snapshot_after_ops(100)
-            .use_compression(false);
+            .use_compression(false) // TODO: set this to `true`.
+            .compression_factor(20);
 
         let database = config.open()?;
         let tree_root = database.open_tree(ROOT_TREE_NAME)?;
@@ -55,6 +56,7 @@ impl DataStorage {
         key_tree.insert(&time, value)?;
 
         // Demo that it's working.
+        log::debug!("Have now {} entries.", key_tree.len());
         // for value in key_tree.iter() {
         //     if let Ok((key, value)) = value {
         //         log::trace!("Found {:x?} => {:x?}", key, value);

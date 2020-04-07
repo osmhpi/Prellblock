@@ -15,7 +15,6 @@ use prellblock::{
     turi::Turi,
 };
 use serde::Deserialize;
-use serde_json::json;
 use std::{
     fs,
     net::{SocketAddr, TcpListener},
@@ -57,19 +56,12 @@ fn main() {
     let opt = Opt::from_args();
     log::debug!("Command line arguments: {:#?}", opt);
 
-    log::trace!("Save some data.");
-    let store = DataStorage::new("./datastorage-db").unwrap();
-    let peer_id = pinxit::PeerId::from_hex(
-        "6a12b22445de46eb13ab146e2523ca4c7d7b3471f8b28bffb6e21175ad95716f",
-    )
-    .unwrap();
-    store.write(&peer_id, "speed", &json!(1234)).unwrap();
-    log::trace!("Saved some data.");
+    let storage = DataStorage::new(&format!("./data/{}", opt.name)).unwrap();
+    let storage = Arc::new(storage);
 
     // load and parse config
     let config_data = fs::read_to_string("./config/config.toml").unwrap();
     let config: Config = toml::from_str(&config_data).unwrap();
-
     let public_config = config
         .rpu
         .iter()
@@ -79,7 +71,6 @@ fn main() {
     let private_config_data =
         fs::read_to_string(format!("./config/{0}/{0}.toml", opt.name)).unwrap();
     let private_config: RpuPrivateConfig = toml::from_str(&private_config_data).unwrap();
-
     // join handles of all threads
     let mut thread_join_handles = Vec::new();
 
@@ -88,13 +79,7 @@ fn main() {
         let peer_addresses = config
             .rpu
             .iter()
-            .filter_map(|rpu_config| {
-                if rpu_config.name == opt.name {
-                    None
-                } else {
-                    Some(rpu_config.peer_address)
-                }
-            })
+            .map(|rpu_config| rpu_config.peer_address)
             .collect();
         let public_config = public_config.clone();
         let private_config = private_config.clone();
@@ -116,7 +101,7 @@ fn main() {
         format!("Peer Receiver ({})", public_config.peer_address),
         std::thread::spawn(move || {
             let listener = TcpListener::bind(public_config.peer_address).unwrap();
-            let receiver = Receiver::new(calculator, private_config.tls_id);
+            let receiver = Receiver::new(private_config.tls_id, calculator, storage);
             receiver.serve(&listener).unwrap();
         }),
     ));
