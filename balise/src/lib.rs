@@ -64,8 +64,8 @@
 //!     fn handle(&self, _addr: &SocketAddr, req: PingAPIMessage) -> Result<Response, BoxError> {
 //!         // handle the actual request
 //!         let res = match req {
-//!             PingAPIMessage::Ping(params) => params.handle(|_| Pong),
-//!             PingAPIMessage::Add(params) => params.handle(|params| params.0 + params.1),
+//!             PingAPIMessage::Ping(params) => params.handle(|_| Ok(Pong)),
+//!             PingAPIMessage::Add(params) => params.handle(|params| Ok(params.0 + params.1)),
 //!         };
 //!         Ok(res?)
 //!     }
@@ -122,9 +122,9 @@ pub trait Request<T>: Serialize + Into<T> + Debug {
     #[cfg(feature = "server")]
     fn handle(
         self,
-        handler: impl FnOnce(Self) -> Self::Response,
+        handler: impl FnOnce(Self) -> Result<Self::Response, BoxError>,
     ) -> Result<server::Response, BoxError> {
-        let res = handler(self);
+        let res = handler(self)?;
         Ok(server::Response(serde_json::to_value(&res)?))
     }
 }

@@ -118,6 +118,7 @@ macro_rules! request_enum {
         ( $($enum_variants:tt)* )
     ) => {
         $(#[$outer])*
+        #[allow(clippy::large_enum_variant)]
         #[derive(Debug, Serialize, Deserialize)]
         $vis enum $enum_name {
             $($enum_variants)*
