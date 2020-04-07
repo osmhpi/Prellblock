@@ -2,15 +2,13 @@
 
 use crate::data_broadcaster::Broadcaster;
 use balise::{
-    server::{Handler, Response, Server},
+    handle_fn,
+    server::{Handler, Server},
     Request,
 };
 use pinxit::Signable;
 use prellblock_client_api::{message, ClientMessage, Pong, TransactionMessage};
-use std::{
-    net::{SocketAddr, TcpListener},
-    sync::Arc,
-};
+use std::{net::TcpListener, sync::Arc};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -78,14 +76,8 @@ impl Turi {
 }
 
 impl Handler<ClientMessage> for Turi {
-    fn handle(&self, _addr: &SocketAddr, req: ClientMessage) -> Result<Response, BoxError> {
-        // handle the actual request
-        let res = match req {
-            ClientMessage::Ping(params) => params.handle(|_| Ok(Pong)),
-            ClientMessage::SetValue(params) => {
-                params.handle(|params| self.handle_set_value(params))
-            }
-        };
-        Ok(res?)
-    }
+    handle_fn!(self, ClientMessage, {
+        Ping(_) => Ok(Pong),
+        SetValue(params) => self.handle_set_value(params),
+    });
 }

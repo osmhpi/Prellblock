@@ -1,14 +1,15 @@
 //! A server for communicating between RPUs.
 
 use std::{
-    net::{SocketAddr, TcpListener},
+    net::TcpListener,
     sync::{Arc, Mutex},
 };
 
 use super::{message, Calculator, PeerMessage, Pong};
 use crate::data_storage::DataStorage;
 use balise::{
-    server::{Handler, Response, Server},
+    handle_fn,
+    server::{Handler, Server},
     Request,
 };
 use pinxit::Signable;
@@ -97,18 +98,10 @@ impl Receiver {
 }
 
 impl Handler<PeerMessage> for Receiver {
-    fn handle(&self, _addr: &SocketAddr, req: PeerMessage) -> Result<Response, BoxError> {
-        // handle the actual request
-        let res = match req {
-            PeerMessage::Add(params) => {
-                params.handle(|params| Ok(self.calculator.lock().unwrap().add(params.0, params.1)))
-            }
-            PeerMessage::Sub(params) => {
-                params.handle(|params| Ok(self.calculator.lock().unwrap().sub(params.0, params.1)))
-            }
-            PeerMessage::Ping(params) => params.handle(|_| Ok(Pong)),
-            PeerMessage::SetValue(params) => params.handle(|params| self.handle_set_value(params)),
-        };
-        Ok(res?)
-    }
+    handle_fn!(self, PeerMessage, {
+        Add(params) =>  Ok(self.calculator.lock().unwrap().add(params.0, params.1)),
+        Sub(params) =>  Ok(self.calculator.lock().unwrap().sub(params.0, params.1)),
+        Ping(_) => Ok(Pong),
+        SetValue(params) => self.handle_set_value(params),
+    });
 }

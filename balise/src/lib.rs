@@ -31,6 +31,7 @@
 //!
 //! // ---------------- Define API server ----------------
 //! use balise::{
+//!     handle_fn,
 //!     server::{Handler, Response, Server},
 //!     Request,
 //! };
@@ -61,14 +62,10 @@
 //! }
 //!
 //! impl Handler<PingAPIMessage> for PingAPIServer {
-//!     fn handle(&self, _addr: &SocketAddr, req: PingAPIMessage) -> Result<Response, BoxError> {
-//!         // handle the actual request
-//!         let res = match req {
-//!             PingAPIMessage::Ping(params) => params.handle(|_| Ok(Pong)),
-//!             PingAPIMessage::Add(params) => params.handle(|params| Ok(params.0 + params.1)),
-//!         };
-//!         Ok(res?)
-//!     }
+//!     handle_fn!(self, PingAPIMessage, {
+//!         Ping(_) => Ok(Pong),
+//!         Add(params) => Ok(params.0 + params.1),
+//!     });
 //! }
 //!
 //! // ---------------- Start server and send request ----------------
