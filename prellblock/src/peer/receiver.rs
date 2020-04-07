@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::{message, Calculator, PeerMessage, Pong};
-use crate::datastorage::DataStorage;
+use crate::data_storage::DataStorage;
 use balise::{
     server::{Handler, Response, Server},
     Request,
@@ -23,15 +23,24 @@ type ArcMut<T> = Arc<Mutex<T>>;
 /// # Example
 ///
 /// ```
-/// use prellblock::peer::{Calculator, Receiver};
+/// use prellblock::{
+///     data_storage::DataStorage,
+///     peer::{Calculator, Receiver},
+/// };
 /// use std::{net::TcpListener, sync::Arc};
 ///
 /// let calculator = Calculator::new();
 /// let calculator = Arc::new(calculator.into());
 /// let bind_addr = "127.0.0.1:0"; // replace 0 with a real port
 ///
+/// let data_storage = DataStorage::new("/tmp/some_db").unwrap();
+///
 /// let listener = TcpListener::bind(bind_addr).unwrap();
-/// let receiver = Receiver::new(calculator, "path_to_pfx.pfx".to_string());
+/// let receiver = Receiver::new(
+///     "path_to_pfx.pfx".to_string(),
+///     calculator,
+///     Arc::new(data_storage),
+/// );
 /// std::thread::spawn(move || {
 ///     receiver.serve(&listener).unwrap();
 /// });

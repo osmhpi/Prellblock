@@ -10,7 +10,7 @@
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
 use prellblock::{
-    datastorage::DataStorage,
+    data_storage::DataStorage,
     peer::{Calculator, Receiver},
     turi::Turi,
 };
