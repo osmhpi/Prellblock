@@ -24,7 +24,8 @@
 //! // create signable test data
 //! let test_data = TestData("Lorem ipsum");
 //!
-//! // create a signature
+//! // create a signed version of test data
+//! // you cannot access the data until it is verified
 //! let signed: Signed<TestData> = test_data.sign(&identity).unwrap();
 //!
 //! // get peer id of identity
@@ -32,6 +33,9 @@
 //!
 //! // verify the signature
 //! let verified: Verified<TestData> = signed.verify(peer_id).unwrap();
+//!
+//! // access the data
+//! println!("{}", verified.0)
 //! ```
 
 #[macro_use]
