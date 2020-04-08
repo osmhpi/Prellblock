@@ -11,8 +11,7 @@ use balise::{
     server::{Handler, Response, Server},
     Request,
 };
-use pinxit::Signable;
-use prellblock_client_api::TransactionMessage;
+use prellblock_client_api::Transaction;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -74,23 +73,23 @@ impl Receiver {
         server.serve(listener)
     }
 
-    fn handle_set_value(&self, params: message::SetValue) -> Result<(), BoxError> {
-        let message::SetValue(peer_id, key, value, signature) = params;
-        // Check validity of message signature.
-        TransactionMessage {
-            key: &key,
-            value: &value,
-        }
-        .verify(&peer_id, &signature)?;
-        log::info!(
-            "Client {} set {} to {} (via another RPU)",
-            peer_id,
-            key,
-            value
-        );
+    fn handle_execute(&self, params: message::Execute) -> Result<(), BoxError> {
+        let message::Execute(peer_id, transaction) = params;
+        let transaction = transaction.verify(&peer_id)?;
 
-        // TODO: Continue with warning or error?
-        self.data_storage.write(&peer_id, key, &value)?;
+        match transaction.into_inner() {
+            Transaction::KeyValue { key, value } => {
+                log::info!(
+                    "Client {} set {} to {} (via another RPU)",
+                    &peer_id,
+                    key,
+                    value
+                );
+
+                // TODO: Continue with warning or error?
+                self.data_storage.write(&peer_id, key, &value)?;
+            }
+        }
 
         Ok(())
     }
@@ -99,16 +98,15 @@ impl Receiver {
 impl Handler<PeerMessage> for Receiver {
     fn handle(&self, _addr: &SocketAddr, req: PeerMessage) -> Result<Response, BoxError> {
         // handle the actual request
-        let res = match req {
-            PeerMessage::Add(params) => {
-                params.handle(|params| Ok(self.calculator.lock().unwrap().add(params.0, params.1)))
-            }
-            PeerMessage::Sub(params) => {
-                params.handle(|params| Ok(self.calculator.lock().unwrap().sub(params.0, params.1)))
-            }
-            PeerMessage::Ping(params) => params.handle(|_| Ok(Pong)),
-            PeerMessage::SetValue(params) => params.handle(|params| self.handle_set_value(params)),
-        };
+        let res =
+            match req {
+                PeerMessage::Add(params) => params
+                    .handle(|params| Ok(self.calculator.lock().unwrap().add(params.0, params.1))),
+                PeerMessage::Sub(params) => params
+                    .handle(|params| Ok(self.calculator.lock().unwrap().sub(params.0, params.1))),
+                PeerMessage::Ping(params) => params.handle(|_| Ok(Pong)),
+                PeerMessage::Execute(params) => params.handle(|params| self.handle_execute(params)),
+            };
         Ok(res?)
     }
 }

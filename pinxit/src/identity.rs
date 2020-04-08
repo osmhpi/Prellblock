@@ -55,8 +55,8 @@ impl Identity {
         S: Signable,
     {
         let expanded = ExpandedSecretKey::from(&self.secret);
-        let message = message.message().map_err(Error::signable_error)?;
-        let signature = expanded.sign(message.as_ref(), &self.id.0);
+        let data = message.signable_data().map_err(Error::signable_error)?;
+        let signature = expanded.sign(data.as_ref(), &self.id.0);
         Ok(Signature(signature))
     }
 }

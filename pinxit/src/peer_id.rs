@@ -88,8 +88,8 @@ impl PeerId {
     where
         S: Signable,
     {
-        let message = message.message().map_err(Error::signable_error)?;
-        Ok(self.0.verify(message.as_ref(), &signature.0)?)
+        let data = message.signable_data().map_err(Error::signable_error)?;
+        Ok(self.0.verify(data.as_ref(), &signature.0)?)
     }
 }
 

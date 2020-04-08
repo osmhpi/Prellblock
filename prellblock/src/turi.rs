@@ -5,8 +5,7 @@ use balise::{
     server::{Handler, Response, Server},
     Request,
 };
-use pinxit::Signable;
-use prellblock_client_api::{message, ClientMessage, Pong, TransactionMessage};
+use prellblock_client_api::{message, ClientMessage, Pong, Transaction};
 use std::net::{SocketAddr, TcpListener};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -53,18 +52,18 @@ impl Turi {
         server.serve(listener)
     }
 
-    fn handle_set_value(&self, params: message::SetValue) -> Result<(), BoxError> {
-        let message::SetValue(peer_id, key, value, signature) = params;
+    fn handle_execute(&self, params: message::Execute) -> Result<(), BoxError> {
+        let message::Execute(peer_id, transaction) = params;
         // Check validity of transaction signature.
-        TransactionMessage {
-            key: &key,
-            value: &value,
+        let transaction = transaction.verify(&peer_id)?;
+
+        match &transaction as &Transaction {
+            Transaction::KeyValue { key, value } => {
+                log::info!("Client {} set {} to {}.", peer_id, key, value);
+            }
         }
-        .verify(&peer_id, &signature)?;
-        log::info!("Client {} set {} to {}", peer_id, key, value);
 
-        let message = crate::peer::message::SetValue(peer_id, key, value, signature);
-
+        let message = crate::peer::message::Execute(peer_id, transaction.into());
         let mut thread_join_handles = Vec::new();
 
         // Broadcast transaction to all RPUs.
@@ -83,6 +82,7 @@ impl Turi {
                 }),
             ));
         }
+
         for (name, join_handle) in thread_join_handles {
             match join_handle.join() {
                 Err(err) => log::error!("Error occurred waiting for {}: {:?}", name, err),
@@ -98,9 +98,7 @@ impl Handler<ClientMessage> for Turi {
         // handle the actual request
         let res = match req {
             ClientMessage::Ping(params) => params.handle(|_| Ok(Pong)),
-            ClientMessage::SetValue(params) => {
-                params.handle(|params| self.handle_set_value(params))
-            }
+            ClientMessage::Execute(params) => params.handle(|params| self.handle_execute(params)),
         };
         Ok(res?)
     }

@@ -3,9 +3,9 @@
 
 //! An example client used to simulate clients.
 
-use pinxit::Identity;
+use pinxit::{Identity, Signable};
 use prellblock_client::Client;
-use prellblock_client_api::{message, TransactionMessage};
+use prellblock_client_api::{message, Transaction};
 use rand::{seq::SliceRandom, thread_rng};
 use serde::Deserialize;
 use serde_json::json;
@@ -65,15 +65,13 @@ fn main() {
             .unwrap();
             let value = json!(value);
 
-            let t_message = TransactionMessage {
-                key: &key,
-                value: &value,
-            };
+            let transaction = Transaction::KeyValue { key, value }
+                .sign(&identity)
+                .unwrap();
 
-            let signature = identity.sign(t_message).unwrap();
             let peer_id = identity.id().clone();
 
-            match client.send_request(message::SetValue(peer_id, key, value, signature)) {
+            match client.send_request(message::Execute(peer_id, transaction)) {
                 Err(err) => log::error!("Failed to send transaction: {}.", err),
                 Ok(()) => log::debug!("Transaction ok!"),
             }
