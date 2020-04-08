@@ -1,6 +1,7 @@
 //! A server for communicating between RPUs.
 
 use std::{
+    env,
     net::TcpListener,
     sync::{Arc, Mutex},
 };
@@ -70,7 +71,10 @@ impl Receiver {
     /// The main server loop.
     pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
         let tls_identity = self.tls_identity.clone();
-        let server = Server::new(self, tls_identity, "prellblock")?;
+        let password =
+            env::var(crate::TLS_PASSWORD_ENV).unwrap_or(crate::TLS_DEFAULT_PASSWORD.to_string());
+        let server = Server::new(self, tls_identity, &password)?;
+        drop(password);
         server.serve(listener)
     }
 
