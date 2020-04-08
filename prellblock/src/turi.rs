@@ -52,8 +52,8 @@ impl Turi {
     /// The main server loop.
     pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
         let tls_identity = self.tls_identity.clone();
-        let password =
-            env::var(crate::TLS_PASSWORD_ENV).unwrap_or(crate::TLS_DEFAULT_PASSWORD.to_string());
+        let password = env::var(crate::TLS_PASSWORD_ENV)
+            .unwrap_or_else(|_| crate::TLS_DEFAULT_PASSWORD.to_string());
         let server = Server::new(self, tls_identity, &password)?;
         drop(password);
         server.serve(listener)
