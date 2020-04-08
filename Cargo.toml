@@ -1,4 +1,8 @@
 [workspace]
 members = [
     "prellblock",
+    "balise",
+    "prellblock-client",
+    "prellblock-client-api",
+    "pinxit",
 ]

@@ -1,0 +1,2 @@
+identity = "./config/percy/percy.key"
+tls_id = "./certificates/percy/percy.pfx"

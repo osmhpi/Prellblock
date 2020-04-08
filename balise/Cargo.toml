@@ -1,5 +1,5 @@
 [package]
-name = "prellblock"
+name = "balise"
 version = "0.1.0"
 authors = [
     "Benedikt Schenkel <benedikt.schenkel@student.hpi.de>",
@@ -9,16 +9,14 @@ authors = [
 ]
 edition = "2018"
 
+[features]
+client = []
+server = []
+tls = ["native-tls"]
+
 [dependencies]
-balise = { path = "../balise", features = ["server", "client", "tls"] }
-chrono = "0.4.11"
 lazy_static = "1.4.0"
 log = "0.4.8"
-pinxit = { path = "../pinxit" }
-prellblock-client-api = { path = "../prellblock-client-api" }
-pretty_env_logger = "0.4.0"
 serde = { version = "1.0.105", features = ["derive"] }
-serde_json = "1.0.51"
-sled = { version = "0.31.0", features = ["compression"] }
-structopt = "0.3.12"
-toml = "0.5.6"
+serde_json = "1.0.48"
+native-tls = { version = "0.2", optional = true }

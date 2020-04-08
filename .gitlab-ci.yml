@@ -8,6 +8,10 @@ variables:
   CARGO_HOME: $CI_PROJECT_DIR/cargo
   RUSTFLAGS: -D warnings
 
+before_script:
+  - rustup toolchain install nightly-2020-03-19 --no-self-update
+  - rustup override set nightly-2020-03-19
+
 test:
   stage: test
   script:
@@ -23,9 +27,10 @@ clippy:
 
 rustfmt:
   stage: test
+  cache: {}
   script:
-    - rustup toolchain install nightly-2020-03-22 --component rustfmt --no-self-update
-    - cargo +nightly-2020-03-22 fmt -- --check
+    - rustup component add rustfmt
+    - cargo fmt -- --check
 
 pages:
   stage: build
@@ -48,6 +53,7 @@ release-build:
       - release
 
 cache:
+  key: $CI_JOB_NAME
   paths:
     - cargo/
     - target/
