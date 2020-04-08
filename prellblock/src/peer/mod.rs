@@ -17,6 +17,7 @@
 //! let data_storage = Arc::new(data_storage);
 //!
 //! let peer_inbox = PeerInbox::new(calculator, data_storage);
+//! let peer_inbox = Arc::new(peer_inbox);
 //!
 //! let bind_addr = "127.0.0.1:0"; // replace 0 with a useful port
 //! let listener = TcpListener::bind(bind_addr).unwrap();

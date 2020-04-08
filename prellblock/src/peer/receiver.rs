@@ -8,7 +8,7 @@ use balise::{
     server::{Handler, Server},
     Request,
 };
-
+use std::sync::Arc;
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 /// A receiver (server) instance.
@@ -29,6 +29,7 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// let data_storage = Arc::new(data_storage);
 ///
 /// let peer_inbox = PeerInbox::new(calculator, data_storage);
+/// let peer_inbox = Arc::new(peer_inbox);
 ///
 /// let bind_addr = "127.0.0.1:0"; // replace 0 with a real port
 ///
@@ -41,13 +42,13 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Clone)]
 pub struct Receiver {
     tls_identity: String,
-    peer_inbox: PeerInbox,
+    peer_inbox: Arc<PeerInbox>,
 }
 
 impl Receiver {
     /// Create a new receiver instance.
     #[must_use]
-    pub const fn new(tls_identity: String, peer_inbox: PeerInbox) -> Self {
+    pub const fn new(tls_identity: String, peer_inbox: Arc<PeerInbox>) -> Self {
         Self {
             tls_identity,
             peer_inbox,
@@ -62,12 +63,11 @@ impl Receiver {
     }
 }
 
-// TODO: macro?
 impl Handler<PeerMessage> for Receiver {
     handle_fn!(self, PeerMessage, {
-        Add(params) =>  self.peer_inbox.handle_add(&params),//calculator.lock().unwrap().add(params.0, params.1)),
-        Sub(params) =>  self.peer_inbox.handle_sub(&params),//calculator.lock().unwrap().sub(params.0, params.1)),
-        Ping(_) => self.peer_inbox.handle_ping(), //Ok(Pong),
+        Add(params) =>  self.peer_inbox.handle_add(&params),
+        Sub(params) =>  self.peer_inbox.handle_sub(&params),
+        Ping(_) => self.peer_inbox.handle_ping(),
         Execute(params) => self.peer_inbox.handle_execute(params),
     });
 }

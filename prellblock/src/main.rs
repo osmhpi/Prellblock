@@ -103,6 +103,7 @@ fn main() {
     let calculator = Arc::new(calculator.into());
 
     let peer_inbox = PeerInbox::new(calculator, storage);
+    let peer_inbox = Arc::new(peer_inbox);
 
     // execute the receiver in a new thread
     thread_join_handles.push((

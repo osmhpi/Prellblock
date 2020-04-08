@@ -7,10 +7,7 @@ type ArcMut<T> = Arc<Mutex<T>>;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-#[derive(Clone)]
 /// A `PeerInbox` instance.
-///
-/// # Example (coming soon)
 pub struct PeerInbox {
     calculator: ArcMut<Calculator>,
     data_storage: Arc<DataStorage>,
