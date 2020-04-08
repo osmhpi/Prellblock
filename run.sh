@@ -1,6 +1,21 @@
 #!/bin/sh -e
 
-local_run=${0%.sh}.local.sh
+# Change to right directory.
+folder="$(dirname "$0")"
+cd "$folder"
+
+local_run=run.local.sh
+
+watch=0
+case "$1" in
+    w|watch)
+        watch=1
+        shift
+        ;;
+esac
+
+bin="$1"
+shift
 
 rust_log="$RUST_LOG"
 
@@ -32,4 +47,12 @@ fi
 
 export RUST_LOG="$rust_log"
 
-exec cargo run "$@"
+if [ "$watch" == "1" ]; then
+    cmd="run --bin \"$bin\" --"
+    for c in "$@"; do
+        cmd="$cmd '$c'"
+    done
+    exec cargo watch -x "$cmd"
+else
+    exec cargo run --bin "$bin" -- "$@"
+fi
