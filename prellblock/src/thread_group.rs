@@ -7,6 +7,24 @@ use std::{
 };
 
 /// A group of threads.
+///
+/// ```no_run
+/// use prellblock::thread_group::ThreadGroup;
+///
+/// let mut thread_group = ThreadGroup::new();
+///
+/// thread_group.spawn("Test 1", move || {
+///     // This is thread 1
+///     // ...
+/// });
+///
+/// thread_group.spawn("Test 2", move || {
+///     // This is thread 2
+///     // ...
+/// });
+///
+/// thread_group.join_and_log();
+/// ```
 pub struct ThreadGroup<T> {
     handles: Vec<JoinHandle<T>>,
 }
