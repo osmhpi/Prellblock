@@ -112,20 +112,6 @@ fn main() {
         }),
     ));
 
-    // // execute the test client
-    // if let Some(peer_addr) = opt.peer {
-    //     let mut client = Sender::new(peer_addr);
-    //     match client.send_request(message::Ping) {
-    //         Err(err) => log::error!("Failed to send Ping: {}.", err),
-    //         Ok(res) => log::debug!("Ping response: {:?}", res),
-    //     }
-    //     log::info!("The sum is {:?}", client.send_request(message::Add(100, 2)));
-    //     log::info!(
-    //         "The second sum is {:?}",
-    //         client.send_request(message::Add(10, 2))
-    //     );
-    // }
-
     // wait for all threads
     for (name, join_handle) in thread_join_handles {
         match join_handle.join() {

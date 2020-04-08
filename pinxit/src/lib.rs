@@ -4,17 +4,17 @@
 //! Cryptographic types for identities and signatures.
 //!
 //! ```
-//! use pinxit::{Identity, Signable};
+//! use pinxit::{Identity, Signable, Signed, Verified};
 //!
 //! // define example struct
-//! struct TestData(String);
+//! struct TestData<'a>(&'a str);
 //!
 //! // make the struct signable
-//! impl<'a> Signable for &'a TestData {
-//!     type Message = &'a str;
+//! impl<'a> Signable for TestData<'a> {
+//!     type SignableData = &'a str;
 //!     type Error = std::io::Error; // never used
-//!     fn message(&self) -> Result<Self::Message, Self::Error> {
-//!         Ok(&self.0)
+//!     fn signable_data(&self) -> Result<Self::SignableData, Self::Error> {
+//!         Ok(self.0)
 //!     }
 //! }
 //!
@@ -22,16 +22,20 @@
 //! let identity = Identity::generate();
 //!
 //! // create signable test data
-//! let test_data = TestData("Lorem ipsum".to_string());
+//! let test_data = TestData("Lorem ipsum");
 //!
-//! // create a signature
-//! let signature = identity.sign(&test_data).unwrap();
+//! // create a signed version of test data
+//! // you cannot access the data until it is verified
+//! let signed: Signed<TestData> = test_data.sign(&identity).unwrap();
 //!
 //! // get peer id of identity
 //! let peer_id = identity.id();
 //!
 //! // verify the signature
-//! peer_id.verify(&test_data, &signature).unwrap();
+//! let verified: Verified<TestData> = signed.verify(peer_id).unwrap();
+//!
+//! // access the data
+//! println!("{}", verified.0)
 //! ```
 
 #[macro_use]
@@ -46,5 +50,5 @@ mod signature;
 pub use error::Error;
 pub use identity::Identity;
 pub use peer_id::PeerId;
-pub use signable::Signable;
+pub use signable::{Signable, Signed, Verified};
 pub use signature::Signature;

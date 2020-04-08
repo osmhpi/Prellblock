@@ -56,7 +56,7 @@ impl DataStorage {
         key_tree.insert(&time, value)?;
 
         // Demo that it's working.
-        log::debug!("Have now {} entries.", key_tree.len());
+        log::debug!("Data storage now has {} entries.", key_tree.len());
         // for value in key_tree.iter() {
         //     if let Ok((key, value)) = value {
         //         log::trace!("Found {:x?} => {:x?}", key, value);

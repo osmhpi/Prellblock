@@ -12,8 +12,7 @@ use balise::{
     server::{Handler, Server},
     Request,
 };
-use pinxit::Signable;
-use prellblock_client_api::TransactionMessage;
+use prellblock_client_api::Transaction;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -75,23 +74,23 @@ impl Receiver {
         server.serve(listener)
     }
 
-    fn handle_set_value(&self, params: message::SetValue) -> Result<(), BoxError> {
-        let message::SetValue(peer_id, key, value, signature) = params;
-        // Check validity of message signature.
-        TransactionMessage {
-            key: &key,
-            value: &value,
-        }
-        .verify(&peer_id, &signature)?;
-        log::info!(
-            "Client {} set {} to {} (via another RPU)",
-            peer_id,
-            key,
-            value
-        );
+    fn handle_execute(&self, params: message::Execute) -> Result<(), BoxError> {
+        let message::Execute(peer_id, transaction) = params;
+        let transaction = transaction.verify(&peer_id)?;
 
-        // TODO: Continue with warning or error?
-        self.data_storage.write(&peer_id, key, &value)?;
+        match transaction.into_inner() {
+            Transaction::KeyValue { key, value } => {
+                log::info!(
+                    "Client {} set {} to {} (via another RPU)",
+                    &peer_id,
+                    key,
+                    value
+                );
+
+                // TODO: Continue with warning or error?
+                self.data_storage.write(&peer_id, key, &value)?;
+            }
+        }
 
         Ok(())
     }
@@ -102,6 +101,6 @@ impl Handler<PeerMessage> for Receiver {
         Add(params) =>  Ok(self.calculator.lock().unwrap().add(params.0, params.1)),
         Sub(params) =>  Ok(self.calculator.lock().unwrap().sub(params.0, params.1)),
         Ping(_) => Ok(Pong),
-        SetValue(params) => self.handle_set_value(params),
+        Execute(params) => self.handle_execute(params),
     });
 }

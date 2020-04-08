@@ -33,10 +33,6 @@
 //! }
 //! ```
 
-// TODO: Define and use a macro to create the api spec boiler plate. (macro_rules!)
-// See https://doc.rust-lang.org/book/ch19-06-macros.html
-// and https://rustbyexample.com/macros.html
-
 mod calculator;
 mod receiver;
 mod sender;
@@ -46,7 +42,8 @@ pub use receiver::Receiver;
 pub use sender::Sender;
 
 use balise::define_api;
-use pinxit::{PeerId, Signature};
+use pinxit::{PeerId, Signed};
+use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -68,7 +65,7 @@ define_api! {
         /// Ping Message. See [`Pong`](../struct.Pong.html).
         Ping => Pong,
 
-        /// Simple transaction Message. Will write a key:value pair.
-        SetValue(PeerId, String,serde_json::Value, Signature) => (),
+        /// Simple transaction message. Will write a key:value pair.
+        Execute(PeerId, Signed<Transaction>) => (),
     }
 }

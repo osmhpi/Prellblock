@@ -6,8 +6,7 @@ use balise::{
     server::{Handler, Server},
     Request,
 };
-use pinxit::Signable;
-use prellblock_client_api::{message, ClientMessage, Pong, TransactionMessage};
+use prellblock_client_api::{message, ClientMessage, Pong, Transaction};
 use std::{net::TcpListener, sync::Arc};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -57,18 +56,18 @@ impl Turi {
         server.serve(listener)
     }
 
-    fn handle_set_value(&self, params: message::SetValue) -> Result<(), BoxError> {
-        let message::SetValue(peer_id, key, value, signature) = params;
+    fn handle_execute(&self, params: message::Execute) -> Result<(), BoxError> {
+        let message::Execute(peer_id, transaction) = params;
         // Check validity of transaction signature.
-        TransactionMessage {
-            key: &key,
-            value: &value,
+        let transaction = transaction.verify(&peer_id)?;
+
+        match &transaction as &Transaction {
+            Transaction::KeyValue { key, value } => {
+                log::info!("Client {} set {} to {}.", peer_id, key, value);
+            }
         }
-        .verify(&peer_id, &signature)?;
-        log::info!("Client {} set {} to {}", peer_id, key, value);
 
-        let message = crate::peer::message::SetValue(peer_id, key, value, signature);
-
+        let message = crate::peer::message::Execute(peer_id, transaction.into());
         self.broadcaster.broadcast(&message)?;
 
         Ok(())
@@ -78,6 +77,6 @@ impl Turi {
 impl Handler<ClientMessage> for Turi {
     handle_fn!(self, ClientMessage, {
         Ping(_) => Ok(Pong),
-        SetValue(params) => self.handle_set_value(params),
+        Execute(params) => self.handle_execute(params),
     });
 }

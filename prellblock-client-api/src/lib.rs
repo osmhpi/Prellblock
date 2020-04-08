@@ -4,7 +4,7 @@
 //! Library Crate used for Communication between external Clients and internal RPUs.
 
 use balise::define_api;
-use pinxit::{PeerId, Signable, Signature};
+use pinxit::{PeerId, Signable, Signed};
 use serde::{Deserialize, Serialize};
 
 /// Play ping pong. See [`Ping`](message/struct.Ping.html).
@@ -19,23 +19,26 @@ define_api! {
         /// Ping Message. See [`Pong`](../struct.Pong.html).
         Ping => Pong,
         /// Simple transaction Message. Will write a key:value pair.
-        SetValue(PeerId, String,serde_json::Value, Signature) => (),
+        Execute(PeerId, Signed<Transaction>) => (),
     }
 }
 
-/// The transaction message for key:value creation.
-#[derive(Debug, Serialize)]
-pub struct TransactionMessage<'a> {
-    /// The key.
-    pub key: &'a str,
-    /// The value.
-    pub value: &'a serde_json::Value,
+/// A blockchain transaction for prellblock.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Transaction {
+    /// Set a `key` to a `value`.
+    KeyValue {
+        /// The key.
+        key: String,
+        /// The value.
+        value: serde_json::Value,
+    },
 }
 
-impl<'a> Signable for TransactionMessage<'a> {
-    type Message = String;
+impl Signable for Transaction {
+    type SignableData = String;
     type Error = serde_json::error::Error;
-    fn message(&self) -> Result<Self::Message, Self::Error> {
+    fn signable_data(&self) -> Result<Self::SignableData, Self::Error> {
         serde_json::to_string(self)
     }
 }
