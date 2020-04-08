@@ -5,7 +5,7 @@
 //! ```no_run
 //! use prellblock::{
 //!     data_storage::DataStorage,
-//!     peer::{message, Calculator, Receiver, Sender},
+//!     peer::{message, Calculator, PeerInbox, Receiver, Sender},
 //! };
 //! use std::{net::TcpListener, sync::Arc};
 //!
@@ -16,12 +16,14 @@
 //! let data_storage = DataStorage::new("/tmp/some_db").unwrap(); // don't use tmp
 //! let data_storage = Arc::new(data_storage);
 //!
+//! let peer_inbox = PeerInbox::new(calculator, data_storage);
+//!
 //! let bind_addr = "127.0.0.1:0"; // replace 0 with a useful port
 //! let listener = TcpListener::bind(bind_addr).unwrap();
 //! let peer_addr = listener.local_addr().unwrap(); // address with allocated port
 //!
 //! std::thread::spawn(move || {
-//!     let receiver = Receiver::new("path_to_pfx.pfx".to_string(), calculator, data_storage);
+//!     let receiver = Receiver::new("path_to_pfx.pfx".to_string(), peer_inbox);
 //!     receiver.serve(&listener).unwrap();
 //! });
 //!
@@ -34,10 +36,12 @@
 //! ```
 
 mod calculator;
+mod peer_inbox;
 mod receiver;
 mod sender;
 
 pub use calculator::Calculator;
+pub use peer_inbox::PeerInbox;
 pub use receiver::Receiver;
 pub use sender::Sender;
 
