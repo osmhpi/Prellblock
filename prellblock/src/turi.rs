@@ -7,7 +7,7 @@ use balise::{
     Request,
 };
 use prellblock_client_api::{message, ClientMessage, Pong, Transaction};
-use std::{net::TcpListener, sync::Arc};
+use std::{env, net::TcpListener, sync::Arc};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -52,7 +52,10 @@ impl Turi {
     /// The main server loop.
     pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
         let tls_identity = self.tls_identity.clone();
-        let server = Server::new(self, tls_identity, "prellblock")?;
+        let password = env::var(crate::TLS_PASSWORD_ENV)
+            .unwrap_or_else(|_| crate::TLS_DEFAULT_PASSWORD.to_string());
+        let server = Server::new(self, tls_identity, &password)?;
+        drop(password);
         server.serve(listener)
     }
 

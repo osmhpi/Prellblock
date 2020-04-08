@@ -12,7 +12,7 @@
 use prellblock::{
     data_broadcaster::Broadcaster,
     data_storage::DataStorage,
-    peer::{Calculator, Receiver},
+    peer::{Calculator, PeerInbox, Receiver},
     thread_group::ThreadGroup,
     turi::Turi,
 };
@@ -58,9 +58,6 @@ fn main() {
     let opt = Opt::from_args();
     log::debug!("Command line arguments: {:#?}", opt);
 
-    let storage = DataStorage::new(&format!("./data/{}", opt.name)).unwrap();
-    let storage = Arc::new(storage);
-
     // load and parse config
     let config_data = fs::read_to_string("./config/config.toml").unwrap();
     let config: Config = toml::from_str(&config_data).unwrap();
@@ -101,15 +98,21 @@ fn main() {
         );
     }
 
+    let storage = DataStorage::new(&format!("./data/{}", opt.name)).unwrap();
+    let storage = Arc::new(storage);
+
     let calculator = Calculator::new();
     let calculator = Arc::new(calculator.into());
+
+    let peer_inbox = PeerInbox::new(calculator, storage);
+    let peer_inbox = Arc::new(peer_inbox);
 
     // execute the receiver in a new thread
     thread_group.spawn(
         format!("Peer Receiver ({})", public_config.peer_address),
         move || {
             let listener = TcpListener::bind(public_config.peer_address)?;
-            let receiver = Receiver::new(private_config.tls_id, calculator, storage);
+            let receiver = Receiver::new(private_config.tls_id, peer_inbox);
             receiver.serve(&listener)
         },
     );

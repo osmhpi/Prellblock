@@ -1,22 +1,14 @@
 //! A server for communicating between RPUs.
 
-use std::{
-    net::TcpListener,
-    sync::{Arc, Mutex},
-};
+use std::{env, net::TcpListener, sync::Arc};
 
-use super::{message, Calculator, PeerMessage, Pong};
-use crate::data_storage::DataStorage;
+use super::{PeerInbox, PeerMessage};
 use balise::{
     handle_fn,
     server::{Handler, Server},
     Request,
 };
-use prellblock_client_api::Transaction;
-
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
-
-type ArcMut<T> = Arc<Mutex<T>>;
 
 /// A receiver (server) instance.
 ///
@@ -25,22 +17,23 @@ type ArcMut<T> = Arc<Mutex<T>>;
 /// ```
 /// use prellblock::{
 ///     data_storage::DataStorage,
-///     peer::{Calculator, Receiver},
+///     peer::{Calculator, PeerInbox, Receiver},
 /// };
 /// use std::{net::TcpListener, sync::Arc};
 ///
 /// let calculator = Calculator::new();
 /// let calculator = Arc::new(calculator.into());
-/// let bind_addr = "127.0.0.1:0"; // replace 0 with a real port
 ///
 /// let data_storage = DataStorage::new("/tmp/some_db").unwrap();
+/// let data_storage = Arc::new(data_storage);
+///
+/// let peer_inbox = PeerInbox::new(calculator, data_storage);
+/// let peer_inbox = Arc::new(peer_inbox);
+///
+/// let bind_addr = "127.0.0.1:0"; // replace 0 with a real port
 ///
 /// let listener = TcpListener::bind(bind_addr).unwrap();
-/// let receiver = Receiver::new(
-///     "path_to_pfx.pfx".to_string(),
-///     calculator,
-///     Arc::new(data_storage),
-/// );
+/// let receiver = Receiver::new("path_to_pfx.pfx".to_string(), peer_inbox);
 /// std::thread::spawn(move || {
 ///     receiver.serve(&listener).unwrap();
 /// });
@@ -48,59 +41,35 @@ type ArcMut<T> = Arc<Mutex<T>>;
 #[derive(Clone)]
 pub struct Receiver {
     tls_identity: String,
-    calculator: ArcMut<Calculator>,
-    data_storage: Arc<DataStorage>,
+    peer_inbox: Arc<PeerInbox>,
 }
 
 impl Receiver {
     /// Create a new receiver instance.
     #[must_use]
-    pub fn new(
-        tls_identity: String,
-        calculator: ArcMut<Calculator>,
-        data_storage: Arc<DataStorage>,
-    ) -> Self {
+    pub const fn new(tls_identity: String, peer_inbox: Arc<PeerInbox>) -> Self {
         Self {
             tls_identity,
-            calculator,
-            data_storage,
+            peer_inbox,
         }
     }
 
     /// The main server loop.
     pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
         let tls_identity = self.tls_identity.clone();
-        let server = Server::new(self, tls_identity, "prellblock")?;
+        let password = env::var(crate::TLS_PASSWORD_ENV)
+            .unwrap_or_else(|_| crate::TLS_DEFAULT_PASSWORD.to_string());
+        let server = Server::new(self, tls_identity, &password)?;
+        drop(password);
         server.serve(listener)
-    }
-
-    fn handle_execute(&self, params: message::Execute) -> Result<(), BoxError> {
-        let message::Execute(peer_id, transaction) = params;
-        let transaction = transaction.verify(&peer_id)?;
-
-        match transaction.into_inner() {
-            Transaction::KeyValue { key, value } => {
-                log::info!(
-                    "Client {} set {} to {} (via another RPU)",
-                    &peer_id,
-                    key,
-                    value
-                );
-
-                // TODO: Continue with warning or error?
-                self.data_storage.write(&peer_id, key, &value)?;
-            }
-        }
-
-        Ok(())
     }
 }
 
 impl Handler<PeerMessage> for Receiver {
     handle_fn!(self, PeerMessage, {
-        Add(params) =>  Ok(self.calculator.lock().unwrap().add(params.0, params.1)),
-        Sub(params) =>  Ok(self.calculator.lock().unwrap().sub(params.0, params.1)),
-        Ping(_) => Ok(Pong),
-        Execute(params) => self.handle_execute(params),
+        Add(params) =>  self.peer_inbox.handle_add(&params),
+        Sub(params) =>  self.peer_inbox.handle_sub(&params),
+        Ping(_) => self.peer_inbox.handle_ping(),
+        Execute(params) => self.peer_inbox.handle_execute(params),
     });
 }

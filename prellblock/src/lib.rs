@@ -14,3 +14,6 @@ pub mod data_storage;
 pub mod peer;
 pub mod thread_group;
 pub mod turi;
+
+const TLS_PASSWORD_ENV: &str = "TLS_PASSWORD";
+const TLS_DEFAULT_PASSWORD: &str = "prellblock";
