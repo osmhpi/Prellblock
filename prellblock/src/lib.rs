@@ -9,6 +9,7 @@
 //! By using an execute-order-validate procedure it is assured, that data will be saved, even in case of a total failure of all but one redundant processing unit.
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
+pub mod data_broadcaster;
 pub mod data_storage;
 pub mod peer;
 pub mod turi;

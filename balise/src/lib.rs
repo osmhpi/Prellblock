@@ -114,7 +114,7 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// (is done automatically when using the [`define_api!`](macro.define_api.html)-macro).
 /// This allows a message `M` which implements `Request<T>` to be converted to one of the enum variants (via `Into<T>`).
 /// And the implementation can ensure that the response is of type `M::Response`.
-pub trait Request<T>: Serialize + Into<T> + Debug {
+pub trait Request<T>: Serialize + Into<T> + Debug + Clone + Send + 'static {
     /// The type of the response.
     type Response: Serialize + DeserializeOwned + Debug;
 
