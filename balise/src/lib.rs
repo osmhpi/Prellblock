@@ -113,7 +113,7 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// And the implementation can ensure that the response is of type `M::Response`.
 pub trait Request<T>: Serialize + Into<T> + Debug + Clone + Send + 'static {
     /// The type of the response.
-    type Response: Serialize + DeserializeOwned + Debug;
+    type Response: Serialize + DeserializeOwned + Debug + Send + 'static;
 
     /// Call the request handler and encode the response.
     #[cfg(feature = "server")]

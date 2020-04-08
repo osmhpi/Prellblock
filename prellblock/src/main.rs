@@ -13,6 +13,7 @@ use prellblock::{
     data_broadcaster::Broadcaster,
     data_storage::DataStorage,
     peer::{Calculator, Receiver},
+    thread_group::ThreadGroup,
     turi::Turi,
 };
 use serde::Deserialize;
@@ -73,7 +74,8 @@ fn main() {
         fs::read_to_string(format!("./config/{0}/{0}.toml", opt.name)).unwrap();
     let private_config: RpuPrivateConfig = toml::from_str(&private_config_data).unwrap();
     // join handles of all threads
-    let mut thread_join_handles = Vec::new();
+
+    let mut thread_group = ThreadGroup::new();
 
     let peer_addresses: Vec<SocketAddr> = config
         .rpu
@@ -89,35 +91,30 @@ fn main() {
         let public_config = public_config.clone();
         let private_config = private_config.clone();
 
-        thread_join_handles.push((
+        thread_group.spawn(
             format!("Turi ({})", public_config.turi_address),
-            std::thread::spawn(move || {
-                let listener = TcpListener::bind(public_config.turi_address).unwrap();
+            move || {
+                let listener = TcpListener::bind(public_config.turi_address)?;
                 let turi = Turi::new(private_config.tls_id, broadcaster);
-                turi.serve(&listener).unwrap();
-            }),
-        ));
+                turi.serve(&listener)
+            },
+        );
     }
 
     let calculator = Calculator::new();
     let calculator = Arc::new(calculator.into());
 
     // execute the receiver in a new thread
-    thread_join_handles.push((
+    thread_group.spawn(
         format!("Peer Receiver ({})", public_config.peer_address),
-        std::thread::spawn(move || {
-            let listener = TcpListener::bind(public_config.peer_address).unwrap();
+        move || {
+            let listener = TcpListener::bind(public_config.peer_address)?;
             let receiver = Receiver::new(private_config.tls_id, calculator, storage);
-            receiver.serve(&listener).unwrap();
-        }),
-    ));
+            receiver.serve(&listener)
+        },
+    );
 
     // wait for all threads
-    for (name, join_handle) in thread_join_handles {
-        match join_handle.join() {
-            Err(err) => log::error!("Error occurred waiting for {}: {:?}", name, err),
-            Ok(()) => log::info!("Ended {}.", name),
-        };
-    }
+    thread_group.join_and_log();
     log::info!("Going to hunt some mice. I meant *NICE*. Bye.");
 }

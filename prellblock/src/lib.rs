@@ -12,4 +12,5 @@
 pub mod data_broadcaster;
 pub mod data_storage;
 pub mod peer;
+pub mod thread_group;
 pub mod turi;
