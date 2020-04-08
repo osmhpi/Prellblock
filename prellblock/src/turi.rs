@@ -1,12 +1,15 @@
 //! A server for communicating between RPUs.
 
-use crate::peer::Sender;
+use crate::data_broadcaster::Broadcaster;
 use balise::{
     server::{Handler, Response, Server},
     Request,
 };
 use prellblock_client_api::{message, ClientMessage, Pong, Transaction};
-use std::net::{SocketAddr, TcpListener};
+use std::{
+    net::{SocketAddr, TcpListener},
+    sync::Arc,
+};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -16,13 +19,16 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 ///
 /// ```no_run
 /// use prellblock::turi::Turi;
+/// use prellblock::data_broadcaster::Broadcaster;
 /// use std::{net::TcpListener, sync::Arc};
 ///
 /// let bind_addr = "127.0.0.1:0"; // replace 0 with a real port
 ///
 /// let listener = TcpListener::bind(bind_addr).unwrap();
 /// let peer_addresses = vec!["127.0.0.1:2480".parse().unwrap()]; // The ip addresses + ports of all other peers.
-/// let turi = Turi::new("path_to_pfx.pfx".to_string(), peer_addresses);
+/// let broadcaster = Broadcaster::new(peer_addresses);
+/// let broadcaster = Arc::new(broadcaster);
+/// let turi = Turi::new("path_to_pfx.pfx".to_string(), broadcaster);
 /// std::thread::spawn(move || {
 ///     turi.serve(&listener).unwrap();
 /// });
@@ -30,7 +36,7 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Clone)]
 pub struct Turi {
     tls_identity: String,
-    peer_addresses: Vec<SocketAddr>,
+    broadcaster: Arc<Broadcaster>,
 }
 
 impl Turi {
@@ -38,10 +44,10 @@ impl Turi {
     ///
     /// The `identity` is a path to a `.pfx` file.
     #[must_use]
-    pub const fn new(tls_identity: String, peer_addresses: Vec<SocketAddr>) -> Self {
+    pub const fn new(tls_identity: String, broadcaster: Arc<Broadcaster>) -> Self {
         Self {
             tls_identity,
-            peer_addresses,
+            broadcaster,
         }
     }
 
@@ -64,31 +70,8 @@ impl Turi {
         }
 
         let message = crate::peer::message::Execute(peer_id, transaction.into());
-        let mut thread_join_handles = Vec::new();
+        self.broadcaster.broadcast(&message)?;
 
-        // Broadcast transaction to all RPUs.
-        for &peer_address in &self.peer_addresses {
-            let message = message.clone();
-            thread_join_handles.push((
-                format!("Sender ({})", peer_address),
-                std::thread::spawn(move || {
-                    let mut sender = Sender::new(peer_address);
-                    match sender.send_request(message) {
-                        Ok(()) => log::debug!("Successfully sent message to peer {}", peer_address),
-                        Err(err) => {
-                            log::error!("Failed sending message to peer {}: {}", peer_address, err)
-                        }
-                    }
-                }),
-            ));
-        }
-
-        for (name, join_handle) in thread_join_handles {
-            match join_handle.join() {
-                Err(err) => log::error!("Error occurred waiting for {}: {:?}", name, err),
-                Ok(()) => log::info!("Ended {}.", name),
-            };
-        }
         Ok(())
     }
 }

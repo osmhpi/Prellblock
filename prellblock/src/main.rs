@@ -10,6 +10,7 @@
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
 use prellblock::{
+    data_broadcaster::Broadcaster,
     data_storage::DataStorage,
     peer::{Calculator, Receiver},
     turi::Turi,
@@ -74,20 +75,25 @@ fn main() {
     // join handles of all threads
     let mut thread_join_handles = Vec::new();
 
+    let peer_addresses: Vec<SocketAddr> = config
+        .rpu
+        .iter()
+        .map(|rpu_config| rpu_config.peer_address)
+        .collect();
+
+    let broadcaster = Broadcaster::new(peer_addresses);
+    let broadcaster = Arc::new(broadcaster);
+
     // execute the turi in a new thread
     {
-        let peer_addresses = config
-            .rpu
-            .iter()
-            .map(|rpu_config| rpu_config.peer_address)
-            .collect();
         let public_config = public_config.clone();
         let private_config = private_config.clone();
+
         thread_join_handles.push((
             format!("Turi ({})", public_config.turi_address),
             std::thread::spawn(move || {
                 let listener = TcpListener::bind(public_config.turi_address).unwrap();
-                let turi = Turi::new(private_config.tls_id, peer_addresses);
+                let turi = Turi::new(private_config.tls_id, broadcaster);
                 turi.serve(&listener).unwrap();
             }),
         ));
