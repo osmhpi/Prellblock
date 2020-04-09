@@ -568,6 +568,7 @@ name = "prellblock-client"
 version = "0.1.0"
 dependencies = [
  "balise",
+ "hex",
  "log",
  "pinxit",
  "prellblock-client-api",
