@@ -10,6 +10,7 @@
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
 use prellblock::{
+    batcher::Batcher,
     data_broadcaster::Broadcaster,
     data_storage::DataStorage,
     peer::{Calculator, PeerInbox, Receiver},
@@ -83,6 +84,9 @@ fn main() {
     let broadcaster = Broadcaster::new(peer_addresses);
     let broadcaster = Arc::new(broadcaster);
 
+    let batcher = Batcher::new(broadcaster);
+    let batcher = Arc::new(batcher);
+
     // execute the turi in a new thread
     {
         let public_config = public_config.clone();
@@ -92,7 +96,7 @@ fn main() {
             format!("Turi ({})", public_config.turi_address),
             move || {
                 let listener = TcpListener::bind(public_config.turi_address)?;
-                let turi = Turi::new(private_config.tls_id, broadcaster);
+                let turi = Turi::new(private_config.tls_id, batcher);
                 turi.serve(&listener)
             },
         );

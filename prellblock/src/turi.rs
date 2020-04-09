@@ -1,6 +1,6 @@
 //! A server for communicating between RPUs.
 
-use crate::data_broadcaster::Broadcaster;
+use crate::batcher::Batcher;
 use balise::{
     handle_fn,
     server::{Handler, Server},
@@ -8,7 +8,6 @@ use balise::{
 };
 use prellblock_client_api::{message, ClientMessage, Pong, Transaction};
 use std::{env, net::TcpListener, sync::Arc};
-
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 /// A receiver (server) instance.
@@ -17,6 +16,7 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 ///
 /// ```no_run
 /// use prellblock::turi::Turi;
+/// use prellblock::batcher::Batcher;
 /// use prellblock::data_broadcaster::Broadcaster;
 /// use std::{net::TcpListener, sync::Arc};
 ///
@@ -24,9 +24,14 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 ///
 /// let listener = TcpListener::bind(bind_addr).unwrap();
 /// let peer_addresses = vec!["127.0.0.1:2480".parse().unwrap()]; // The ip addresses + ports of all other peers.
+///
 /// let broadcaster = Broadcaster::new(peer_addresses);
 /// let broadcaster = Arc::new(broadcaster);
-/// let turi = Turi::new("path_to_pfx.pfx".to_string(), broadcaster);
+///
+/// let batcher = Batcher::new(broadcaster);
+/// let batcher = Arc::new(batcher.into());
+///
+/// let turi = Turi::new("path_to_pfx.pfx".to_string(), batcher);
 /// std::thread::spawn(move || {
 ///     turi.serve(&listener).unwrap();
 /// });
@@ -34,7 +39,7 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Clone)]
 pub struct Turi {
     tls_identity: String,
-    broadcaster: Arc<Broadcaster>,
+    batcher: Arc<Batcher>,
 }
 
 impl Turi {
@@ -42,10 +47,10 @@ impl Turi {
     ///
     /// The `identity` is a path to a `.pfx` file.
     #[must_use]
-    pub const fn new(tls_identity: String, broadcaster: Arc<Broadcaster>) -> Self {
+    pub const fn new(tls_identity: String, batcher: Arc<Batcher>) -> Self {
         Self {
             tls_identity,
-            broadcaster,
+            batcher,
         }
     }
 
@@ -71,7 +76,7 @@ impl Turi {
         }
 
         let message = crate::peer::message::Execute(peer_id, transaction.into());
-        self.broadcaster.broadcast(&message)?;
+        self.batcher.clone().add_to_batch(message);
 
         Ok(())
     }

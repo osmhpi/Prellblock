@@ -10,8 +10,6 @@ use std::net::SocketAddr;
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 /// A broadcaster for peer messages.
-///
-/// Example (coming soon)
 pub struct Broadcaster {
     peer_addresses: Vec<SocketAddr>,
 }
@@ -25,7 +23,7 @@ impl Broadcaster {
         Self { peer_addresses }
     }
 
-    /// Broadcast a message to all known peers (stored in `peer_addresses`).
+    /// Broadcast a batch to all known peers (stored in `peer_addresses`).
     pub fn broadcast<T>(&self, message: &T) -> Result<(), BoxError>
     where
         T: Request<PeerMessage>,
@@ -35,6 +33,7 @@ impl Broadcaster {
         // Broadcast transaction to all RPUs.
         for &peer_address in &self.peer_addresses {
             let message = message.clone();
+            //let message = message::ExecuteBatch(batch);
             thread_group.spawn(format!("Sender ({})", peer_address), move || {
                 let mut sender = Sender::new(peer_address);
                 sender.send_request(message)

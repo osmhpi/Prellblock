@@ -72,5 +72,8 @@ define_api! {
 
         /// Simple transaction message. Will write a key:value pair.
         Execute(PeerId, Signed<Transaction>) => (),
+
+        /// Simple transaction message. Will write a key:value pair.
+        ExecuteBatch(Vec<Execute>) => (),
     }
 }
