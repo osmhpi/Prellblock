@@ -35,7 +35,7 @@ enum Command {
         /// The key to use for saving benchmark generated data.
         key: String,
         /// The number of transactions to send
-        transactions: usize,
+        transactions: u32,
         /// The number of bytes each transaction's payload should have.
         #[structopt(short, long, default_value = "8")]
         size: usize,
@@ -137,28 +137,29 @@ fn main() {
                             Ok(()) => log::debug!("Transaction ok!"),
                         }
                     }
-                    let time_diff = start.elapsed();
-                    time_diff
+                    start.elapsed()
                 }));
             }
 
             for (n, worker) in worker_handles.into_iter().enumerate() {
-                match worker.join() {
-                    Ok(time_diff) => {
-                        let avg_time_per_tx = time_diff.div_f64(transactions as f64);
-                        let avg_tps = 1.0 / avg_time_per_tx.as_secs_f64();
-                        log::info!(
-                            "--------------------------------------------------------------------------------"
-                        );
-                        log::info!("Finished benchmark with worker {}.", n);
-                        log::info!("Number of transactions: {}", transactions);
-                        log::info!("Transaction size:       {} bytes", size);
-                        log::info!("Sum of sent payload:    {} bytes", size * transactions);
-                        log::info!("Duration:               {:?}", time_diff);
-                        log::info!("Transaction time:       {:?}", avg_time_per_tx);
-                        log::info!("TPS (averaged):         {}", avg_tps);
-                    }
-                    Err(_) => log::error!("Failed to benchmark with worker {}", n),
+                if let Ok(time_diff) = worker.join() {
+                    let avg_time_per_tx = time_diff / transactions;
+                    let avg_tps = 1.0 / avg_time_per_tx.as_secs_f64();
+                    log::info!(
+                        "--------------------------------------------------------------------------------"
+                    );
+                    log::info!("Finished benchmark with worker {}.", n);
+                    log::info!("Number of transactions: {}", transactions);
+                    log::info!("Transaction size:       {} bytes", size);
+                    log::info!(
+                        "Sum of sent payload:    {} bytes",
+                        size * transactions as usize
+                    );
+                    log::info!("Duration:               {:?}", time_diff);
+                    log::info!("Transaction time:       {:?}", avg_time_per_tx);
+                    log::info!("TPS (averaged):         {}", avg_tps);
+                } else {
+                    log::error!("Failed to benchmark with worker {}", n);
                 }
             }
         }
