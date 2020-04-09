@@ -14,3 +14,8 @@
 
 # Data storage
 /data/
+
+# Flamegraphs
+/perf.data*
+/flamegraph*.svg
+/cargo-flamegraph.stacks

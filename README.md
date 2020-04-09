@@ -113,3 +113,22 @@ This will set the default log level to `info`, show all `trace` logs of `prellbl
 and disable all logs in submodules of `prellblock` (sets `RUST_LOG=info,prellblock=trace,prellblock::=off`).
 To use this configuration execute `./run.sh <binary> <options>` instead of `cargo run -- bin <binary> -- <options>`.
 If you whish to run `cargo watch` you can also run the script with `./run.sh w(atch) <binary> <options>`.
+
+### Profiling
+
+For testing speed and efficiency of the *prellblock*, there is a tool called [flamegraph-rs/flamegraph](https://github.com/flamegraph-rs/flamegraph).
+You can install it via `cargo install flamegraph`. On Linux (Debian) you need to install `linux-perf`, too.
+To generate an interactive graph on **Linux**, run:
+
+```sh
+$ sudo sysctl -w kernel.perf_event_paranoid=1
+$ ./run.sh f prellblock <options>
+```
+
+On **macOS** run:
+
+```sh
+$ ./run.sh f prellblock <options>
+```
+
+After stopping the program, a graph (`flamegraph.svg`) will be created.
