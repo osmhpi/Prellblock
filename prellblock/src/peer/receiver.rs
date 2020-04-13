@@ -71,5 +71,5 @@ impl Handler<PeerMessage> for Receiver {
         Sub(params) =>  self.peer_inbox.handle_sub(&params),
         Ping(_) => self.peer_inbox.handle_ping(),
         Execute(params) => self.peer_inbox.handle_execute(params),
-    });
+        ExecuteBatch(params) => self.peer_inbox.handle_execute_batch(params),    });
 }

@@ -23,7 +23,7 @@ impl PeerInbox {
         }
     }
 
-    /// Handle an `execute` `Signable` message, answer with a `pong` as a `Result`.
+    /// Handle an `execute` `Signable` message.
     pub fn handle_execute(&self, params: message::Execute) -> Result<(), BoxError> {
         let message::Execute(peer_id, transaction) = params;
         let transaction = transaction.verify(&peer_id)?;
@@ -39,6 +39,16 @@ impl PeerInbox {
 
                 // TODO: Continue with warning or error?
                 self.data_storage.write(&peer_id, key, &value)?;
+            }
+        }
+        Ok(())
+    }
+    /// Handle a btach of `execute` `Signable` messages.
+    pub fn handle_execute_batch(&self, params: message::ExecuteBatch) -> Result<(), BoxError> {
+        let message::ExecuteBatch(batch) = params;
+        for message in batch {
+            if let Err(err) = self.handle_execute(message) {
+                log::error!("Error while handling message: {}", err);
             }
         }
         Ok(())
