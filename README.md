@@ -257,7 +257,15 @@ On **macOS** run:
 ./run.sh f prellblock <options>
 ```
 
-After stopping the program, a graph (`flamegraph.svg`) will be created. -->
+After stopping the program, a graph (`flamegraph.svg`) will be created.
+
+Furthermore, there is a [**benchmarking** script](benchmarking/benchmark.sh). It profiles *prellblock* via the client and plots the results via **gnuplot**.
+
+```sh
+sudo apt-get install gnuplot
+./benchmarking/benchmark.sh
+```
+-->
 
 ## License
 
