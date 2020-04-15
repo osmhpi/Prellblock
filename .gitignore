@@ -24,3 +24,7 @@
 /perf.data*
 /flamegraph*.svg
 /cargo-flamegraph.stacks
+
+# Benchmark data and plots
+benchmarking/*.dat
+benchmarking/*.png
