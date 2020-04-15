@@ -26,6 +26,12 @@ rustfmt:
   script:
     - cargo fmt -- --check
 
+sort-ck:
+  stage: test
+  cache: {}
+  script:
+    - find . -name Cargo.toml -exec cargo sort-ck {} +
+
 pages:
   stage: build
   script:
