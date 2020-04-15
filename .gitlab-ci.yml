@@ -1,4 +1,4 @@
-image: rust:1
+image: mgjm/rust-ci
 
 stages:
   - test
@@ -7,10 +7,6 @@ stages:
 variables:
   CARGO_HOME: $CI_PROJECT_DIR/cargo
   RUSTFLAGS: -D warnings
-
-before_script:
-  - rustup toolchain install nightly-2020-03-19 --no-self-update
-  - rustup override set nightly-2020-03-19
 
 test:
   stage: test
@@ -22,14 +18,12 @@ test:
 clippy:
   stage: test
   script:
-    - rustup component add clippy
     - cargo clippy
 
 rustfmt:
   stage: test
   cache: {}
   script:
-    - rustup component add rustfmt
     - cargo fmt -- --check
 
 pages:
