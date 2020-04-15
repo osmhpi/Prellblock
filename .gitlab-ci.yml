@@ -39,9 +39,7 @@ pages:
 release-build:
   stage: build
   script:
-    - mkdir release
-    - cargo build --release
-    - find target/release -maxdepth 2 -executable -type f -exec sh -c 'cp "$@" release' {} +
+    - cargo build --release -Z unstable-options --out-dir release
   artifacts:
     paths:
       - release
