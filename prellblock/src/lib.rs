@@ -13,8 +13,10 @@ pub mod batcher;
 pub mod data_broadcaster;
 pub mod data_storage;
 pub mod peer;
+pub mod permission_checker;
 pub mod thread_group;
 pub mod turi;
+pub mod world_state;
 
 const TLS_PASSWORD_ENV: &str = "TLS_PASSWORD";
 const TLS_DEFAULT_PASSWORD: &str = "prellblock";

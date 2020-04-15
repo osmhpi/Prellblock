@@ -1,6 +1,6 @@
 //! A server for communicating between RPUs.
 
-use crate::batcher::Batcher;
+use crate::{batcher::Batcher, permission_checker::PermissionChecker};
 use balise::{
     handle_fn,
     server::{Handler, Server},
@@ -8,6 +8,7 @@ use balise::{
 };
 use prellblock_client_api::{message, ClientMessage, Pong, Transaction};
 use std::{env, net::TcpListener, sync::Arc};
+
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 /// A receiver (server) instance.
@@ -40,6 +41,7 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 pub struct Turi {
     tls_identity: String,
     batcher: Arc<Batcher>,
+    permission_checker: Arc<PermissionChecker>,
 }
 
 impl Turi {
@@ -47,10 +49,15 @@ impl Turi {
     ///
     /// The `identity` is a path to a `.pfx` file.
     #[must_use]
-    pub const fn new(tls_identity: String, batcher: Arc<Batcher>) -> Self {
+    pub const fn new(
+        tls_identity: String,
+        batcher: Arc<Batcher>,
+        permission_checker: Arc<PermissionChecker>,
+    ) -> Self {
         Self {
             tls_identity,
             batcher,
+            permission_checker,
         }
     }
 
@@ -68,6 +75,9 @@ impl Turi {
         let message::Execute(peer_id, transaction) = params;
         // Check validity of transaction signature.
         let transaction = transaction.verify(&peer_id)?;
+
+        // Verify permissions
+        self.permission_checker.verify(&peer_id, &transaction)?;
 
         match &transaction as &Transaction {
             Transaction::KeyValue { key, value } => {

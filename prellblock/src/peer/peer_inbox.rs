@@ -1,5 +1,5 @@
 use super::{message, Calculator, Pong};
-use crate::data_storage::DataStorage;
+use crate::{data_storage::DataStorage, permission_checker::PermissionChecker};
 use prellblock_client_api::Transaction;
 use std::sync::{Arc, Mutex};
 
@@ -11,15 +11,21 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 pub struct PeerInbox {
     calculator: ArcMut<Calculator>,
     data_storage: Arc<DataStorage>,
+    permission_checker: Arc<PermissionChecker>,
 }
 
 impl PeerInbox {
     /// Create a new `PeerInbox` instance.
     #[must_use]
-    pub fn new(calculator: ArcMut<Calculator>, data_storage: Arc<DataStorage>) -> Self {
+    pub fn new(
+        calculator: ArcMut<Calculator>,
+        data_storage: Arc<DataStorage>,
+        permission_checker: Arc<PermissionChecker>,
+    ) -> Self {
         Self {
             calculator,
             data_storage,
+            permission_checker,
         }
     }
 
@@ -27,6 +33,9 @@ impl PeerInbox {
     pub fn handle_execute(&self, params: message::Execute) -> Result<(), BoxError> {
         let message::Execute(peer_id, transaction) = params;
         let transaction = transaction.verify(&peer_id)?;
+
+        // Verify permissions
+        self.permission_checker.verify(&peer_id, &transaction)?;
 
         match transaction.into_inner() {
             Transaction::KeyValue { key, value } => {
