@@ -1,0 +1,9 @@
+[package]
+name = "blocksberg"
+version = "0.1.0"
+authors = ["Martin Michaelis <code@mgjm.de>"]
+edition = "2018"
+
+[dependencies]
+hex = "0.4.2"
+serde = "1.0.105"
