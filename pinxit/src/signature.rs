@@ -16,7 +16,7 @@ impl fmt::Debug for Signature {
 
 impl fmt::Display for Signature {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write_hex!(f, &self.0.to_bytes(), SIGNATURE_LEN)
+        blocksberg::write_hex!(f, &self.0.to_bytes(), SIGNATURE_LEN)
     }
 }
 
@@ -44,24 +44,20 @@ impl Signature {
 
 // custom serde implementation
 const _: () = {
+    use blocksberg::ByteArrayHelper;
     use serde::{
-        de::{Error, SeqAccess, Unexpected, Visitor},
-        ser::SerializeTupleStruct,
+        de::{Error, Unexpected},
         Deserialize, Deserializer, Serialize, Serializer,
     };
-    const SIGNATURE_NAME: &str = "Signature";
+
+    const SIGNATURE_HELPER: ByteArrayHelper = ByteArrayHelper("Signature", SIGNATURE_LEN);
 
     impl Serialize for Signature {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
             S: Serializer,
         {
-            let mut tup = serializer.serialize_tuple_struct(SIGNATURE_NAME, SIGNATURE_LEN)?;
-
-            for b in self.0.to_bytes().iter() {
-                tup.serialize_field(b)?;
-            }
-            tup.end()
+            SIGNATURE_HELPER.serialize(serializer, &self.0.to_bytes())
         }
     }
 
@@ -70,36 +66,15 @@ const _: () = {
         where
             D: Deserializer<'de>,
         {
-            struct SignatureVisitor;
-            impl<'de> Visitor<'de> for SignatureVisitor {
-                type Value = Signature;
-
-                fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                    formatter.write_str("an array of length 64, that contains a valid signature")
-                }
-
-                #[inline]
-                fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-                where
-                    A: SeqAccess<'de>,
-                {
-                    let mut bytes = [0; SIGNATURE_LEN];
-                    for (i, b) in bytes.iter_mut().enumerate() {
-                        match seq.next_element()? {
-                            Some(val) => *b = val,
-                            None => return Err(Error::invalid_length(i, &self)),
-                        }
-                    }
-                    match ed25519_dalek::Signature::from_bytes(&bytes) {
-                        Ok(sig) => Ok(Signature(sig)),
-                        Err(err) => Err(Error::invalid_value(
-                            Unexpected::Bytes(&bytes),
-                            &err.to_string().as_ref(),
-                        )),
-                    }
-                }
+            let mut bytes = [0; SIGNATURE_LEN];
+            SIGNATURE_HELPER.deserialize(deserializer, &mut bytes)?;
+            match ed25519_dalek::Signature::from_bytes(&bytes) {
+                Ok(sig) => Ok(Self(sig)),
+                Err(err) => Err(Error::invalid_value(
+                    Unexpected::Bytes(&bytes),
+                    &err.to_string().as_ref(),
+                )),
             }
-            deserializer.deserialize_tuple_struct(SIGNATURE_NAME, SIGNATURE_LEN, SignatureVisitor)
         }
     }
 };

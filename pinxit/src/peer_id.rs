@@ -47,7 +47,7 @@ impl fmt::Debug for PeerId {
 
 impl fmt::Display for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write_hex!(f, self.0.as_bytes(), PUBLIC_LEN)
+        blocksberg::write_hex!(f, self.0.as_bytes(), PUBLIC_LEN)
     }
 }
 
