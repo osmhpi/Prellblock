@@ -7,7 +7,7 @@ use std::{
     mem,
     sync::{Arc, Condvar, Mutex},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const MAX_TRANSACTIONS_PER_BATCH: usize = 100;
@@ -92,15 +92,21 @@ impl Epoch {
     fn next_after_timeout(&self, f: impl FnOnce()) {
         let mut epoch_guard = self.epoch.lock().unwrap();
         let old_epoch = *epoch_guard;
+        let deadline = Instant::now() + MAX_TIME_BETWEEN_BATCHES;
         loop {
-            let result = self
-                .cvar
-                .wait_timeout(epoch_guard, MAX_TIME_BETWEEN_BATCHES)
-                .unwrap();
+            let now = Instant::now();
+            let wait_duration = deadline.checked_duration_since(now).unwrap_or_default();
+
+            let result = self.cvar.wait_timeout(epoch_guard, wait_duration).unwrap();
             epoch_guard = result.0;
             if old_epoch == *epoch_guard {
-                *epoch_guard += 1;
-                f();
+                // execute only after timeout (check spurious wakeups)
+                if result.1.timed_out() {
+                    *epoch_guard += 1;
+                    f();
+                    break;
+                }
+            } else {
                 break;
             }
         }
