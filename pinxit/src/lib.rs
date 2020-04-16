@@ -38,9 +38,6 @@
 //! println!("{}", verified.0)
 //! ```
 
-#[macro_use]
-mod macros;
-
 mod error;
 mod identity;
 mod peer_id;

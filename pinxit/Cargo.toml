@@ -10,6 +10,7 @@ authors = [
 edition = "2018"
 
 [dependencies]
+blocksberg = { path = "../blocksberg" }
 ed25519-dalek = "1.0.0-pre.3"
 err-derive = "0.2.3"
 hex = "0.4.2"

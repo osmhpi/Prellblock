@@ -533,6 +533,7 @@ dependencies = [
 name = "pinxit"
 version = "0.1.0"
 dependencies = [
+ "blocksberg",
  "ed25519-dalek",
  "err-derive",
  "hex",
