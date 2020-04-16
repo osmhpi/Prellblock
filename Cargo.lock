@@ -74,6 +74,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "blocksberg"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde",
+]
+
+[[package]]
 name = "byte-tools"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
