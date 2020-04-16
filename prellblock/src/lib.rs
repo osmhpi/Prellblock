@@ -10,11 +10,15 @@
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
 pub mod batcher;
+pub mod consensus;
 pub mod data_broadcaster;
 pub mod data_storage;
 pub mod peer;
 pub mod thread_group;
 pub mod turi;
+
+// TODO: remove this sh**
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 const TLS_PASSWORD_ENV: &str = "TLS_PASSWORD";
 const TLS_DEFAULT_PASSWORD: &str = "prellblock";

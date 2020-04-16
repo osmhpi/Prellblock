@@ -9,8 +9,10 @@
 //! By using an execute-order-validate procedure it is assured, that data will be saved, even in case of a total failure of all but one redundant processing unit.
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
+use pinxit::Identity;
 use prellblock::{
     batcher::Batcher,
+    consensus::Consensus,
     data_broadcaster::Broadcaster,
     data_storage::DataStorage,
     peer::{Calculator, PeerInbox, Receiver},
@@ -71,15 +73,26 @@ fn main() {
     let private_config_data =
         fs::read_to_string(format!("./config/{0}/{0}.toml", opt.name)).unwrap();
     let private_config: RpuPrivateConfig = toml::from_str(&private_config_data).unwrap();
-    // join handles of all threads
-
     let mut thread_group = ThreadGroup::new();
-
-    let peer_addresses: Vec<SocketAddr> = config
+    let peers = config
+        .rpu
+        .iter()
+        .map(|rpu_config| {
+            let peer_id = fs::read_to_string(&rpu_config.peer_id).unwrap();
+            let peer_id = peer_id.parse().unwrap();
+            (peer_id, rpu_config.peer_address)
+        })
+        .collect();
+    let peer_addresses = config
         .rpu
         .iter()
         .map(|rpu_config| rpu_config.peer_address)
         .collect();
+
+    let hex_identity =
+        fs::read_to_string(&private_config.identity).expect("Could not load identity file.");
+    let identity = Identity::from_hex(&hex_identity).expect("Identity could not be loaded.");
+    let consensus = Consensus::new(identity, peers);
 
     let broadcaster = Broadcaster::new(peer_addresses);
     let broadcaster = Arc::new(broadcaster);
@@ -108,7 +121,7 @@ fn main() {
     let calculator = Calculator::new();
     let calculator = Arc::new(calculator.into());
 
-    let peer_inbox = PeerInbox::new(calculator, storage);
+    let peer_inbox = PeerInbox::new(calculator, storage, consensus);
     let peer_inbox = Arc::new(peer_inbox);
 
     // execute the receiver in a new thread

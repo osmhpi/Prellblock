@@ -1,12 +1,12 @@
 //! The datastorage is a temporary storage for incoming transactions persisted on disk.
+
 use chrono::{DateTime, Utc};
 use pinxit::PeerId;
 use sled::{Config, Db, IVec, Tree};
 
-const ROOT_TREE_NAME: &[u8; 4] = b"root";
+use crate::BoxError;
 
-// TODO: Remove this.
-type BoxError = Box<dyn std::error::Error + Send + Sync>;
+const ROOT_TREE_NAME: &[u8; 4] = b"root";
 
 /// A `DataStorage` provides persistent storage on disk.
 ///

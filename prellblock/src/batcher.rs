@@ -2,7 +2,10 @@
 
 #![allow(clippy::mutex_atomic)]
 
-use crate::{data_broadcaster::Broadcaster, peer::message};
+use crate::{
+    data_broadcaster::Broadcaster,
+    peer::{message, SignedTransaction},
+};
 use std::{
     mem,
     sync::{Arc, Condvar, Mutex},
@@ -10,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const MAX_TRANSACTIONS_PER_BATCH: usize = 100;
+const MAX_TRANSACTIONS_PER_BATCH: usize = 5;
 const MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_secs(1);
 
 /// A Batcher for messages.
@@ -21,7 +24,7 @@ pub struct Batcher {
 
 struct Bucket {
     broadcaster: Arc<Broadcaster>,
-    bucket: Vec<message::Execute>,
+    bucket: Vec<SignedTransaction>,
 }
 
 struct Epoch {
@@ -46,7 +49,7 @@ impl Batcher {
     }
 
     /// Add a received message to the batchers bucket.
-    pub fn add_to_batch(self: Arc<Self>, message: message::Execute) {
+    pub fn add_to_batch(self: Arc<Self>, transaction: SignedTransaction) {
         let mut bucket = self.bucket.lock().unwrap();
         let shared_self = self.clone();
         if bucket.bucket.is_empty() {
@@ -56,7 +59,7 @@ impl Batcher {
                 });
             });
         }
-        bucket.bucket.push(message);
+        bucket.bucket.push(transaction);
         if bucket.bucket.len() >= MAX_TRANSACTIONS_PER_BATCH {
             self.epoch.next(|| bucket.send_to_broadcaster());
         }

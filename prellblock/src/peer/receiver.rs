@@ -1,14 +1,14 @@
 //! A server for communicating between RPUs.
 
-use std::{env, net::TcpListener, sync::Arc};
-
 use super::{PeerInbox, PeerMessage};
+use crate::BoxError;
 use balise::{
     handle_fn,
     server::{Handler, Server},
     Request,
 };
-type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
+use std::{env, net::TcpListener, sync::Arc};
 
 /// A receiver (server) instance.
 ///
@@ -70,6 +70,7 @@ impl Handler<PeerMessage> for Receiver {
         Add(params) =>  self.peer_inbox.handle_add(&params),
         Sub(params) =>  self.peer_inbox.handle_sub(&params),
         Ping(_) => self.peer_inbox.handle_ping(),
-        Execute(params) => self.peer_inbox.handle_execute(params),
-        ExecuteBatch(params) => self.peer_inbox.handle_execute_batch(params),    });
+        ExecuteBatch(params) => self.peer_inbox.handle_execute_batch(params),
+        Consensus(params) => self.peer_inbox.handle_consensus(params),
+    });
 }

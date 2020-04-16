@@ -3,11 +3,10 @@
 use crate::{
     peer::{PeerMessage, Sender},
     thread_group::ThreadGroup,
+    BoxError,
 };
 use balise::Request;
 use std::net::SocketAddr;
-
-type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 /// A broadcaster for peer messages.
 pub struct Broadcaster {

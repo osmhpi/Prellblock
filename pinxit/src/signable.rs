@@ -100,6 +100,12 @@ where
         peer_id.verify(&self.body, &self.signature)?;
         Ok(Verified(self))
     }
+
+    /// Verify the signature of a signed message.
+    pub fn verify_ref(&self, peer_id: &PeerId) -> Result<VerifiedRef<T>, Error> {
+        peer_id.verify(&self.body, &self.signature)?;
+        Ok(VerifiedRef(self))
+    }
 }
 
 /// A verified signed message.
@@ -133,6 +139,28 @@ impl<T> DerefMut for Verified<T> {
 
 impl<T> From<Verified<T>> for Signed<T> {
     fn from(v: Verified<T>) -> Self {
+        v.0
+    }
+}
+/// A verified signed message.
+pub struct VerifiedRef<'a, T>(&'a Signed<T>);
+
+impl<'a, T> VerifiedRef<'a, T> {
+    /// Get the signature of the message.
+    pub const fn signature(&self) -> &Signature {
+        &self.0.signature
+    }
+}
+
+impl<'a, T> Deref for VerifiedRef<'a, T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.0.body
+    }
+}
+
+impl<'a, T> From<VerifiedRef<'a, T>> for &'a Signed<T> {
+    fn from(v: VerifiedRef<'a, T>) -> Self {
         v.0
     }
 }

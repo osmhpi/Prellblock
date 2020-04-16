@@ -26,7 +26,7 @@ use std::{
 /// thread_group.join_and_log();
 /// ```
 pub struct ThreadGroup<T> {
-    handles: Vec<JoinHandle<T>>,
+    pub(crate) handles: Vec<JoinHandle<T>>,
 }
 
 impl<T> ThreadGroup<T> {

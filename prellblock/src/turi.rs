@@ -1,6 +1,6 @@
 //! A server for communicating between RPUs.
 
-use crate::batcher::Batcher;
+use crate::{batcher::Batcher, BoxError};
 use balise::{
     handle_fn,
     server::{Handler, Server},
@@ -8,7 +8,6 @@ use balise::{
 };
 use prellblock_client_api::{message, ClientMessage, Pong, Transaction};
 use std::{env, net::TcpListener, sync::Arc};
-type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 /// A receiver (server) instance.
 ///
@@ -75,8 +74,9 @@ impl Turi {
             }
         }
 
-        let message = crate::peer::message::Execute(peer_id, transaction.into());
-        self.batcher.clone().add_to_batch(message);
+        self.batcher
+            .clone()
+            .add_to_batch((peer_id, transaction.into()));
 
         Ok(())
     }
