@@ -95,7 +95,7 @@ where
 {
     match result {
         Err(_) => log::error!("Thread {} panicked.", name),
-        Ok(Err(err)) => log::info!("Thread {} failed: {}", name, err),
+        Ok(Err(err)) => log::error!("Thread {} failed: {}", name, err),
         Ok(Ok(ok)) => log::info!("Thread {} ended: {:?}", name, ok),
     }
 }
