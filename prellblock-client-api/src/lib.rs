@@ -4,7 +4,7 @@
 //! Library Crate used for Communication between external Clients and internal RPUs.
 
 use balise::define_api;
-use pinxit::{PeerId, Signable, Signed};
+use pinxit::{Signable, Signed};
 use serde::{Deserialize, Serialize};
 
 /// Play ping pong. See [`Ping`](message/struct.Ping.html).
@@ -19,7 +19,7 @@ define_api! {
         /// Ping Message. See [`Pong`](../struct.Pong.html).
         Ping => Pong,
         /// Simple transaction Message. Will write a key:value pair.
-        Execute(PeerId, Signed<Transaction>) => (),
+        Execute(Signed<Transaction>) => (),
     }
 }
 

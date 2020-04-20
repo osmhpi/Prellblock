@@ -85,9 +85,7 @@ fn main() {
                 .sign(&identity)
                 .unwrap();
 
-            let peer_id = identity.id().clone();
-
-            match client.send_request(message::Execute(peer_id, transaction)) {
+            match client.send_request(message::Execute(transaction)) {
                 Err(err) => log::error!("Failed to send transaction: {}.", err),
                 Ok(()) => log::debug!("Transaction ok!"),
             }
@@ -131,8 +129,7 @@ fn main() {
                         let transaction = Transaction::KeyValue { key, value }
                             .sign(&identity)
                             .unwrap();
-                        let peer_id = identity.id().clone();
-                        match client.send_request(message::Execute(peer_id, transaction)) {
+                        match client.send_request(message::Execute(transaction)) {
                             Err(err) => log::error!("Failed to send transaction: {}.", err),
                             Ok(()) => log::debug!("Transaction ok!"),
                         }

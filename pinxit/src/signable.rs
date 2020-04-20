@@ -65,8 +65,10 @@ pub trait Signable: Sized {
 
     /// Sign a `Signable` message with an `identity`.
     fn sign(self, identity: &Identity) -> Result<Signed<Self>, Error> {
+        let signer = identity.id().clone();
         let signature = identity.sign(&self)?;
         Ok(Signed {
+            signer,
             body: self,
             signature,
         })
@@ -87,8 +89,16 @@ where
 /// Wraps a message with signature.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Signed<T> {
+    signer: PeerId,
     body: T,
     signature: Signature,
+}
+
+impl<T> Signed<T> {
+    /// Get the signer of the signature.
+    pub const fn signer(&self) -> &PeerId {
+        &self.signer
+    }
 }
 
 impl<T> Signed<T>
@@ -96,14 +106,14 @@ where
     T: Signable,
 {
     /// Verify the signature of a signed message.
-    pub fn verify(self, peer_id: &PeerId) -> Result<Verified<T>, Error> {
-        peer_id.verify(&self.body, &self.signature)?;
+    pub fn verify(self) -> Result<Verified<T>, Error> {
+        self.signer.verify(&self.body, &self.signature)?;
         Ok(Verified(self))
     }
 
     /// Verify the signature of a signed message.
-    pub fn verify_ref(&self, peer_id: &PeerId) -> Result<VerifiedRef<T>, Error> {
-        peer_id.verify(&self.body, &self.signature)?;
+    pub fn verify_ref(&self) -> Result<VerifiedRef<T>, Error> {
+        self.signer.verify(&self.body, &self.signature)?;
         Ok(VerifiedRef(self))
     }
 }
@@ -112,6 +122,11 @@ where
 pub struct Verified<T>(Signed<T>);
 
 impl<T> Verified<T> {
+    /// Get the signer of the signature.
+    pub const fn signer(&self) -> &PeerId {
+        self.0.signer()
+    }
+
     /// Get the signature of the message.
     pub const fn signature(&self) -> &Signature {
         &self.0.signature
@@ -146,6 +161,11 @@ impl<T> From<Verified<T>> for Signed<T> {
 pub struct VerifiedRef<'a, T>(&'a Signed<T>);
 
 impl<'a, T> VerifiedRef<'a, T> {
+    /// Get the signer of the signature.
+    pub const fn signer(&self) -> &PeerId {
+        self.0.signer()
+    }
+
     /// Get the signature of the message.
     pub const fn signature(&self) -> &Signature {
         &self.0.signature

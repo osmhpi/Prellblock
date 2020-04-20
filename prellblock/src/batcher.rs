@@ -2,10 +2,9 @@
 
 #![allow(clippy::mutex_atomic)]
 
-use crate::{
-    data_broadcaster::Broadcaster,
-    peer::{message, SignedTransaction},
-};
+use crate::{data_broadcaster::Broadcaster, peer::message};
+use pinxit::Signed;
+use prellblock_client_api::Transaction;
 use std::{
     mem,
     sync::{Arc, Condvar, Mutex},
@@ -24,7 +23,7 @@ pub struct Batcher {
 
 struct Bucket {
     broadcaster: Arc<Broadcaster>,
-    bucket: Vec<SignedTransaction>,
+    bucket: Vec<Signed<Transaction>>,
 }
 
 struct Epoch {
@@ -49,7 +48,7 @@ impl Batcher {
     }
 
     /// Add a received message to the batchers bucket.
-    pub fn add_to_batch(self: Arc<Self>, transaction: SignedTransaction) {
+    pub fn add_to_batch(self: Arc<Self>, transaction: Signed<Transaction>) {
         let mut bucket = self.bucket.lock().unwrap();
         let shared_self = self.clone();
         if bucket.bucket.is_empty() {

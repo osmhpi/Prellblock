@@ -48,7 +48,7 @@ pub use sender::Sender;
 
 use crate::consensus::ConsensusMessage;
 use balise::define_api;
-use pinxit::{PeerId, Signed};
+use pinxit::Signed;
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -56,9 +56,6 @@ use std::fmt::Debug;
 /// Play ping pong. See [`Ping`](message/struct.Ping.html).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Pong;
-
-/// A signed transaction with origin peer id.
-pub type SignedTransaction = (PeerId, Signed<Transaction>);
 
 define_api! {
     /// The message API module for communication between RPUs.
@@ -75,9 +72,9 @@ define_api! {
         Ping => Pong,
 
         /// Simple batch of transaction message. Will write a key:value pair.
-        ExecuteBatch(Vec<SignedTransaction>) => (),
+        ExecuteBatch(Vec<Signed<Transaction>>) => (),
 
         /// Messages exchanged by the consensus.
-        Consensus(PeerId, Signed<ConsensusMessage>) => (PeerId, Signed<ConsensusMessage>),
+        Consensus(Signed<ConsensusMessage>) => Signed<ConsensusMessage>,
     }
 }

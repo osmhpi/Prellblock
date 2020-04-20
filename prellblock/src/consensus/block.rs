@@ -1,9 +1,9 @@
-use crate::peer::SignedTransaction;
 use blake2::{
     digest::{generic_array::typenum::Unsigned, FixedOutput},
     Blake2b, Digest,
 };
-use pinxit::{PeerId, Signature};
+use pinxit::{PeerId, Signature, Signed};
+use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -28,7 +28,7 @@ impl Block {
 pub struct Body {
     pub(crate) block_num: u64,
     pub(crate) prev_block_hash: BlockHash,
-    pub(crate) transactions: Vec<SignedTransaction>,
+    pub(crate) transactions: Vec<Signed<Transaction>>,
 }
 
 impl Body {
@@ -49,7 +49,7 @@ const HASH_SIZE: usize = <Blake2b as FixedOutput>::OutputSize::USIZE;
 /// The datatype of hashes of blocks is `BlockHash`.
 // #[derive(Serialize, Deserialize)]
 // pub struct BlockHash(<Blake2b as FixedOutput>::OutputSize::ArrayType);
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 #[allow(clippy::module_name_repetitions)]
 pub struct BlockHash([u8; HASH_SIZE]);
 
@@ -64,6 +64,14 @@ impl Default for BlockHash {
         Self([0; HASH_SIZE])
     }
 }
+
+impl PartialEq for BlockHash {
+    fn eq(&self, other: &Self) -> bool {
+        self.0[..] == other.0[..]
+    }
+}
+
+impl Eq for BlockHash {}
 
 // custom serde implementation
 const _: () = {

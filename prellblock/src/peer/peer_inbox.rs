@@ -1,10 +1,10 @@
-use super::{message, Calculator, Pong, SignedTransaction};
+use super::{message, Calculator, Pong};
 use crate::{
     consensus::{Consensus, ConsensusMessage},
     data_storage::DataStorage,
     BoxError,
 };
-use pinxit::{PeerId, Signed};
+use pinxit::Signed;
 use prellblock_client_api::Transaction;
 use std::sync::{Arc, Mutex};
 
@@ -33,21 +33,21 @@ impl PeerInbox {
     }
 
     /// Handle an `execute` `Signable` message.
-    pub fn handle_execute(&self, params: &SignedTransaction) -> Result<(), BoxError> {
-        let (peer_id, transaction) = params;
-        let transaction = transaction.verify_ref(peer_id)?;
+    pub fn handle_execute(&self, params: &Signed<Transaction>) -> Result<(), BoxError> {
+        let transaction = params;
+        let transaction = transaction.verify_ref()?;
 
         match &*transaction {
             Transaction::KeyValue { key, value } => {
                 log::info!(
                     "Client {} set {} to {} (via another RPU)",
-                    &peer_id,
+                    &transaction.signer(),
                     key,
                     value
                 );
 
                 // TODO: Continue with warning or error?
-                self.data_storage.write(peer_id, key, value)?;
+                self.data_storage.write(transaction.signer(), key, value)?;
             }
         }
         Ok(())
@@ -85,7 +85,7 @@ impl PeerInbox {
     pub fn handle_consensus(
         &self,
         params: message::Consensus,
-    ) -> Result<(PeerId, Signed<ConsensusMessage>), BoxError> {
-        Ok(self.consensus.handle_message(params.0, params.1)?)
+    ) -> Result<Signed<ConsensusMessage>, BoxError> {
+        Ok(self.consensus.handle_message(params.0)?)
     }
 }

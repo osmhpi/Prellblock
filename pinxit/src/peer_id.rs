@@ -13,7 +13,7 @@ use std::{
 const PUBLIC_LEN: usize = ed25519_dalek::PUBLIC_KEY_LENGTH;
 
 /// The unique identifier of a peer.
-#[derive(Clone, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct PeerId(pub(crate) PublicKey);
 
 impl Hash for PeerId {
@@ -22,12 +22,6 @@ impl Hash for PeerId {
         H: Hasher,
     {
         self.0.as_bytes().hash(h)
-    }
-}
-
-impl PartialEq for PeerId {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
     }
 }
 

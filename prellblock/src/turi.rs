@@ -64,19 +64,17 @@ impl Turi {
     }
 
     fn handle_execute(&self, params: message::Execute) -> Result<(), BoxError> {
-        let message::Execute(peer_id, transaction) = params;
+        let message::Execute(transaction) = params;
         // Check validity of transaction signature.
-        let transaction = transaction.verify(&peer_id)?;
-
+        let transaction = transaction.verify()?;
+        let peer_id = transaction.signer();
         match &transaction as &Transaction {
             Transaction::KeyValue { key, value } => {
                 log::info!("Client {} set {} to {}.", peer_id, key, value);
             }
         }
 
-        self.batcher
-            .clone()
-            .add_to_batch((peer_id, transaction.into()));
+        self.batcher.clone().add_to_batch(transaction.into());
 
         Ok(())
     }

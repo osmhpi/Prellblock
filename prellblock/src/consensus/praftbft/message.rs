@@ -23,8 +23,6 @@ pub enum ConsensusMessage {
         leader_term: usize,
         /// The current sequence number of this round.
         sequence_number: usize,
-        /// Identity of the Peer answering the `PREPARE` message
-        peer_id: PeerId,
         /// The hash of this rounds block.
         block_hash: BlockHash,
     },
