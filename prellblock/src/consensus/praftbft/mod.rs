@@ -114,4 +114,15 @@ impl PRaftBFT {
                 .expect("Processing thread is not running.");
         }
     }
+
+    /// Check whether a number represents a supermajority (>2/3) compared
+    /// to the peers in the consenus.
+    fn supermajority_reached(&self, number: usize) -> bool {
+        let len = self.peers.len();
+        if len < 4 {
+            panic!("Cannot find consensus for less than four peers.");
+        }
+        let supermajority = len * 2 / 3 + 1;
+        number >= supermajority
+    }
 }

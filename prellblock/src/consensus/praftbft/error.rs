@@ -17,6 +17,14 @@ pub enum Error {
     #[error(display = "There is no leader.")]
     NoLeader,
 
+    /// The Block Hash has changed between Phases.
+    #[error(display = "The Block Hash has changed.")]
+    ChangedBlockHash,
+
+    /// The Block Hash is wrong.
+    #[error(display = "The Block Hash is wrong.")]
+    WrongBlockHash,
+
     /// The leader proposing the block is not the one the `Follower` saved (maybe there is no leader).
     #[error(display = "The RPU {} is not the current leader.", 0)]
     WrongLeader(PeerId),
@@ -25,7 +33,7 @@ pub enum Error {
     #[error(display = "Sequence number is too low.")]
     SequenceNumberTooSmall,
 
-    /// The current sequence number is different than the received one.
+    /// The current sequence number is different from the expected one.
     #[error(display = "Sequence number is wrong.")]
     WrongSequenceNumber,
 
@@ -35,4 +43,7 @@ pub enum Error {
         0
     )]
     InvalidPeer(PeerId),
+
+    #[error(display = "Not enough signatures.")]
+    NotEnoughSignatures,
 }

@@ -1,7 +1,5 @@
 use super::{
-    super::{BlockHash, Body},
-    message::ConsensusMessage,
-    PRaftBFT, Sleeper, MAX_TRANSACTIONS_PER_BLOCK,
+    super::Body, message::ConsensusMessage, PRaftBFT, Sleeper, MAX_TRANSACTIONS_PER_BLOCK,
 };
 use crate::{
     peer::{message as peer_message, Sender},
@@ -12,17 +10,6 @@ use pinxit::{PeerId, Signable, Signature};
 use std::sync::mpsc;
 
 impl PRaftBFT {
-    /// Check whether a number represents a supermajority (>2/3) compared
-    /// to the peers in the consenus.
-    fn supermajority_reached(&self, number: usize) -> bool {
-        let len = self.peers.len();
-        if len < 4 {
-            panic!("Cannot find consensus for less than four peers.");
-        }
-        let supermajority = len * 2 / 3 + 1;
-        number >= supermajority
-    }
-
     fn broadcast_until_majority<F>(
         &self,
         message: ConsensusMessage,
@@ -119,14 +106,13 @@ impl PRaftBFT {
                         break;
                     }
                 }
-
+                let leader_state = self.leader_state.as_ref().unwrap().lock().unwrap();
                 let body = Body {
-                    block_num: 1,
-                    prev_block_hash: BlockHash::default(),
+                    height: leader_state.block_height + 1,
+                    prev_block_hash: leader_state.last_block_hash,
                     transactions,
                 };
                 let hash = body.hash();
-                let leader_state = self.leader_state.as_ref().unwrap().lock().unwrap();
 
                 let transactions = body.transactions;
 
@@ -157,7 +143,7 @@ impl PRaftBFT {
                                 Err("This is an invalid ACK PREPARE message.".into())
                             }
                         }
-                        _ => Err("This is not an ack message.".into()),
+                        _ => Err("This is not an ACK PREPARE message.".into()),
                     }
                 };
                 let ackprepares =
@@ -182,6 +168,29 @@ impl PRaftBFT {
                     ackprepare_signatures: ackprepares,
                     data: transactions,
                 };
+
+                let validate_ackappends = move |response: &ConsensusMessage| {
+                    // This is done for every ACKPREPARE.
+                    match response {
+                        ConsensusMessage::AckAppend {
+                            leader_term: ack_leader_term,
+                            sequence_number: ack_sequence_number,
+                            block_hash: ack_block_hash,
+                        } => {
+                            // Check whether the ACKPREPARE is for the same message.
+                            if *ack_leader_term == leader_term
+                                && *ack_sequence_number == sequence_number
+                                && *ack_block_hash == hash
+                            {
+                                Ok(())
+                            } else {
+                                Err("This is an invalid ACK APPEND message.".into())
+                            }
+                        }
+                        _ => Err("This is not an ack append message.".into()),
+                    }
+                };
+                let ackappends = self.broadcast_until_majority(append_message, validate_ackappends);
 
                 // do commit
             }

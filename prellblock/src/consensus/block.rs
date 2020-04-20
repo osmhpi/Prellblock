@@ -26,7 +26,7 @@ impl Block {
 /// and an Array of the actual `Transaction`s with their corresponding Signature in the `Block`.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Body {
-    pub(crate) block_num: u64,
+    pub(crate) height: u64,
     pub(crate) prev_block_hash: BlockHash,
     pub(crate) transactions: Vec<Signed<Transaction>>,
 }

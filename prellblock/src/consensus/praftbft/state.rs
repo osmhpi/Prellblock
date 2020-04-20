@@ -1,14 +1,21 @@
 //! Contains the states used in the consensus.
 
-use super::{super::BlockHash, Error};
+use super::{
+    super::{BlockHash, Body},
+    Error,
+};
 use pinxit::PeerId;
 
 #[derive(Default)]
 pub(super) struct FollowerState {
     pub(super) leader_term: usize,
     pub(super) sequence: usize,
+    // TODO: Is this the same as sequence?
+    pub(super) block_height: u64,
+    pub(super) last_block_hash: BlockHash,
     pub(super) current_block_hash: BlockHash,
     pub(super) leader: Option<PeerId>,
+    pub(super) current_body: Option<Body>,
 }
 
 impl FollowerState {
@@ -56,6 +63,8 @@ impl FollowerState {
 pub(super) struct LeaderState {
     pub(super) leader_term: usize,
     pub(super) sequence: usize,
+    pub(super) block_height: u64,
+    pub(super) last_block_hash: BlockHash,
     pub(super) current_block_hash: BlockHash,
 }
 
@@ -64,6 +73,8 @@ impl LeaderState {
         Self {
             leader_term: follower_state.leader_term,
             sequence: follower_state.sequence,
+            block_height: follower_state.block_height,
+            last_block_hash: follower_state.last_block_hash,
             current_block_hash: follower_state.current_block_hash,
         }
     }
