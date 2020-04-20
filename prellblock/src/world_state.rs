@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs};
 
 /// A `WorldState` keeps track of the current state of the blockchain.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct WorldState {
     pub(crate) accounts: HashMap<PeerId, Account>,
 }

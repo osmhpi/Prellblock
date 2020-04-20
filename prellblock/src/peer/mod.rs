@@ -6,9 +6,11 @@
 //! use prellblock::{
 //!     data_storage::DataStorage,
 //!     peer::{message, Calculator, PeerInbox, Receiver, Sender},
+//!     permission_checker::PermissionChecker,
 //! };
 //! use std::{net::TcpListener, sync::Arc};
 //!
+//! use prellblock::world_state::WorldState;
 //! // start a receiver
 //! let calculator = Calculator::new();
 //! let calculator = Arc::new(calculator.into());
@@ -16,7 +18,11 @@
 //! let data_storage = DataStorage::new("/tmp/some_db").unwrap(); // don't use tmp
 //! let data_storage = Arc::new(data_storage);
 //!
-//! let peer_inbox = PeerInbox::new(calculator, data_storage);
+//! let world_state = WorldState::default();
+//! let permission_checker = PermissionChecker::new(world_state);
+//! let permission_checker = Arc::new(permission_checker);
+//!
+//! let peer_inbox = PeerInbox::new(calculator, data_storage, permission_checker);
 //! let peer_inbox = Arc::new(peer_inbox);
 //!
 //! let bind_addr = "127.0.0.1:0"; // replace 0 with a useful port

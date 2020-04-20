@@ -17,6 +17,8 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 ///
 /// ```no_run
 /// use prellblock::turi::Turi;
+/// use prellblock::permission_checker::PermissionChecker;
+/// use prellblock::world_state::WorldState;
 /// use prellblock::batcher::Batcher;
 /// use prellblock::data_broadcaster::Broadcaster;
 /// use std::{net::TcpListener, sync::Arc};
@@ -32,7 +34,11 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// let batcher = Batcher::new(broadcaster);
 /// let batcher = Arc::new(batcher.into());
 ///
-/// let turi = Turi::new("path_to_pfx.pfx".to_string(), batcher);
+/// let world_state = WorldState::default();
+/// let permission_checker = PermissionChecker::new(world_state);
+/// let permission_checker = Arc::new(permission_checker);
+///
+/// let turi = Turi::new("path_to_pfx.pfx".to_string(), batcher, permission_checker);
 /// std::thread::spawn(move || {
 ///     turi.serve(&listener).unwrap();
 /// });

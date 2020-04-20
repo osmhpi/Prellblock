@@ -18,6 +18,8 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// use prellblock::{
 ///     data_storage::DataStorage,
 ///     peer::{Calculator, PeerInbox, Receiver},
+///     permission_checker::PermissionChecker,
+///     world_state::WorldState,
 /// };
 /// use std::{net::TcpListener, sync::Arc};
 ///
@@ -27,7 +29,11 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// let data_storage = DataStorage::new("/tmp/some_db").unwrap();
 /// let data_storage = Arc::new(data_storage);
 ///
-/// let peer_inbox = PeerInbox::new(calculator, data_storage);
+/// let world_state = WorldState::default();
+/// let permission_checker = PermissionChecker::new(world_state);
+/// let permission_checker = Arc::new(permission_checker);
+///
+/// let peer_inbox = PeerInbox::new(calculator, data_storage, permission_checker);
 /// let peer_inbox = Arc::new(peer_inbox);
 ///
 /// let bind_addr = "127.0.0.1:0"; // replace 0 with a real port
