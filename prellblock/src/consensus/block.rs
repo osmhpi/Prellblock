@@ -24,7 +24,7 @@ impl Block {
 
 /// The `Body` of a `Block` stores the Block number (height in chain), the Hash of the previous `Block`
 /// and an Array of the actual `Transaction`s with their corresponding Signature in the `Block`.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Body {
     pub(crate) height: u64,
     pub(crate) prev_block_hash: BlockHash,

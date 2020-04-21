@@ -80,7 +80,7 @@ impl PRaftBFT {
             let leader_state = match &self.leader_state {
                 Some(leader_state) => leader_state,
                 None => {
-                    log::trace!("I am not a leader. Let me sleep.");
+                    // log::trace!("I am not a leader. Let me sleep.");
                     continue;
                 }
             };
@@ -106,9 +106,10 @@ impl PRaftBFT {
                         break;
                     }
                 }
-                let leader_state = self.leader_state.as_ref().unwrap().lock().unwrap();
+                let mut leader_state = self.leader_state.as_ref().unwrap().lock().unwrap();
+                let sequence_number = leader_state.sequence + 1;
                 let body = Body {
-                    height: leader_state.block_height + 1,
+                    height: sequence_number,
                     prev_block_hash: leader_state.last_block_hash,
                     transactions,
                 };
@@ -116,8 +117,16 @@ impl PRaftBFT {
 
                 let transactions = body.transactions;
 
-                // do prepare
-                let sequence_number = leader_state.sequence + 1;
+                // ----------------------------------------- //
+                //    _____                                  //
+                //   |  __ \                                 //
+                //   | |__) | __ ___ _ __   __ _ _ __ ___    //
+                //   |  ___/ '__/ _ \ '_ \ / _` | '__/ _ \   //
+                //   | |   | | |  __/ |_) | (_| | | |  __/   //
+                //   |_|   |_|  \___| .__/ \__,_|_|  \___|   //
+                //    --------------| |-------------------   //
+                //                  |_|                      //
+                // ----------------------------------------- //
                 let leader_term = leader_state.leader_term;
                 let prepare_message = ConsensusMessage::Prepare {
                     leader_term,
@@ -157,10 +166,21 @@ impl PRaftBFT {
                         continue;
                     }
                 };
-                log::trace!("Got ACKPREPARE signatures: {:?}", ackprepares);
+                log::trace!(
+                    "Prepare phase ended. Got ACKPREPARE signatures: {:?}",
+                    ackprepares
+                );
 
-                // do append
-
+                // ------------------------------------------- //
+                //                                        _    //
+                //       /\                              | |   //
+                //      /  \   _ __  _ __   ___ _ __   __| |   //
+                //     / /\ \ | '_ \| '_ \ / _ \ '_ \ / _` |   //
+                //    / ____ \| |_) | |_) |  __/ | | | (_| |   //
+                //   /_/    \_\ .__/| .__/ \___|_| |_|\__,_|   //
+                //   ---------| |---| |---------------------   //
+                //            |_|   |_|                        //
+                // ------------------------------------------- //
                 let append_message = ConsensusMessage::Append {
                     leader_term,
                     sequence_number,
@@ -168,7 +188,6 @@ impl PRaftBFT {
                     ackprepare_signatures: ackprepares,
                     data: transactions,
                 };
-
                 let validate_ackappends = move |response: &ConsensusMessage| {
                     // This is done for every ACKPREPARE.
                     match response {
@@ -191,8 +210,49 @@ impl PRaftBFT {
                     }
                 };
                 let ackappends = self.broadcast_until_majority(append_message, validate_ackappends);
+                let ackappends = match ackappends {
+                    Ok(ackappends) => ackappends,
+                    Err(err) => {
+                        log::error!("Consensus error during APPEND phase: {}", err);
+                        // TODO: retry the transactions
+                        continue;
+                    }
+                };
+                log::trace!(
+                    "Append Phase ended. Got ACKAPPEND signatures: {:?}",
+                    ackappends
+                );
 
-                // do commit
+                // after we collected enough signatures, we can update our state
+                leader_state.sequence = sequence_number;
+                leader_state.last_block_hash = hash;
+
+                // ------------------------------------------- //
+                //     _____                          _ _      //
+                //    / ____|                        (_) |     //
+                //   | |     ___  _ __ ___  _ __ ___  _| |_    //
+                //   | |    / _ \| '_ ` _ \| '_ ` _ \| | __|   //
+                //   | |___| (_) | | | | | | | | | | | | |_    //
+                //    \_____\___/|_| |_| |_|_| |_| |_|_|\__|   //
+                //   ---------------------------------------   //
+                //                                             //
+                // ------------------------------------------- //
+
+                let commit_message = ConsensusMessage::Commit {
+                    leader_term,
+                    sequence_number,
+                    block_hash: hash,
+                    ackappend_signatures: ackappends,
+                };
+
+                let validate_ackcommits = move |response: &ConsensusMessage| {
+                    // This is done for every ACKCOMMIT.
+                    match response {
+                        ConsensusMessage::AckCommit => Ok(()),
+                        _ => Err("This is not an ack commit message.".into()),
+                    }
+                };
+                self.broadcast_until_majority(commit_message, validate_ackcommits);
             }
         }
     }

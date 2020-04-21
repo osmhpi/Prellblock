@@ -11,8 +11,8 @@ pub enum ConsensusMessage {
     Prepare {
         /// The current number of the view (selected leader).
         leader_term: usize,
-        /// The current sequence number of this round.
-        sequence_number: usize,
+        /// The current sequence number (block height) of this round.
+        sequence_number: u64,
         /// The hash of this rounds block.
         block_hash: BlockHash,
     },
@@ -21,8 +21,8 @@ pub enum ConsensusMessage {
     AckPrepare {
         /// The current number of the view (selected leader).
         leader_term: usize,
-        /// The current sequence number of this round.
-        sequence_number: usize,
+        /// The current sequence number (block height) of this round.
+        sequence_number: u64,
         /// The hash of this rounds block.
         block_hash: BlockHash,
     },
@@ -30,8 +30,8 @@ pub enum ConsensusMessage {
     Append {
         /// The current number of the view (selected leader).
         leader_term: usize,
-        /// The current sequence number of this round.
-        sequence_number: usize,
+        /// The current sequence number (block height) of this round.
+        sequence_number: u64,
         /// The hash of this rounds block.
         block_hash: BlockHash,
         /// The signatures of all (2f+1) `AckPrepare` signatures.
@@ -45,8 +45,8 @@ pub enum ConsensusMessage {
     AckAppend {
         /// The current number of the view (selected leader).
         leader_term: usize,
-        /// The current sequence number of this round.
-        sequence_number: usize,
+        /// The current sequence number (block height) of this round.
+        sequence_number: u64,
         /// The hash of this rounds block.
         block_hash: BlockHash,
     },
@@ -54,13 +54,15 @@ pub enum ConsensusMessage {
     Commit {
         /// The current number of the view (selected leader).
         leader_term: usize,
-        /// The current sequence number of this round.
-        sequence_number: usize,
+        /// The current sequence number (block height) of this round.
+        sequence_number: u64,
         /// The hash of this rounds block.
         block_hash: BlockHash,
         /// The signatures of all (2f+1) `AckAppend` signatures.
         ackappend_signatures: Vec<(PeerId, Signature)>,
     },
+    /// A `ConsensusMessage` signalizing the Leader that a Follower has applied the transactions.
+    AckCommit,
 }
 
 impl Signable for ConsensusMessage {

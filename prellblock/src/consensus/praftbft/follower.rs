@@ -1,6 +1,8 @@
 use super::{
     super::{BlockHash, Body},
+    error::PhaseError,
     message::ConsensusMessage,
+    state::{Phase, PhaseMeta},
     Error, PRaftBFT,
 };
 use pinxit::{PeerId, Signable, Signature, Signed};
@@ -11,14 +13,32 @@ impl PRaftBFT {
         &self,
         peer_id: &PeerId,
         leader_term: usize,
-        sequence_number: usize,
+        sequence_number: u64,
         block_hash: BlockHash,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state.lock().unwrap();
         follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
 
+        // Check whether the state for the sequence is Waiting.
+        // We only allow to receive messages once.
+        let phase = follower_state.phase(sequence_number)?;
+        match phase {
+            Phase::Waiting => {}
+            _ => {
+                return Err(Error::WrongPhase {
+                    received: phase.to_phase_error(),
+                    expected: PhaseError::Waiting,
+                });
+            }
+        };
         // All checks passed, update our state.
-        follower_state.current_block_hash = block_hash;
+        let leader = follower_state.leader.clone().unwrap();
+        follower_state
+            .set_phase(
+                sequence_number,
+                Phase::Prepare(PhaseMeta { leader, block_hash }),
+            )
+            .unwrap();
 
         // Send AckPrepare to the leader.
         // *Note*: Technically, we only need to send a signature of
@@ -26,7 +46,7 @@ impl PRaftBFT {
         let ackprepare_message = ConsensusMessage::AckPrepare {
             leader_term: follower_state.leader_term,
             sequence_number,
-            block_hash: follower_state.current_block_hash,
+            block_hash,
         };
 
         // Done :D
@@ -37,7 +57,7 @@ impl PRaftBFT {
         &self,
         peer_id: &PeerId,
         leader_term: usize,
-        sequence_number: usize,
+        sequence_number: u64,
         block_hash: BlockHash,
         ackprepare_signatures: Vec<(PeerId, Signature)>,
         data: Vec<Signed<Transaction>>,
@@ -45,7 +65,20 @@ impl PRaftBFT {
         let mut follower_state = self.follower_state.lock().unwrap();
         follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
 
-        if block_hash != follower_state.current_block_hash {
+        // Check whether the state for the sequence is Prepare.
+        // We only allow to receive messages once.
+        let phase = follower_state.phase(sequence_number)?;
+        let meta = match phase {
+            Phase::Prepare(meta) => meta,
+            _ => {
+                return Err(Error::WrongPhase {
+                    received: phase.to_phase_error(),
+                    expected: PhaseError::Prepare,
+                });
+            }
+        };
+
+        if block_hash != meta.block_hash {
             return Err(Error::ChangedBlockHash);
         }
 
@@ -53,18 +86,20 @@ impl PRaftBFT {
             return Err(Error::WrongSequenceNumber);
         }
 
-        // Check validity of ACKAPPEND Signatures.
+        // Check validity of ACKPREPARE Signatures.
         if !self.supermajority_reached(ackprepare_signatures.len()) {
             return Err(Error::NotEnoughSignatures);
         }
+
+        let ackprepare_message = ConsensusMessage::AckPrepare {
+            leader_term,
+            sequence_number,
+            block_hash,
+        };
+
         for (peer_id, signature) in ackprepare_signatures {
-            let ackprepare_message = ConsensusMessage::AckPrepare {
-                leader_term,
-                sequence_number,
-                block_hash,
-            };
             // Frage: Was tun bei faulty signature? Abbrechen oder weiter bei Supermajority?
-            peer_id.verify(ackprepare_message, &signature)?;
+            peer_id.verify(&ackprepare_message, &signature)?;
         }
 
         // Check for transaction validity.
@@ -73,78 +108,28 @@ impl PRaftBFT {
         }
 
         // TODO: Stateful validate transactions HERE.
+        let validated_transactions = data;
 
         // Validate the Block Hash.
         let body = Body {
-            height: follower_state.block_height + 1,
-            prev_block_hash: follower_state.last_block_hash,
-            transactions: data,
+            height: sequence_number,
+            prev_block_hash: follower_state.last_block_hash(),
+            transactions: validated_transactions,
         };
         if block_hash != body.hash() {
             return Err(Error::WrongBlockHash);
         }
 
-        follower_state.current_body = Some(body); // once told me the world was gonna roll me
-                                                  // I ain't the sharpest tool in the sheeeed
-
-        // ######################################################################################
-        // #                                                                                    #
-        // #                            ,.--------._                                            #
-        // #                           /            ''.                                         #
-        // #                         ,'                \     |"\                /\          /\  #
-        // #                /"|     /                   \    |__"              ( \\        // ) #
-        // #               "_"|    /           z#####z   \  //                  \ \\      // /  #
-        // #                 \\  #####        ##------".  \//                    \_\\||||//_/   #
-        // #                  \\/-----\     /          ".  \                      \/ _  _ \     #
-        // #                   \|      \   |   ,,--..       \                    \/|(O)(O)|     #
-        // #                   | ,.--._ \  (  | ##   \)      \                  \/ |      |     #
-        // #                   |(  ##  )/   \ `-....-//       |///////////////_\/  \      /     #
-        // #                     '--'."      \                \              //     |____|      #
-        // #                  /'    /         ) --.            \            ||     /      \     #
-        // #               ,..|     \.________/    `-..         \   \       \|     \ 0  0 /     #
-        // #            _,##/ |   ,/   /   \           \         \   \       U    / \_//_/      #
-        // #          :###.-  |  ,/   /     \        /' ""\      .\        (     /              #
-        // #         /####|   |   (.___________,---',/    |       |\=._____|  |_/               #
-        // #        /#####|   |     \__|__|__|__|_,/             |####\    |  ||                #
-        // #       /######\   \      \__________/                /#####|   \  ||                #
-        // #      /|#######`. `\                                /#######\   | ||                #
-        // #     /++\#########\  \                      _,'    _/#########\ | ||                #
-        // #    /++++|#########|  \      .---..       ,/      ,'##########.\|_||  Donkey By     #
-        // #   //++++|#########\.  \.              ,-/      ,'########,+++++\\_\\ Hard'96       #
-        // #  /++++++|##########\.   '._        _,/       ,'######,''++++++++\                  #
-        // # |+++++++|###########|       -----."        _'#######' +++++++++++\                 #
-        // # |+++++++|############\.     \\     //      /#######/++++ S@yaN +++\                #
-        // #      ________________________\\___//______________________________________         #
-        // #     / ____________________________________________________________________)        #
-        // #    / /              _                                             _                #
-        // #    | |             | |                                           | |               #
-        // #     \ \            | | _           ____           ____           | |  _            #
-        // #      \ \           | || \         / ___)         / _  )          | | / )           #
-        // #  _____) )          | | | |        | |           (  __ /          | |< (            #
-        // # (______/           |_| |_|        |_|            \_____)         |_| \_)           #
-        // #                                                                           19.08.02 #
-        // ######################################################################################
-        // ───────────────────────────────────────
-        // ───▐▀▄───────▄▀▌───▄▄▄▄▄▄▄─────────────
-        // ───▌▒▒▀▄▄▄▄▄▀▒▒▐▄▀▀▒██▒██▒▀▀▄──────────
-        // ──▐▒▒▒▒▀▒▀▒▀▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▀▄────────
-        // ──▌▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▄▒▒▒▒▒▒▒▒▒▒▒▒▀▄──────
-        // ▀█▒▒▒█▌▒▒█▒▒▐█▒▒▒▀▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▌─────
-        // ▀▌▒▒▒▒▒▒▀▒▀▒▒▒▒▒▒▀▀▒▒▒▒▒▒▒▒▒▒▒▒▒▒▐───▄▄
-        // ▐▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▌▄█▒█
-        // ▐▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒█▒█▀─
-        // ▐▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒█▀───
-        // ▐▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▌────
-        // ─▌▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▐─────
-        // ─▐▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▌─────
-        // ──▌▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▐──────
-        // ──▐▄▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▄▌──────
-        // ────▀▄▄▀▀▀▀▀▄▄▀▀▀▀▀▀▀▄▄▀▀▀▀▀▄▄▀────────
+        // All checks passed, update our state.
+        let meta = meta.clone();
+        follower_state
+            .set_phase(sequence_number, Phase::Append(meta, body))
+            .unwrap();
 
         let ackappend_message = ConsensusMessage::AckAppend {
             leader_term: follower_state.leader_term,
             sequence_number,
-            block_hash: follower_state.current_block_hash,
+            block_hash,
         };
         Ok(ackappend_message)
     }
@@ -153,23 +138,65 @@ impl PRaftBFT {
         &self,
         peer_id: &PeerId,
         leader_term: usize,
-        sequence_number: usize,
+        sequence_number: u64,
         block_hash: BlockHash,
         ackappend_signatures: Vec<(PeerId, Signature)>,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state.lock().unwrap();
         follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
 
-        if block_hash != follower_state.current_block_hash {
+        // Check whether the state for the sequence is Append.
+        // We only allow to receive messages once.
+        let phase = follower_state.phase(sequence_number)?;
+        let (meta, body) = match phase {
+            Phase::Append(meta, body) => (meta, body),
+            _ => {
+                return Err(Error::WrongPhase {
+                    received: phase.to_phase_error(),
+                    expected: PhaseError::Append,
+                });
+            }
+        };
+
+        if block_hash != meta.block_hash {
             return Err(Error::ChangedBlockHash);
         }
 
-        follower_state.last_block_hash = follower_state.current_block_hash;
+        if sequence_number != follower_state.sequence + 1 {
+            return Err(Error::WrongSequenceNumber);
+        }
+
+        // Check validity of ACKAPPEND Signatures.
+        if !self.supermajority_reached(ackappend_signatures.len()) {
+            return Err(Error::NotEnoughSignatures);
+        }
+        let ackprepare_message = ConsensusMessage::AckAppend {
+            leader_term,
+            sequence_number,
+            block_hash,
+        };
+        for (peer_id, signature) in ackappend_signatures {
+            // Frage: Was tun bei faulty signature? Abbrechen oder weiter bei Supermajority?
+            peer_id.verify(&ackprepare_message, &signature)?;
+        }
+
+        follower_state
+            .set_phase(sequence_number, Phase::Committed(block_hash))
+            .unwrap();
+        match follower_state.round_state.increment(Phase::Waiting) {
+            Phase::Committed(..) => {}
+            _ => unreachable!(),
+        }
         follower_state.sequence = sequence_number;
-        follower_state.block_height += 1;
 
         // Write Blocks to BlockStorage
-        unimplemented!();
+        log::debug!(
+            "Committed block #{} with hash {:?}.",
+            sequence_number,
+            block_hash
+        );
+
+        Ok(ConsensusMessage::AckCommit)
     }
 
     /// Process the incoming `ConsensusMessages` (`PREPARE`, `ACKPREPARE`, `APPEND`, `ACKAPPEND`, `COMMIT`).

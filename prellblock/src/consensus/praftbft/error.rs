@@ -1,3 +1,4 @@
+use super::state::Phase;
 use err_derive::Error;
 use pinxit::PeerId;
 
@@ -33,6 +34,10 @@ pub enum Error {
     #[error(display = "Sequence number is too low.")]
     SequenceNumberTooSmall,
 
+    /// The current sequence number is already higher.
+    #[error(display = "Sequence number is too big.")]
+    SequenceNumberTooBig,
+
     /// The current sequence number is different from the expected one.
     #[error(display = "Sequence number is wrong.")]
     WrongSequenceNumber,
@@ -46,4 +51,34 @@ pub enum Error {
 
     #[error(display = "Not enough signatures.")]
     NotEnoughSignatures,
+
+    #[error(
+        display = "Received a {:?} message in wrong phase (expected {:?}).",
+        received,
+        expected
+    )]
+    WrongPhase {
+        received: PhaseError,
+        expected: PhaseError,
+    },
+}
+
+#[derive(Debug)]
+pub enum PhaseError {
+    Waiting,
+    Prepare,
+    Append,
+    Commited,
+}
+
+impl Phase {
+    /// Convert a phase to the corresponding `PhaseError`.
+    pub(super) fn to_phase_error(&self) -> PhaseError {
+        match self {
+            Phase::Waiting => PhaseError::Waiting,
+            Phase::Prepare(..) => PhaseError::Prepare,
+            Phase::Append(..) => PhaseError::Append,
+            Phase::Committed(..) => PhaseError::Commited,
+        }
+    }
 }

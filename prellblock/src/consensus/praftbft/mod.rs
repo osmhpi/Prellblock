@@ -10,6 +10,7 @@ mod flatten_vec;
 mod follower;
 mod leader;
 pub mod message;
+mod ring_buffer;
 mod state;
 
 pub use error::Error;
@@ -80,7 +81,7 @@ impl PRaftBFT {
 
         let praftbft = Self {
             queue: Mutex::default(),
-            follower_state: Mutex::default(),
+            follower_state: Mutex::new(FollowerState::new()),
             leader_state,
             identity,
             peers,
@@ -104,10 +105,10 @@ impl PRaftBFT {
     /// Stores incoming `Transaction`s in the Consensus' `queue`.
     pub fn take_transactions(&self, transactions: Vec<Signed<Transaction>>) {
         let mut queue = self.queue.lock().unwrap();
-
         queue.push(transactions);
 
         if queue.len() >= MAX_TRANSACTIONS_PER_BLOCK {
+            drop(queue);
             // TODO: Restart thread for processing messages.
             self.waker
                 .send(())
