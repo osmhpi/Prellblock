@@ -5,7 +5,7 @@ use err_derive::Error;
 use pinxit::PeerId;
 use prellblock_client_api::Transaction;
 
-/// An error of the `pinxit` crate.
+/// An error of the `permission_checker` module.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum PermissionError {

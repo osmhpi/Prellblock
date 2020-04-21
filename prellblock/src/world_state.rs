@@ -30,7 +30,9 @@ pub(crate) struct Account {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ReadingRight {
-    keyspace: ReadingPermission,
+    /// a black- or whitelist of accounts
+    accounts: ReadingPermission,
+    /// the tree belonging to a account
     namespace: ReadingPermission,
 }
 #[derive(Serialize, Deserialize, Debug)]
@@ -39,10 +41,9 @@ pub(crate) enum ReadingPermission {
     Blacklist(PermissionList),
     Whitelist(PermissionList),
 }
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct PermissionList {
-    permissions: Vec<Permission>,
-}
+
+type PermissionList = Vec<Permission>;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct Permission {
     scope: String,
