@@ -1,4 +1,4 @@
-use std::mem;
+use std::{convert::TryInto, mem};
 
 /// The `RingBuffer` provides access to a circular buffer with fixed capactiy.
 ///
@@ -24,13 +24,13 @@ impl<T> RingBuffer<T> {
     /// Return the value stored at the given `index` (relative in the ringbuffer).
     pub(super) fn get(&self, index: u64) -> Option<&T> {
         let index = self.index2index(index)?;
-        return Some(&self.data[index]);
+        Some(&self.data[index])
     }
 
     /// Return a mutable reference
     pub(super) fn get_mut(&mut self, index: u64) -> Option<&mut T> {
         let index = self.index2index(index)?;
-        return Some(&mut self.data[index]);
+        Some(&mut self.data[index])
     }
 
     pub fn increment(&mut self, new_item: T) -> T {
@@ -43,7 +43,7 @@ impl<T> RingBuffer<T> {
     fn index2index(&self, index: u64) -> Option<usize> {
         let len = self.data.len() as u64;
         if index >= self.start && index < self.start + len {
-            Some((index % len) as usize)
+            Some((index % len).try_into().unwrap())
         } else {
             None
         }

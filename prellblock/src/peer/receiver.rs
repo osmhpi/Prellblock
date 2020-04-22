@@ -4,50 +4,25 @@ use super::{PeerInbox, PeerMessage};
 use crate::BoxError;
 use balise::{
     handle_fn,
-    server::{Handler, Server},
+    server::{Handler, Server, TlsIdentity},
     Request,
 };
 
-use std::{env, net::TcpListener, sync::Arc};
+use std::{net::TcpListener, sync::Arc};
 
 /// A receiver (server) instance.
 ///
-/// # Example
-///
-/// ```
-/// use prellblock::{
-///     data_storage::DataStorage,
-///     peer::{Calculator, PeerInbox, Receiver},
-/// };
-/// use std::{net::TcpListener, sync::Arc};
-///
-/// let calculator = Calculator::new();
-/// let calculator = Arc::new(calculator.into());
-///
-/// let data_storage = DataStorage::new("/tmp/some_db").unwrap();
-/// let data_storage = Arc::new(data_storage);
-///
-/// let peer_inbox = PeerInbox::new(calculator, data_storage);
-/// let peer_inbox = Arc::new(peer_inbox);
-///
-/// let bind_addr = "127.0.0.1:0"; // replace 0 with a real port
-///
-/// let listener = TcpListener::bind(bind_addr).unwrap();
-/// let receiver = Receiver::new("path_to_pfx.pfx".to_string(), peer_inbox);
-/// std::thread::spawn(move || {
-///     receiver.serve(&listener).unwrap();
-/// });
-/// ```
+/// The `Receiver` is used to receive messages being sent between RPUs.
 #[derive(Clone)]
 pub struct Receiver {
-    tls_identity: String,
+    tls_identity: TlsIdentity,
     peer_inbox: Arc<PeerInbox>,
 }
 
 impl Receiver {
     /// Create a new receiver instance.
     #[must_use]
-    pub const fn new(tls_identity: String, peer_inbox: Arc<PeerInbox>) -> Self {
+    pub const fn new(tls_identity: TlsIdentity, peer_inbox: Arc<PeerInbox>) -> Self {
         Self {
             tls_identity,
             peer_inbox,
@@ -57,10 +32,7 @@ impl Receiver {
     /// The main server loop.
     pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
         let tls_identity = self.tls_identity.clone();
-        let password = env::var(crate::TLS_PASSWORD_ENV)
-            .unwrap_or_else(|_| crate::TLS_DEFAULT_PASSWORD.to_string());
-        let server = Server::new(self, tls_identity, &password)?;
-        drop(password);
+        let server = Server::new(self, tls_identity)?;
         server.serve(listener)
     }
 }

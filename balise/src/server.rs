@@ -8,6 +8,7 @@ use std::{
     io::{self, Read, Write},
     marker::PhantomData,
     net::{SocketAddr, TcpListener},
+    path::Path,
     sync::Arc,
 };
 
@@ -18,6 +19,9 @@ pub struct Response(pub(crate) serde_json::Value);
 
 #[cfg(feature = "tls")]
 use native_tls::{Identity, Protocol, TlsAcceptor};
+
+#[cfg(feature = "tls")]
+pub use native_tls::Identity as TlsIdentity;
 
 #[cfg(not(feature = "tls"))]
 struct TlsAcceptor;
@@ -70,13 +74,9 @@ where
     /// Create a new TLS server instance.
     ///
     /// The `handler` needs to provide a `handle` callback script to handle requests on the server.
-    /// The `identity_path` is a file path to a `.pfx` file containing the server's identity.
+    /// The `identity` determines the server's identity.
     #[cfg(feature = "tls")]
-    pub fn new(handler: H, identity_path: String, password: &str) -> Result<Self, BoxError> {
-        log::trace!("Loading server identity from {}.", identity_path);
-        let identity = std::fs::read(identity_path)?;
-        let identity = Identity::from_pkcs12(&identity, password)?;
-
+    pub fn new(handler: H, identity: Identity) -> Result<Self, BoxError> {
         let acceptor = TlsAcceptor::builder(identity)
             .min_protocol_version(Some(Protocol::Tlsv12))
             .build()?;
@@ -176,6 +176,24 @@ where
         log::trace!("Send response to {}: {:?}", addr, res);
         Ok(res?)
     }
+}
+
+/// Load the identity from a file path.
+///
+/// `identity_path` is a file path to a `.pfx` file containing the server's identity.
+/// This file could be protected by a `password`.
+#[cfg(feature = "tls")]
+pub fn load_identity(
+    identity_path: impl AsRef<Path>,
+    password: &str,
+) -> Result<Identity, io::Error> {
+    log::trace!(
+        "Loading server identity from {}.",
+        identity_path.as_ref().display()
+    );
+    let identity = std::fs::read(identity_path)?;
+    Identity::from_pkcs12(&identity, password)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
 /// Handles a request and returns the corresponding response.

@@ -1,40 +1,4 @@
 //! Message types that can be used to communicate between RPUs.
-//!
-//! # Example
-//!
-//! ```no_run
-//! use prellblock::{
-//!     data_storage::DataStorage,
-//!     peer::{message, Calculator, PeerInbox, Receiver, Sender},
-//! };
-//! use std::{net::TcpListener, sync::Arc};
-//!
-//! // start a receiver
-//! let calculator = Calculator::new();
-//! let calculator = Arc::new(calculator.into());
-//!
-//! let data_storage = DataStorage::new("/tmp/some_db").unwrap(); // don't use tmp
-//! let data_storage = Arc::new(data_storage);
-//!
-//! let peer_inbox = PeerInbox::new(calculator, data_storage);
-//! let peer_inbox = Arc::new(peer_inbox);
-//!
-//! let bind_addr = "127.0.0.1:0"; // replace 0 with a useful port
-//! let listener = TcpListener::bind(bind_addr).unwrap();
-//! let peer_addr = listener.local_addr().unwrap(); // address with allocated port
-//!
-//! std::thread::spawn(move || {
-//!     let receiver = Receiver::new("path_to_pfx.pfx".to_string(), peer_inbox);
-//!     receiver.serve(&listener).unwrap();
-//! });
-//!
-//! // use a sender to execute some requests
-//! let mut sender = Sender::new(peer_addr);
-//! match sender.send_request(message::Ping) {
-//!     Err(err) => log::error!("Failed to send Ping: {}", err),
-//!     Ok(res) => log::debug!("Ping response: {:?}", res),
-//! }
-//! ```
 
 mod calculator;
 mod peer_inbox;

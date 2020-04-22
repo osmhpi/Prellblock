@@ -3,41 +3,19 @@
 use crate::{batcher::Batcher, BoxError};
 use balise::{
     handle_fn,
-    server::{Handler, Server},
+    server::{Handler, Server, TlsIdentity},
     Request,
 };
 use prellblock_client_api::{message, ClientMessage, Pong, Transaction};
-use std::{env, net::TcpListener, sync::Arc};
+use std::{net::TcpListener, sync::Arc};
 
 /// A receiver (server) instance.
 ///
-/// # Example
-///
-/// ```no_run
-/// use prellblock::turi::Turi;
-/// use prellblock::batcher::Batcher;
-/// use prellblock::data_broadcaster::Broadcaster;
-/// use std::{net::TcpListener, sync::Arc};
-///
-/// let bind_addr = "127.0.0.1:0"; // replace 0 with a real port
-///
-/// let listener = TcpListener::bind(bind_addr).unwrap();
-/// let peer_addresses = vec!["127.0.0.1:2480".parse().unwrap()]; // The ip addresses + ports of all other peers.
-///
-/// let broadcaster = Broadcaster::new(peer_addresses);
-/// let broadcaster = Arc::new(broadcaster);
-///
-/// let batcher = Batcher::new(broadcaster);
-/// let batcher = Arc::new(batcher.into());
-///
-/// let turi = Turi::new("path_to_pfx.pfx".to_string(), batcher);
-/// std::thread::spawn(move || {
-///     turi.serve(&listener).unwrap();
-/// });
-/// ```
+/// The Turi (old German for "door") is the entrypoint for
+/// any clients to send transactions.
 #[derive(Clone)]
 pub struct Turi {
-    tls_identity: String,
+    tls_identity: TlsIdentity,
     batcher: Arc<Batcher>,
 }
 
@@ -46,7 +24,7 @@ impl Turi {
     ///
     /// The `identity` is a path to a `.pfx` file.
     #[must_use]
-    pub const fn new(tls_identity: String, batcher: Arc<Batcher>) -> Self {
+    pub const fn new(tls_identity: TlsIdentity, batcher: Arc<Batcher>) -> Self {
         Self {
             tls_identity,
             batcher,
@@ -56,10 +34,7 @@ impl Turi {
     /// The main server loop.
     pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
         let tls_identity = self.tls_identity.clone();
-        let password = env::var(crate::TLS_PASSWORD_ENV)
-            .unwrap_or_else(|_| crate::TLS_DEFAULT_PASSWORD.to_string());
-        let server = Server::new(self, tls_identity, &password)?;
-        drop(password);
+        let server = Server::new(self, tls_identity)?;
         server.serve(listener)
     }
 

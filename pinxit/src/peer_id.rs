@@ -16,6 +16,7 @@ const PUBLIC_LEN: usize = ed25519_dalek::PUBLIC_KEY_LENGTH;
 #[derive(Clone, PartialEq, Eq)]
 pub struct PeerId(pub(crate) PublicKey);
 
+#[allow(clippy::derive_hash_xor_eq)]
 impl Hash for PeerId {
     fn hash<H>(&self, h: &mut H)
     where

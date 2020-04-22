@@ -32,6 +32,7 @@
 //! // ---------------- Define API server ----------------
 //! use balise::{
 //!     handle_fn,
+//!     server,
 //!     server::{Handler, Response, Server},
 //!     Request,
 //! };
@@ -53,7 +54,8 @@
 //!
 //!         #[cfg(feature = "tls")]
 //!         {
-//!             match Server::new(self, "path_to.pfx".to_string(), "password") {
+//!             let tls_identity = server::load_identity("path_to.pfx".to_string(), "password").unwrap();
+//!             match Server::new(self, tls_identity) {
 //!                 Ok(server) => server.serve(listener),
 //!                 Err(err) => panic!("Could not start server: {}.", err),
 //!             }

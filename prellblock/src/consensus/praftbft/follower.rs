@@ -1,6 +1,6 @@
 use super::{
     super::{BlockHash, Body},
-    error::PhaseError,
+    error::PhaseName,
     message::ConsensusMessage,
     state::{Phase, PhaseMeta},
     Error, PRaftBFT,
@@ -8,6 +8,7 @@ use super::{
 use pinxit::{PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
 
+#[allow(clippy::single_match_else)]
 impl PRaftBFT {
     fn handle_prepare_message(
         &self,
@@ -22,15 +23,13 @@ impl PRaftBFT {
         // Check whether the state for the sequence is Waiting.
         // We only allow to receive messages once.
         let phase = follower_state.phase(sequence_number)?;
-        match phase {
-            Phase::Waiting => {}
-            _ => {
-                return Err(Error::WrongPhase {
-                    received: phase.to_phase_error(),
-                    expected: PhaseError::Waiting,
-                });
-            }
-        };
+        if !matches!(phase, Phase::Waiting) {
+            return Err(Error::WrongPhase {
+                received: phase.to_phase_name(),
+                expected: PhaseName::Waiting,
+            });
+        }
+
         // All checks passed, update our state.
         let leader = follower_state.leader.clone().unwrap();
         follower_state
@@ -72,8 +71,8 @@ impl PRaftBFT {
             Phase::Prepare(meta) => meta,
             _ => {
                 return Err(Error::WrongPhase {
-                    received: phase.to_phase_error(),
-                    expected: PhaseError::Prepare,
+                    received: phase.to_phase_name(),
+                    expected: PhaseName::Prepare,
                 });
             }
         };
@@ -152,8 +151,8 @@ impl PRaftBFT {
             Phase::Append(meta, body) => (meta, body),
             _ => {
                 return Err(Error::WrongPhase {
-                    received: phase.to_phase_error(),
-                    expected: PhaseError::Append,
+                    received: phase.to_phase_name(),
+                    expected: PhaseName::Append,
                 });
             }
         };
@@ -190,6 +189,7 @@ impl PRaftBFT {
         follower_state.sequence = sequence_number;
 
         // Write Blocks to BlockStorage
+        let _ = body;
         log::debug!(
             "Committed block #{} with hash {:?}.",
             sequence_number,

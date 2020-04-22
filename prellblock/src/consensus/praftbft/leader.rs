@@ -18,7 +18,6 @@ impl PRaftBFT {
     where
         F: Fn(&ConsensusMessage) -> Result<(), BoxError> + Clone + Send + 'static,
     {
-        let own_id = self.identity.id().clone();
         let message = message.sign(&self.identity)?;
         let signed_message = peer_message::Consensus(message);
 
@@ -70,6 +69,8 @@ impl PRaftBFT {
     }
 
     /// This function waits until it is triggered to process transactions.
+    // TODO: split this function into smaller phases
+    #[allow(clippy::too_many_lines)]
     pub(super) fn process_transactions(&self, sleeper: &Sleeper) {
         loop {
             // TODO: sleep until timeout
@@ -106,7 +107,7 @@ impl PRaftBFT {
                         break;
                     }
                 }
-                let mut leader_state = self.leader_state.as_ref().unwrap().lock().unwrap();
+                let mut leader_state = leader_state.lock().unwrap();
                 let sequence_number = leader_state.sequence + 1;
                 let body = Body {
                     height: sequence_number,
@@ -252,7 +253,13 @@ impl PRaftBFT {
                         _ => Err("This is not an ack commit message.".into()),
                     }
                 };
-                self.broadcast_until_majority(commit_message, validate_ackcommits);
+                let ackcommits = self.broadcast_until_majority(commit_message, validate_ackcommits);
+                match ackcommits {
+                    Ok(_) => log::info!("Comitted blocks on majority of RPUs."),
+                    Err(err) => {
+                        log::error!("Consensus error during COMMIT phase: {}", err);
+                    }
+                }
             }
         }
     }

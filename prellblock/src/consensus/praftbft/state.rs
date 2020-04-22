@@ -8,6 +8,7 @@ use super::{
 use pinxit::PeerId;
 
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
 pub(super) enum Phase {
     /// This phase was never used, waiting for prepare message.
     Waiting,
@@ -129,14 +130,15 @@ pub(super) struct LeaderState {
     pub(super) last_block_hash: BlockHash,
 }
 
-impl LeaderState {
-    pub fn new(follower_state: &FollowerState) -> Self {
-        // TODO: Error handling with genesis block?
-        // if sequence == 0 { genesis block not found } else { you f***d up }
-        Self {
-            leader_term: follower_state.leader_term,
-            sequence: follower_state.sequence,
-            last_block_hash: follower_state.last_block_hash(),
-        }
-    }
-}
+// impl LeaderState {
+//     /// Create a new `LeaderState` from a `follower_state`.
+//     pub(super) fn new(follower_state: &FollowerState) -> Self {
+//         // TODO: Error handling with genesis block?
+//         // if sequence == 0 { genesis block not found } else { you f***d up }
+//         Self {
+//             leader_term: follower_state.leader_term,
+//             sequence: follower_state.sequence,
+//             last_block_hash: follower_state.last_block_hash(),
+//         }
+//     }
+// }

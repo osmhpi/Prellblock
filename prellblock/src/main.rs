@@ -9,6 +9,7 @@
 //! By using an execute-order-validate procedure it is assured, that data will be saved, even in case of a total failure of all but one redundant processing unit.
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
+use balise::server::TlsIdentity;
 use pinxit::Identity;
 use prellblock::{
     batcher::Batcher,
@@ -21,7 +22,7 @@ use prellblock::{
 };
 use serde::Deserialize;
 use std::{
-    fs,
+    env, fs, io,
     net::{SocketAddr, TcpListener},
     sync::Arc,
 };
@@ -104,12 +105,12 @@ fn main() {
     {
         let public_config = public_config.clone();
         let private_config = private_config.clone();
-
         thread_group.spawn(
             format!("Turi ({})", public_config.turi_address),
             move || {
+                let tls_identity = load_identity_from_env(private_config.tls_id)?;
                 let listener = TcpListener::bind(public_config.turi_address)?;
-                let turi = Turi::new(private_config.tls_id, batcher);
+                let turi = Turi::new(tls_identity, batcher);
                 turi.serve(&listener)
             },
         );
@@ -128,8 +129,9 @@ fn main() {
     thread_group.spawn(
         format!("Peer Receiver ({})", public_config.peer_address),
         move || {
+            let tls_identity = load_identity_from_env(private_config.tls_id)?;
             let listener = TcpListener::bind(public_config.peer_address)?;
-            let receiver = Receiver::new(private_config.tls_id, peer_inbox);
+            let receiver = Receiver::new(tls_identity, peer_inbox);
             receiver.serve(&listener)
         },
     );
@@ -137,4 +139,9 @@ fn main() {
     // wait for all threads
     thread_group.join_and_log();
     log::info!("Going to hunt some mice. I meant *NICE*. Bye.");
+}
+
+fn load_identity_from_env(tls_identity_path: String) -> Result<TlsIdentity, io::Error> {
+    let password = env::var("TLS_PASSWORD").unwrap_or_else(|_| "prellblock".to_string());
+    balise::server::load_identity(tls_identity_path, &password)
 }

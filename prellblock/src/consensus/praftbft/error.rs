@@ -58,13 +58,13 @@ pub enum Error {
         expected
     )]
     WrongPhase {
-        received: PhaseError,
-        expected: PhaseError,
+        received: PhaseName,
+        expected: PhaseName,
     },
 }
 
 #[derive(Debug)]
-pub enum PhaseError {
+pub enum PhaseName {
     Waiting,
     Prepare,
     Append,
@@ -72,13 +72,13 @@ pub enum PhaseError {
 }
 
 impl Phase {
-    /// Convert a phase to the corresponding `PhaseError`.
-    pub(super) fn to_phase_error(&self) -> PhaseError {
+    /// Convert a phase to the corresponding `PhaseName`.
+    pub(super) fn to_phase_name(&self) -> PhaseName {
         match self {
-            Phase::Waiting => PhaseError::Waiting,
-            Phase::Prepare(..) => PhaseError::Prepare,
-            Phase::Append(..) => PhaseError::Append,
-            Phase::Committed(..) => PhaseError::Commited,
+            Self::Waiting => PhaseName::Waiting,
+            Self::Prepare(..) => PhaseName::Prepare,
+            Self::Append(..) => PhaseName::Append,
+            Self::Committed(..) => PhaseName::Commited,
         }
     }
 }

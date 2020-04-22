@@ -30,12 +30,13 @@
 //!
 //! // get peer id of identity
 //! let peer_id = identity.id();
+//! println!("{}", peer_id);
 //!
 //! // verify the signature
-//! let verified: Verified<TestData> = signed.verify(peer_id).unwrap();
+//! let verified: Verified<TestData> = signed.verify().unwrap();
 //!
 //! // access the data
-//! println!("{}", verified.0)
+//! println!("{}", verified.0);
 //! ```
 
 mod error;

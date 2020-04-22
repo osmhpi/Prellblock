@@ -19,6 +19,3 @@ pub mod turi;
 
 // TODO: remove this sh**
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
-
-const TLS_PASSWORD_ENV: &str = "TLS_PASSWORD";
-const TLS_DEFAULT_PASSWORD: &str = "prellblock";

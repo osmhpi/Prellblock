@@ -75,7 +75,7 @@ impl Signable for ConsensusMessage {
                 sequence_number,
                 block_hash,
                 ackprepare_signatures,
-                data: _,
+                ..
             } => {
                 let sign_data = (
                     leader_term,
