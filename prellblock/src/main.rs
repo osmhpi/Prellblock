@@ -17,8 +17,10 @@ use prellblock::{
     data_broadcaster::Broadcaster,
     data_storage::DataStorage,
     peer::{Calculator, PeerInbox, Receiver},
+    permission_checker::PermissionChecker,
     thread_group::ThreadGroup,
     turi::Turi,
+    world_state::WorldState,
 };
 use serde::Deserialize;
 use std::{
@@ -101,16 +103,22 @@ fn main() {
     let batcher = Batcher::new(broadcaster);
     let batcher = Arc::new(batcher);
 
+    let world_state = WorldState::with_fake_data();
+    let permission_checker = PermissionChecker::new(world_state);
+    let permission_checker = Arc::new(permission_checker);
+
     // execute the turi in a new thread
     {
         let public_config = public_config.clone();
         let private_config = private_config.clone();
+        let permission_checker = permission_checker.clone();
+
         thread_group.spawn(
             format!("Turi ({})", public_config.turi_address),
             move || {
                 let tls_identity = load_identity_from_env(private_config.tls_id)?;
                 let listener = TcpListener::bind(public_config.turi_address)?;
-                let turi = Turi::new(tls_identity, batcher);
+                let turi = Turi::new(tls_identity, batcher, permission_checker);
                 turi.serve(&listener)
             },
         );
@@ -122,7 +130,7 @@ fn main() {
     let calculator = Calculator::new();
     let calculator = Arc::new(calculator.into());
 
-    let peer_inbox = PeerInbox::new(calculator, storage, consensus);
+    let peer_inbox = PeerInbox::new(calculator, storage, consensus, permission_checker);
     let peer_inbox = Arc::new(peer_inbox);
 
     // execute the receiver in a new thread

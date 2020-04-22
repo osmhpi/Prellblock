@@ -1,6 +1,6 @@
 //! A server for communicating between RPUs.
 
-use crate::{batcher::Batcher, BoxError};
+use crate::{batcher::Batcher, permission_checker::PermissionChecker, BoxError};
 use balise::{
     handle_fn,
     server::{Handler, Server, TlsIdentity},
@@ -17,6 +17,7 @@ use std::{net::TcpListener, sync::Arc};
 pub struct Turi {
     tls_identity: TlsIdentity,
     batcher: Arc<Batcher>,
+    permission_checker: Arc<PermissionChecker>,
 }
 
 impl Turi {
@@ -24,10 +25,15 @@ impl Turi {
     ///
     /// The `identity` is a path to a `.pfx` file.
     #[must_use]
-    pub const fn new(tls_identity: TlsIdentity, batcher: Arc<Batcher>) -> Self {
+    pub const fn new(
+        tls_identity: TlsIdentity,
+        batcher: Arc<Batcher>,
+        permission_checker: Arc<PermissionChecker>,
+    ) -> Self {
         Self {
             tls_identity,
             batcher,
+            permission_checker,
         }
     }
 
@@ -43,6 +49,10 @@ impl Turi {
         // Check validity of transaction signature.
         let transaction = transaction.verify()?;
         let peer_id = transaction.signer();
+
+        // Verify permissions
+        self.permission_checker.verify(peer_id, &transaction)?;
+
         match &transaction as &Transaction {
             Transaction::KeyValue { key, value } => {
                 log::info!("Client {} set {} to {}.", peer_id, key, value);

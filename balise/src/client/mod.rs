@@ -9,7 +9,6 @@ use std::{
     io::{self, Read, Write},
     marker::PhantomData,
     net::SocketAddr,
-    ops::DerefMut,
     time::{Duration, Instant},
 };
 
@@ -50,7 +49,7 @@ impl<T> Client<T> {
         let (mut stream, addr) = self.stream()?;
 
         log::trace!("Sending request to {}: {:?}", addr, req);
-        let res = send_request(stream.deref_mut(), req)?;
+        let res = send_request(&mut *stream, req)?;
 
         log::trace!("Received response from {}: {:?}", addr, res);
         stream.done();

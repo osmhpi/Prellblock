@@ -14,8 +14,10 @@ pub mod consensus;
 pub mod data_broadcaster;
 pub mod data_storage;
 pub mod peer;
+pub mod permission_checker;
 pub mod thread_group;
 pub mod turi;
+pub mod world_state;
 
 // TODO: remove this sh**
 type BoxError = Box<dyn std::error::Error + Send + Sync>;

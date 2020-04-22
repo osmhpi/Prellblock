@@ -6,8 +6,10 @@ use prellblock::{
     data_broadcaster::Broadcaster,
     data_storage::DataStorage,
     peer::{Calculator, PeerInbox, Receiver},
+    permission_checker::PermissionChecker,
     thread_group::ThreadGroup,
     turi::Turi,
+    world_state::WorldState,
 };
 use std::{collections::HashMap, net::TcpListener, sync::Arc};
 
@@ -39,15 +41,20 @@ fn test_prellblock() {
     let batcher = Batcher::new(broadcaster);
     let batcher = Arc::new(batcher);
 
+    let world_state = WorldState::default();
+    let permission_checker = PermissionChecker::new(world_state);
+    let permission_checker = Arc::new(permission_checker);
+
     let test_identity =
         TlsIdentity::from_pkcs12(include_bytes!("test-identity.pfx"), "prellblock").unwrap();
 
     // execute the turi in a new thread
     {
+        let permission_checker = permission_checker.clone();
         let test_identity = test_identity.clone();
         thread_group.spawn(format!("Turi ({})", turi_address), move || {
             let listener = TcpListener::bind(turi_address)?;
-            let turi = Turi::new(test_identity, batcher);
+            let turi = Turi::new(test_identity, batcher, permission_checker);
             turi.serve(&listener)
         });
     }
@@ -58,7 +65,7 @@ fn test_prellblock() {
     let calculator = Calculator::new();
     let calculator = Arc::new(calculator.into());
 
-    let peer_inbox = PeerInbox::new(calculator, storage, consensus);
+    let peer_inbox = PeerInbox::new(calculator, storage, consensus, permission_checker);
     let peer_inbox = Arc::new(peer_inbox);
 
     // execute the receiver in a new thread
