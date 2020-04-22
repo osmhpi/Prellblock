@@ -2,7 +2,7 @@ use super::{
     super::{BlockHash, Body},
     error::PhaseName,
     message::ConsensusMessage,
-    state::{Phase, PhaseMeta},
+    state::{Phase, PhaseMeta, RoundState},
     Error, PRaftBFT,
 };
 use pinxit::{PeerId, Signable, Signature, Signed};
@@ -22,10 +22,10 @@ impl PRaftBFT {
 
         // Check whether the state for the sequence is Waiting.
         // We only allow to receive messages once.
-        let phase = follower_state.phase(sequence_number)?;
-        if !matches!(phase, Phase::Waiting) {
+        let round_state = follower_state.round_state(sequence_number)?;
+        if !matches!(round_state.phase, Phase::Waiting) {
             return Err(Error::WrongPhase {
-                received: phase.to_phase_name(),
+                received: round_state.phase.to_phase_name(),
                 expected: PhaseName::Waiting,
             });
         }
@@ -33,11 +33,9 @@ impl PRaftBFT {
         // All checks passed, update our state.
         let leader = follower_state.leader.clone().unwrap();
         follower_state
-            .set_phase(
-                sequence_number,
-                Phase::Prepare(PhaseMeta { leader, block_hash }),
-            )
-            .unwrap();
+            .round_state_mut(sequence_number)
+            .unwrap()
+            .phase = Phase::Prepare(PhaseMeta { leader, block_hash });
 
         // Send AckPrepare to the leader.
         // *Note*: Technically, we only need to send a signature of
@@ -66,12 +64,16 @@ impl PRaftBFT {
 
         // Check whether the state for the sequence is Prepare.
         // We only allow to receive messages once.
-        let phase = follower_state.phase(sequence_number)?;
-        let meta = match phase {
-            Phase::Prepare(meta) => meta,
+        let round_state = follower_state.round_state(sequence_number)?;
+        let meta = match &round_state.phase {
+            Phase::Prepare(meta) => meta.clone(),
+            Phase::Waiting => {
+                let leader = follower_state.leader.clone().unwrap();
+                PhaseMeta { leader, block_hash }
+            }
             _ => {
                 return Err(Error::WrongPhase {
-                    received: phase.to_phase_name(),
+                    received: round_state.phase.to_phase_name(),
                     expected: PhaseName::Prepare,
                 });
             }
@@ -95,7 +97,6 @@ impl PRaftBFT {
             sequence_number,
             block_hash,
         };
-
         for (peer_id, signature) in ackprepare_signatures {
             // Frage: Was tun bei faulty signature? Abbrechen oder weiter bei Supermajority?
             peer_id.verify(&ackprepare_message, &signature)?;
@@ -120,10 +121,34 @@ impl PRaftBFT {
         }
 
         // All checks passed, update our state.
-        let meta = meta.clone();
-        follower_state
-            .set_phase(sequence_number, Phase::Append(meta, body))
-            .unwrap();
+        let round_state = follower_state.round_state_mut(sequence_number).unwrap();
+        round_state.phase = Phase::Append(meta, body);
+
+        // There could be a commit message for this sequence number that arrived first.
+        // We then need to apply the commit (or at least check).
+        if let Some(buffered_message) = round_state.buffered_commit_message.take() {
+            match buffered_message {
+                ConsensusMessage::Commit {
+                    leader_term,
+                    sequence_number,
+                    block_hash,
+                    ackappend_signatures,
+                } => {
+                    let commit_result = self.handle_commit_message(
+                        peer_id,
+                        leader_term,
+                        sequence_number,
+                        block_hash,
+                        ackappend_signatures,
+                    );
+                    match commit_result {
+                        Ok(_) => log::trace!("Used out-of-order commit."),
+                        Err(err) => log::trace!("Failed to apply out-of-order commit: {}", err),
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
 
         let ackappend_message = ConsensusMessage::AckAppend {
             leader_term: follower_state.leader_term,
@@ -146,12 +171,29 @@ impl PRaftBFT {
 
         // Check whether the state for the sequence is Append.
         // We only allow to receive messages once.
-        let phase = follower_state.phase(sequence_number)?;
-        let (meta, body) = match phase {
+        let round_state = follower_state.round_state(sequence_number)?;
+        let (meta, body) = match &round_state.phase {
+            Phase::Waiting | Phase::Prepare(..) => {
+                let current_phase_name = round_state.phase.to_phase_name();
+                let consensus_message = ConsensusMessage::Commit {
+                    leader_term,
+                    sequence_number,
+                    block_hash,
+                    ackappend_signatures,
+                };
+                follower_state
+                    .round_state_mut(sequence_number)
+                    .unwrap()
+                    .buffered_commit_message = Some(consensus_message);
+                return Err(Error::WrongPhase {
+                    received: current_phase_name,
+                    expected: PhaseName::Append,
+                });
+            }
             Phase::Append(meta, body) => (meta, body),
             _ => {
                 return Err(Error::WrongPhase {
-                    received: phase.to_phase_name(),
+                    received: round_state.phase.to_phase_name(),
                     expected: PhaseName::Append,
                 });
             }
@@ -180,12 +222,14 @@ impl PRaftBFT {
         }
 
         follower_state
-            .set_phase(sequence_number, Phase::Committed(block_hash))
-            .unwrap();
-        match follower_state.round_state.increment(Phase::Waiting) {
-            Phase::Committed(..) => {}
-            _ => unreachable!(),
-        }
+            .round_state_mut(sequence_number)
+            .unwrap()
+            .phase = Phase::Committed(block_hash);
+
+        let old_round_state = follower_state.round_states.increment(RoundState::default());
+        assert!(matches!(old_round_state.phase, Phase::Committed(..)));
+        assert!(old_round_state.buffered_commit_message.is_none());
+
         follower_state.sequence = sequence_number;
 
         // Write Blocks to BlockStorage

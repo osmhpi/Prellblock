@@ -70,7 +70,7 @@ impl PRaftBFT {
 
         // TODO: Remove this.
         let leader_id =
-            PeerId::from_hex("b7f85ce58ff74f34f6600891082af745bcc70df35cca49e816bdeca96924ce99")
+            PeerId::from_hex("98dcfa6fa5fe22e457bfff6cce55a7fa713f88a0766ffa890b804056e823d66f")
                 .unwrap();
 
         let leader_state = if *identity.id() == leader_id {
