@@ -53,12 +53,12 @@ pub enum Error {
     NotEnoughSignatures,
 
     #[error(
-        display = "Received a {:?} message in wrong phase (expected {:?}).",
-        received,
-        expected
+        display = "Expected to be in {:?} phase but was in {:?} phase.",
+        expected,
+        current
     )]
     WrongPhase {
-        received: PhaseName,
+        current: PhaseName,
         expected: PhaseName,
     },
 }

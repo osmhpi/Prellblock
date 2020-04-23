@@ -25,7 +25,7 @@ impl PRaftBFT {
         let round_state = follower_state.round_state(sequence_number)?;
         if !matches!(round_state.phase, Phase::Waiting) {
             return Err(Error::WrongPhase {
-                received: round_state.phase.to_phase_name(),
+                current: round_state.phase.to_phase_name(),
                 expected: PhaseName::Waiting,
             });
         }
@@ -73,7 +73,7 @@ impl PRaftBFT {
             }
             _ => {
                 return Err(Error::WrongPhase {
-                    received: round_state.phase.to_phase_name(),
+                    current: round_state.phase.to_phase_name(),
                     expected: PhaseName::Prepare,
                 });
             }
@@ -186,14 +186,14 @@ impl PRaftBFT {
                     .unwrap()
                     .buffered_commit_message = Some(consensus_message);
                 return Err(Error::WrongPhase {
-                    received: current_phase_name,
+                    current: current_phase_name,
                     expected: PhaseName::Append,
                 });
             }
             Phase::Append(meta, body) => (meta, body),
             _ => {
                 return Err(Error::WrongPhase {
-                    received: round_state.phase.to_phase_name(),
+                    current: round_state.phase.to_phase_name(),
                     expected: PhaseName::Append,
                 });
             }
