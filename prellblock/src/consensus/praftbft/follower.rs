@@ -121,25 +121,25 @@ impl PRaftBFT {
         }
 
         // All checks passed, update our state.
-        let round_state = follower_state.round_state_mut(sequence_number).unwrap();
-        round_state.phase = Phase::Append(meta, body);
+        let round_state_mut = follower_state.round_state_mut(sequence_number).unwrap();
+        round_state_mut.phase = Phase::Append(meta, body);
 
         // There could be a commit message for this sequence number that arrived first.
         // We then need to apply the commit (or at least check).
-        if let Some(buffered_message) = round_state.buffered_commit_message.take() {
+        if let Some(buffered_message) = round_state_mut.buffered_commit_message.take() {
             match buffered_message {
                 ConsensusMessage::Commit {
-                    leader_term,
-                    sequence_number,
-                    block_hash,
-                    ackappend_signatures,
+                    leader_term: buffered_leader_term,
+                    sequence_number: buffered_sequence_number,
+                    block_hash: buffered_block_hash,
+                    ackappend_signatures: buffered_ackappend_signatures,
                 } => {
                     let commit_result = self.handle_commit_message(
                         peer_id,
-                        leader_term,
-                        sequence_number,
-                        block_hash,
-                        ackappend_signatures,
+                        buffered_leader_term,
+                        buffered_sequence_number,
+                        buffered_block_hash,
+                        buffered_ackappend_signatures,
                     );
                     match commit_result {
                         Ok(_) => log::trace!("Used out-of-order commit."),
