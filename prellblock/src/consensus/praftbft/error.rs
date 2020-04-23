@@ -38,6 +38,13 @@ pub enum Error {
     #[error(display = "Sequence number is too big.")]
     SequenceNumberTooBig,
 
+    /// The current sequence number is already higher.
+    #[error(display = "Leader term is too low.")]
+    LeaderTermTooSmall,
+
+    /// The current sequence number is already higher.
+    #[error(display = "Leader term is too big.")]
+    LeaderTermTooBig,
     /// The current sequence number is different from the expected one.
     #[error(display = "Sequence number is wrong.")]
     WrongSequenceNumber,

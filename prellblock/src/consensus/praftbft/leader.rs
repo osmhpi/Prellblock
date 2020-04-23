@@ -1,73 +1,8 @@
 use super::{
     super::Body, message::ConsensusMessage, PRaftBFT, Sleeper, MAX_TRANSACTIONS_PER_BLOCK,
 };
-use crate::{
-    peer::{message as peer_message, Sender},
-    thread_group::ThreadGroup,
-    BoxError,
-};
-use pinxit::{PeerId, Signable, Signature};
-use std::sync::mpsc;
 
 impl PRaftBFT {
-    fn broadcast_until_majority<F>(
-        &self,
-        message: ConsensusMessage,
-        verify_response: F,
-    ) -> Result<Vec<(PeerId, Signature)>, BoxError>
-    where
-        F: Fn(&ConsensusMessage) -> Result<(), BoxError> + Clone + Send + 'static,
-    {
-        let message = message.sign(&self.identity)?;
-        let signed_message = peer_message::Consensus(message);
-
-        let mut thread_group = ThreadGroup::new();
-        let (tx, rx) = mpsc::sync_channel(0);
-
-        for &peer_address in self.peers.values() {
-            let signed_message = signed_message.clone();
-            let verify_response = verify_response.clone();
-            let tx = tx.clone();
-            thread_group.spawn(
-                &format!("Send consensus message to {}", peer_address),
-                move || {
-                    let send_message_and_verify_response = || {
-                        let mut sender = Sender::new(peer_address);
-                        let response = sender.send_request(signed_message)?;
-                        let signer = response.signer().clone();
-                        let verified_response = response.verify()?;
-                        verify_response(&*verified_response)?;
-                        Ok::<_, BoxError>((signer, verified_response.signature().clone()))
-                    };
-
-                    // The rx-side is closed when we probably collected enough signatures.
-                    let _ = tx.send(send_message_and_verify_response());
-                },
-            );
-        }
-
-        // IMPORTANT: when we do not drop this tx, the loop below will loop forever
-        drop(tx);
-
-        let mut responses = Vec::new();
-
-        for result in rx {
-            match result {
-                Ok((peer_id, signature)) => responses.push((peer_id, signature)),
-                Err(err) => {
-                    log::warn!("Consensus Error: {}", err);
-                }
-            }
-            if self.supermajority_reached(responses.len()) {
-                // TODO: once async io is used, drop the unused threads
-                return Ok(responses);
-            }
-        }
-
-        // All sender threads have died **before reaching supermajority**.
-        Err("Could not get supermajority.".into())
-    }
-
     /// This function waits until it is triggered to process transactions.
     // TODO: split this function into smaller phases
     #[allow(clippy::too_many_lines)]
@@ -77,20 +12,13 @@ impl PRaftBFT {
             sleeper.recv().expect(
                 "The consensus died. Stopping processing transaction in background thread.",
             );
+            let mut leader_state = self.leader_state.lock().unwrap();
 
-            let leader_state = match &self.leader_state {
-                Some(leader_state) => leader_state,
-                None => {
-                    // log::trace!("I am not a leader. Let me sleep.");
-                    continue;
-                }
-            };
-            // TODO: Remove this.
             // Die when we are not the leader.
-            assert_eq!(
-                Some(self.identity.id()),
-                self.follower_state.lock().unwrap().leader.as_ref()
-            );
+            if !self.is_current_leader(leader_state.leader_term, self.identity.id()) {
+                drop(leader_state);
+                continue;
+            }
 
             // TODO: use > 0 instead, when in timeout
             while self.queue.lock().unwrap().len() >= MAX_TRANSACTIONS_PER_BLOCK {
@@ -107,7 +35,6 @@ impl PRaftBFT {
                         break;
                     }
                 }
-                let mut leader_state = leader_state.lock().unwrap();
                 let sequence_number = leader_state.sequence + 1;
                 let body = Body {
                     height: sequence_number,

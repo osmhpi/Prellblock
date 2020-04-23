@@ -12,7 +12,7 @@ use prellblock::{
     turi::Turi,
     world_state::WorldState,
 };
-use std::{collections::HashMap, net::TcpListener, sync::Arc};
+use std::{net::TcpListener, sync::Arc};
 
 #[test]
 fn test_prellblock() {
@@ -26,13 +26,12 @@ fn test_prellblock() {
     // load and parse config
     let mut thread_group = ThreadGroup::new();
 
-    let mut peers = HashMap::new();
+    let mut peers = Vec::new();
     let peer_addresses = Vec::new();
 
     let identity = Identity::generate();
-    peers.insert(identity.id().clone(), turi_address.parse().unwrap());
-    // skype_chat.insert(Felix, MArtin)
-    // waitinbg for lock on mutex mutx?
+    peers.push((identity.id().clone(), turi_address.parse().unwrap()));
+
     let block_storage = BlockStorage::new("../blocks/test-prellblock").unwrap();
 
     let consensus = Consensus::new(identity, peers, block_storage);

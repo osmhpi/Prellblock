@@ -2,11 +2,12 @@ use super::{
     super::{Block, BlockHash, Body},
     error::PhaseName,
     message::ConsensusMessage,
-    state::{Phase, PhaseMeta},
+    state::{Phase, PhaseMeta, ViewPhase, ViewPhaseMeta},
     Error, PRaftBFT,
 };
 use pinxit::{PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
+use std::collections::HashMap;
 
 #[allow(clippy::single_match_else)]
 impl PRaftBFT {
@@ -18,7 +19,11 @@ impl PRaftBFT {
         block_hash: BlockHash,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state.lock().unwrap();
-        follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
+        if !self.is_current_leader(leader_term, peer_id) {
+            log::warn!("Received message from invalid leader (ID: {}).", peer_id);
+            return Err(Error::WrongLeader(peer_id.clone()));
+        }
+        follower_state.verify_message_meta(leader_term, sequence_number)?;
 
         // Check whether the state for the sequence is Waiting.
         // We only allow to receive messages once.
@@ -31,7 +36,7 @@ impl PRaftBFT {
         }
 
         // All checks passed, update our state.
-        let leader = follower_state.leader.clone().unwrap();
+        let leader = self.leader(follower_state.leader_term).clone();
         follower_state
             .set_phase(
                 sequence_number,
@@ -62,7 +67,11 @@ impl PRaftBFT {
         data: Vec<Signed<Transaction>>,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state.lock().unwrap();
-        follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
+        if !self.is_current_leader(leader_term, peer_id) {
+            log::warn!("Received message from invalid leader (ID: {}).", peer_id);
+            return Err(Error::WrongLeader(peer_id.clone()));
+        }
+        follower_state.verify_message_meta(leader_term, sequence_number)?;
 
         // Check whether the state for the sequence is Prepare.
         // We only allow to receive messages once.
@@ -142,7 +151,11 @@ impl PRaftBFT {
         ackappend_signatures: Vec<(PeerId, Signature)>,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state.lock().unwrap();
-        follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
+        if !self.is_current_leader(leader_term, peer_id) {
+            log::warn!("Received message from invalid leader (ID: {}).", peer_id);
+            return Err(Error::WrongLeader(peer_id.clone()));
+        }
+        follower_state.verify_message_meta(leader_term, sequence_number)?;
 
         // Check whether the state for the sequence is Append.
         // We only allow to receive messages once.
@@ -200,7 +213,14 @@ impl PRaftBFT {
             sequence_number,
             block_hash
         );
-
+        let new_leader_term = leader_term + 1;
+        let messages = HashMap::new();
+        follower_state.set_view_phase(
+            new_leader_term,
+            ViewPhase::ViewChanging(ViewPhaseMeta { messages }),
+        )?;
+        drop(follower_state);
+        self.broadcast_view_change(new_leader_term).unwrap();
         Ok(ConsensusMessage::AckCommit)
     }
 
@@ -210,12 +230,19 @@ impl PRaftBFT {
         message: Signed<ConsensusMessage>,
     ) -> Result<Signed<ConsensusMessage>, Error> {
         // Only RPUs are allowed.
-        if !self.peers.contains_key(message.signer()) {
+        let mut exists = false;
+        for (peer_id, _) in self.peers.clone() {
+            if message.signer() == &peer_id {
+                exists = true;
+            }
+        }
+        if !exists {
             return Err(Error::InvalidPeer(message.signer().clone()));
         }
 
         let message = message.verify()?;
         let peer_id = message.signer().clone();
+        let signature = message.signature().clone();
 
         let response = match message.into_inner() {
             ConsensusMessage::Prepare {
@@ -249,6 +276,13 @@ impl PRaftBFT {
                 block_hash,
                 ackappend_signatures,
             )?,
+            ConsensusMessage::ViewChange { new_leader_term } => {
+                self.handle_view_change(peer_id, signature, new_leader_term)?
+            }
+            ConsensusMessage::NewView {
+                leader_term,
+                view_change_signatures,
+            } => self.handle_new_view(&peer_id, leader_term, view_change_signatures)?,
             _ => unimplemented!(),
         };
 
