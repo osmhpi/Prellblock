@@ -41,7 +41,9 @@ impl PRaftBFT {
                     };
 
                     // The rx-side is closed when we probably collected enough signatures.
-                    let _ = tx.send(send_message_and_verify_response());
+                    let response =
+                        send_message_and_verify_response().map_err(|err| (peer_address, err));
+                    let _ = tx.send(response);
                 },
             );
         }
@@ -54,8 +56,8 @@ impl PRaftBFT {
         for result in rx {
             match result {
                 Ok((peer_id, signature)) => responses.push((peer_id, signature)),
-                Err(err) => {
-                    log::warn!("Consensus Error: {}", err);
+                Err((peer_address, err)) => {
+                    log::warn!("Consensus Error from {}: {}", peer_address, err);
                 }
             }
             if self.supermajority_reached(responses.len()) {
