@@ -3,9 +3,8 @@ use super::{
     state::{ViewPhase, ViewPhaseMeta},
     Error, PRaftBFT,
 };
-use crate::BoxError;
 use pinxit::{PeerId, Signature};
-use std::collections::HashMap;
+use std::{collections::HashMap, thread, time::Duration};
 
 impl PRaftBFT {
     pub(super) fn handle_new_view(
@@ -22,10 +21,6 @@ impl PRaftBFT {
                 peer_id,
                 leader_term
             );
-            log::error!(
-                "New Leader should be {}",
-                self.peers[leader_term % self.peers.len()].0
-            );
             return Err(Error::WrongLeader(peer_id.clone()));
         }
 
@@ -37,30 +32,15 @@ impl PRaftBFT {
             peer_id.verify(&view_change_message, &signature)?
         }
 
-        let mut follower_state = self.follower_state.lock().unwrap();
-        // The ViewChange was successfull:
-        // Update the leader_term of the follower_state to the new leaderterm
-        log::debug!(
-            "Changed from leader term {} to leader term {}",
-            follower_state.leader_term,
-            leader_term
-        );
-        follower_state.leader_term = leader_term;
+        let (lock, cvar) = &*self.view_change_cvar;
+        let mut view_changed = lock.lock().unwrap();
+        *view_changed = leader_term;
+        cvar.notify_one();
 
-        // check if this is the current leader
-        if self.is_current_leader(leader_term, self.identity.id()) {
-            let mut leader_state = self.leader_state.lock().unwrap();
-            leader_state.leader_term = follower_state.leader_term;
-            leader_state.sequence = follower_state.sequence;
-            leader_state.last_block_hash = follower_state.last_block_hash();
-        }
-        // Stop ViewChange-Timer
-
-        // If fails, resend ViewChange on Timer timeout
         Ok(ConsensusMessage::AckNewView)
     }
 
-    pub(super) fn broadcast_view_change(&self, new_leader_term: usize) -> Result<(), BoxError> {
+    pub(super) fn broadcast_view_change(&self, new_leader_term: usize) -> Result<(), Error> {
         log::trace!("Broadcasting ViewChange Message");
         let view_change_message = ConsensusMessage::ViewChange { new_leader_term };
         let validate_ack_view_change = move |response: &ConsensusMessage| {
@@ -70,10 +50,18 @@ impl PRaftBFT {
                 _ => Err("This is not an ack ViewChange message.".into()),
             }
         };
-        let _ = self.broadcast_until_majority(view_change_message, validate_ack_view_change)?;
+        match self.broadcast_until_majority(view_change_message, validate_ack_view_change) {
+            Ok(_) => {}
+            // Malte TM
+            Err(err) => log::warn!(
+                "ViewChange Message Broadcast did not reach supermajority: {}",
+                err
+            ),
+        };
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     pub(super) fn handle_view_change(
         &self,
         peer_id: PeerId,
@@ -121,7 +109,7 @@ impl PRaftBFT {
                         "Changed to ViewChanging State for Leader Term {}",
                         new_leader_term
                     );
-                    self.broadcast_view_change(new_leader_term).unwrap();
+                    self.broadcast_view_change(new_leader_term)?;
                 } else {
                     follower_state.set_view_phase(
                         new_leader_term,
@@ -134,30 +122,82 @@ impl PRaftBFT {
                 let mut messages = meta.messages.clone();
                 messages.insert(peer_id, signature);
                 if self.supermajority_reached(messages.len()) {
-                    //start timer
                     log::trace!("Supermajority reached!");
                     follower_state.set_view_phase(new_leader_term, ViewPhase::Changed)?;
+                    let (lock, cvar) = &*self.view_change_cvar.clone();
+                    let view_changed = lock.lock().unwrap();
                     drop(follower_state);
-                    if self.is_current_leader(new_leader_term, self.identity.id()) {
-                        // broadcast
-                        let validate_new_view = move |response: &ConsensusMessage| {
-                            // This is done for every ACKCOMMIT.
-                            match response {
-                                ConsensusMessage::AckNewView => Ok(()),
-                                _ => Err("This is not an ack NewView message.".into()),
+                    // If this is the leader broadcast NewView message
+                    if self.is_current_leader(new_leader_term, self.peer_id()) {
+                        let broadcast_meta = self.broadcast_meta.clone();
+                        thread::spawn(move || {
+                            // broadcast
+                            let validate_new_view = move |response: &ConsensusMessage| {
+                                // This is done for every ACKCOMMIT.
+                                match response {
+                                    ConsensusMessage::AckNewView => Ok(()),
+                                    _ => Err("This is not an ack NewView message.".into()),
+                                }
+                            };
+                            let mut sigs = vec![];
+                            for (key, val) in &messages {
+                                sigs.push((key.clone(), val.clone()));
                             }
-                        };
-                        let mut sigs = vec![];
-                        for (key, val) in &messages {
-                            sigs.push((key.clone(), val.clone()));
+                            let new_view_message = ConsensusMessage::NewView {
+                                leader_term: new_leader_term,
+                                view_change_signatures: sigs,
+                            };
+                            match broadcast_meta
+                                .broadcast_until_majority(new_view_message, validate_new_view)
+                            {
+                                Ok(_) => log::trace!("Succesfully broadcasted NewView Message"),
+                                Err(err) => {
+                                    log::warn!("Error while Broadcasting NewView Message: {}", err)
+                                }
+                            }
+                        });
+                    }
+                    let (view_changed, timeout_result) = cvar
+                        .wait_timeout_while(
+                            view_changed,
+                            Duration::from_millis(5000),
+                            |view_changed| *view_changed < new_leader_term,
+                        )
+                        .unwrap();
+
+                    if *view_changed >= new_leader_term {
+                        let leader_term = *view_changed;
+                        // NewView arrived in Time
+                        log::info!("NewView arrived in time");
+
+                        let mut follower_state = self.follower_state.lock().unwrap();
+                        // The ViewChange was successfull:
+                        // Update the leader_term of the follower_state to the new leaderterm
+                        log::debug!(
+                            "Changed from leader term {} to leader term {}",
+                            follower_state.leader_term,
+                            leader_term
+                        );
+                        follower_state.leader_term = leader_term;
+
+                        // check if this is the current leader
+                        let mut leader_state = self.leader_state.lock().unwrap();
+                        leader_state.leader_term = follower_state.leader_term;
+                        if self.is_current_leader(leader_term, self.peer_id()) {
+                            leader_state.sequence = follower_state.sequence;
+                            leader_state.last_block_hash = follower_state.last_block_hash();
+                            self.queue.lock().unwrap().clear();
+                            self.waker.send(()).unwrap();
                         }
-                        let new_view_message = ConsensusMessage::NewView {
-                            leader_term: new_leader_term,
-                            view_change_signatures: sigs,
-                        };
-                        let _ = self.broadcast_until_majority(new_view_message, validate_new_view);
-                    } // else start ViewChange timer
+                    } else {
+                        assert!(timeout_result.timed_out());
+                        log::info!("NewView has not arrived in time");
+
+                        // resend ViewChange for v + 1
+                        self.broadcast_view_change(new_leader_term + 1)?
+                    }
                 } else {
+                    // no supermajority
                     follower_state.set_view_phase(
                         new_leader_term,
                         ViewPhase::ViewChanging(ViewPhaseMeta { messages }),

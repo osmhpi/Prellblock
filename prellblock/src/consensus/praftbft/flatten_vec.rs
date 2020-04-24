@@ -29,6 +29,11 @@ impl<T> FlattenVec<T> {
         let data_sum: usize = self.data.iter().map(Vec::len).sum();
         iter_len + data_sum
     }
+
+    pub fn clear(&mut self) {
+        self.iter = Vec::new().into_iter();
+        self.data.clear();
+    }
 }
 
 impl<T> Iterator for FlattenVec<T> {

@@ -230,13 +230,7 @@ impl PRaftBFT {
         message: Signed<ConsensusMessage>,
     ) -> Result<Signed<ConsensusMessage>, Error> {
         // Only RPUs are allowed.
-        let mut exists = false;
-        for (peer_id, _) in self.peers.clone() {
-            if message.signer() == &peer_id {
-                exists = true;
-            }
-        }
-        if !exists {
+        if !self.peer_ids().any(|peer_id| message.signer() == peer_id) {
             return Err(Error::InvalidPeer(message.signer().clone()));
         }
 
@@ -286,7 +280,7 @@ impl PRaftBFT {
             _ => unimplemented!(),
         };
 
-        let signed_response = response.sign(&self.identity).unwrap();
+        let signed_response = response.sign(&self.broadcast_meta.identity).unwrap();
         Ok(signed_response)
     }
 }

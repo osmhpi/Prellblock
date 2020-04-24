@@ -7,6 +7,7 @@ use super::{
 };
 use pinxit::{PeerId, Signature};
 use std::collections::HashMap;
+
 #[derive(Clone)]
 #[allow(clippy::large_enum_variant)]
 pub(super) enum Phase {

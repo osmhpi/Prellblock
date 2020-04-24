@@ -15,7 +15,7 @@ impl PRaftBFT {
             let mut leader_state = self.leader_state.lock().unwrap();
 
             // Die when we are not the leader.
-            if !self.is_current_leader(leader_state.leader_term, self.identity.id()) {
+            if !self.is_current_leader(leader_state.leader_term, self.peer_id()) {
                 drop(leader_state);
                 continue;
             }

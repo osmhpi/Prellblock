@@ -5,6 +5,8 @@
 //!
 //! [Benchmark Results](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
 
+#![allow(clippy::mutex_atomic)]
+
 mod error;
 mod flatten_vec;
 mod follower;
@@ -24,7 +26,7 @@ use prellblock_client_api::Transaction;
 use state::{FollowerState, LeaderState};
 use std::{
     net::SocketAddr,
-    sync::{mpsc, Arc, Mutex},
+    sync::{mpsc, Arc, Condvar, Mutex},
     thread,
 };
 
@@ -53,11 +55,10 @@ pub struct PRaftBFT {
     queue: Mutex<FlattenVec<Signed<Transaction>>>,
     follower_state: Mutex<FollowerState>,
     leader_state: Mutex<LeaderState>,
-    peers: Vec<(PeerId, SocketAddr)>,
-    /// Our own identity, used for signing messages.
-    identity: Identity,
+    broadcast_meta: BroadcastMeta,
+    view_change_cvar: Arc<(Mutex<usize>, Condvar)>,
     block_storage: BlockStorage,
-    /// Trigger processing of transactions.
+    /// Trigger processing of transactions.    
     waker: Waker,
 }
 
@@ -80,17 +81,20 @@ impl PRaftBFT {
             }
         }
         assert!(exists, "The identity is not part of the peers list.");
+
+        let broadcast_meta = BroadcastMeta { peers, identity };
         let (waker, sleeper) = mpsc::sync_channel(0);
 
         let follower_state = FollowerState::new();
         let leader_state = Mutex::new(LeaderState::new(&follower_state));
+        let leader_term = follower_state.leader_term;
         let follower_state = Mutex::new(follower_state);
         let praftbft = Self {
             queue: Mutex::default(),
             follower_state,
             leader_state,
-            identity,
-            peers,
+            broadcast_meta,
+            view_change_cvar: Arc::new((Mutex::new(leader_term), Condvar::new())),
             block_storage,
             waker,
         };
@@ -118,19 +122,28 @@ impl PRaftBFT {
 
     /// Checks whether a number represents f + 1 nodes
     fn nonfaulty_reached(&self, number: usize) -> bool {
-        let majority = (self.peers.len() - 1) / 3 + 1;
+        let majority = (self.peers_len() - 1) / 3 + 1;
         number >= majority
     }
 
     /// Check whether a number represents a supermajority (>2/3) compared
     /// to the peers in the consenus.
     fn supermajority_reached(&self, number: usize) -> bool {
-        let len = self.peers.len();
-        if len < 4 {
-            panic!("Cannot find consensus for less than four peers.");
-        }
-        let supermajority = len * 2 / 3 + 1;
-        number >= supermajority
+        supermajority_reached(number, self.peers_len())
+    }
+
+    /// Retrieve the consesus' own identity's id.
+    const fn peer_id(&self) -> &PeerId {
+        self.broadcast_meta.identity.id()
+    }
+
+    /// The number of peers in the consensus.
+    fn peers_len(&self) -> usize {
+        self.broadcast_meta.peers.len()
+    }
+
+    fn peer_ids(&self) -> impl Iterator<Item = &PeerId> {
+        self.broadcast_meta.peers.iter().map(|(peer_id, _)| peer_id)
     }
 
     fn broadcast_until_majority<F>(
@@ -141,9 +154,46 @@ impl PRaftBFT {
     where
         F: Fn(&ConsensusMessage) -> Result<(), BoxError> + Clone + Send + 'static,
     {
+        self.broadcast_meta
+            .broadcast_until_majority(message, verify_response)
+    }
+
+    fn is_current_leader(&self, leader_term: usize, peer_id: &PeerId) -> bool {
+        peer_id.clone() == self.leader(leader_term).clone()
+    }
+
+    fn leader(&self, leader_term: usize) -> &PeerId {
+        &self.broadcast_meta.peers[leader_term % self.peers_len()].0
+    }
+}
+
+/// Check whether a number represents a supermajority (>2/3) compared
+/// to the total number of peers (`peer_count`) in the consenus.
+pub(super) fn supermajority_reached(response_len: usize, peer_count: usize) -> bool {
+    if peer_count < 4 {
+        panic!("Cannot find consensus for less than four peers.");
+    }
+    let supermajority = peer_count * 2 / 3 + 1;
+    response_len >= supermajority
+}
+
+#[derive(Clone)]
+struct BroadcastMeta {
+    peers: Vec<(PeerId, SocketAddr)>,
+    identity: Identity,
+}
+
+impl BroadcastMeta {
+    fn broadcast_until_majority<F>(
+        &self,
+        message: ConsensusMessage,
+        verify_response: F,
+    ) -> Result<Vec<(PeerId, Signature)>, BoxError>
+    where
+        F: Fn(&ConsensusMessage) -> Result<(), BoxError> + Clone + Send + 'static,
+    {
         let message = message.sign(&self.identity)?;
         let signed_message = peer_message::Consensus(message);
-
         let mut thread_group = ThreadGroup::new();
         let (tx, rx) = mpsc::sync_channel(0);
 
@@ -181,7 +231,7 @@ impl PRaftBFT {
                     log::warn!("Consensus Error: {}", err);
                 }
             }
-            if self.supermajority_reached(responses.len()) {
+            if supermajority_reached(responses.len(), self.peers.len()) {
                 // TODO: once async io is used, drop the unused threads
                 return Ok(responses);
             }
@@ -189,13 +239,5 @@ impl PRaftBFT {
 
         // All sender threads have died **before reaching supermajority**.
         Err("Could not get supermajority.".into())
-    }
-
-    fn is_current_leader(&self, leader_term: usize, peer_id: &PeerId) -> bool {
-        peer_id.clone() == self.leader(leader_term).clone()
-    }
-
-    fn leader(&self, leader_term: usize) -> &PeerId {
-        &self.peers[leader_term % self.peers.len()].0
     }
 }
