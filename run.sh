@@ -8,7 +8,8 @@ local_run=run.local.sh
 
 watch=0
 flame=0
-case "$1" in
+release=""
+while true; do case "$1" in
     w|watch)
         watch=1
         shift
@@ -17,7 +18,14 @@ case "$1" in
         flame=1
         shift
         ;;
-esac
+    r|release)
+        release="--release"
+        shift
+        ;;
+    *)
+        break;
+        ;;
+esac done
 
 bin="$1"
 shift
@@ -59,11 +67,11 @@ if [ "$flame" == "1" ]; then
 
     exec cargo flamegraph --bin "$bin" -- "$@"
 elif [ "$watch" == "1" ]; then
-    cmd="run --bin '$bin' --"
+    cmd="run $release --bin '$bin' --"
     for c in "$@"; do
         cmd="$cmd '$c'"
     done
     exec cargo watch -x "$cmd"
 else
-    exec cargo run --bin "$bin" -- "$@"
+    exec cargo run $release --bin "$bin" -- "$@"
 fi
