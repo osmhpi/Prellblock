@@ -18,6 +18,7 @@ impl PRaftBFT {
         block_hash: BlockHash,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state.lock().unwrap();
+        log::trace!("Handle Prepare message #{}.", sequence_number);
         follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
 
         // Check whether the state for the sequence is Waiting.
@@ -60,6 +61,7 @@ impl PRaftBFT {
         data: Vec<Signed<Transaction>>,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state.lock().unwrap();
+        log::trace!("Handle Append message #{}.", sequence_number);
         follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
 
         // Check whether the state for the sequence is Prepare.
@@ -167,6 +169,7 @@ impl PRaftBFT {
         ackappend_signatures: Vec<(PeerId, Signature)>,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state.lock().unwrap();
+        log::trace!("Handle Commit message #{}.", sequence_number);
         follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
 
         // Check whether the state for the sequence is Append.

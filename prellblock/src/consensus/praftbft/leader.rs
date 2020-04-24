@@ -162,14 +162,19 @@ impl PRaftBFT {
                 let ackprepares = match ackprepares {
                     Ok(ackprepares) => ackprepares,
                     Err(err) => {
-                        log::error!("Consensus error during PREPARE phase: {}", err);
+                        log::error!(
+                            "Consensus error during PREPARE phase for block #{}: {}",
+                            sequence_number,
+                            err
+                        );
                         // TODO: retry the transactions
                         continue;
                     }
                 };
                 log::trace!(
-                    "Prepare phase ended. Got ACKPREPARE signatures: {:?}",
-                    ackprepares
+                    "Prepare #{} phase ended. Got ACKPREPARE signatures: {:?}",
+                    sequence_number,
+                    ackprepares,
                 );
 
                 // ------------------------------------------- //
@@ -214,14 +219,19 @@ impl PRaftBFT {
                 let ackappends = match ackappends {
                     Ok(ackappends) => ackappends,
                     Err(err) => {
-                        log::error!("Consensus error during APPEND phase: {}", err);
+                        log::error!(
+                            "Consensus error during APPEND phase for block #{}: {}",
+                            sequence_number,
+                            err
+                        );
                         // TODO: retry the transactions
                         continue;
                     }
                 };
                 log::trace!(
-                    "Append Phase ended. Got ACKAPPEND signatures: {:?}",
-                    ackappends
+                    "Append Phase #{} ended. Got ACKAPPEND signatures: {:?}",
+                    sequence_number,
+                    ackappends,
                 );
 
                 // after we collected enough signatures, we can update our state
@@ -255,9 +265,15 @@ impl PRaftBFT {
                 };
                 let ackcommits = self.broadcast_until_majority(commit_message, validate_ackcommits);
                 match ackcommits {
-                    Ok(_) => log::info!("Comitted blocks on majority of RPUs."),
+                    Ok(_) => {
+                        log::info!("Comitted block #{} on majority of RPUs.", sequence_number);
+                    }
                     Err(err) => {
-                        log::error!("Consensus error during COMMIT phase: {}", err);
+                        log::error!(
+                            "Consensus error during COMMIT phase for block #{}: {}",
+                            sequence_number,
+                            err
+                        );
                     }
                 }
             }
