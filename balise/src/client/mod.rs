@@ -126,12 +126,12 @@ where
 {
     let req: T = req.into();
     // serialize request
-    let data = serde_json::to_vec(&req)?;
+    let mut vec = vec![0; 4];
+    serde_json::to_writer(&mut vec, &req)?;
     // send request
-    let size: u32 = data.len().try_into()?;
-    let size = size.to_le_bytes();
-    stream.write_all(&size)?;
-    stream.write_all(&data)?;
+    let size: u32 = (vec.len() - 4).try_into()?;
+    vec[..4].copy_from_slice(&size.to_le_bytes());
+    stream.write_all(&vec)?;
     // read response length
     let mut len_buf = [0; 4];
     stream.read_exact(&mut len_buf)?;

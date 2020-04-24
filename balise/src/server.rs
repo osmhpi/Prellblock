@@ -150,13 +150,13 @@ where
             };
 
             // serialize response
-            let data = serde_json::to_vec(&res)?;
+            let mut vec = vec![0; 4];
+            serde_json::to_writer(&mut vec, &res)?;
 
             // send response
-            let size: u32 = data.len().try_into()?;
-            let size = size.to_le_bytes();
-            stream.write_all(&size)?;
-            stream.write_all(&data)?;
+            let size: u32 = (vec.len() - 4).try_into()?;
+            vec[..4].copy_from_slice(&size.to_le_bytes());
+            stream.write_all(&vec)?;
 
             // Simulate connection drop
             // let _ = stream.shutdown(std::net::Shutdown::Both);
