@@ -1,5 +1,5 @@
 use super::{
-    super::{BlockHash, Body},
+    super::{Block, BlockHash, Body},
     error::PhaseName,
     message::ConsensusMessage,
     state::{Phase, PhaseMeta},
@@ -148,7 +148,7 @@ impl PRaftBFT {
         // We only allow to receive messages once.
         let phase = follower_state.phase(sequence_number)?;
         let (meta, body) = match phase {
-            Phase::Append(meta, body) => (meta, body),
+            Phase::Append(meta, body) => (meta, body.clone()),
             _ => {
                 return Err(Error::WrongPhase {
                     received: phase.to_phase_name(),
@@ -174,9 +174,9 @@ impl PRaftBFT {
             sequence_number,
             block_hash,
         };
-        for (peer_id, signature) in ackappend_signatures {
+        for (peer_id, signature) in &ackappend_signatures {
             // Frage: Was tun bei faulty signature? Abbrechen oder weiter bei Supermajority?
-            peer_id.verify(&ackprepare_message, &signature)?;
+            peer_id.verify(&ackprepare_message, signature)?;
         }
 
         follower_state
@@ -188,8 +188,13 @@ impl PRaftBFT {
         }
         follower_state.sequence = sequence_number;
 
-        // Write Blocks to BlockStorage
-        let _ = body;
+        // Write Block to BlockStorage
+        self.block_storage
+            .write_block(&Block {
+                body,
+                signatures: ackappend_signatures,
+            })
+            .unwrap();
         log::debug!(
             "Committed block #{} with hash {:?}.",
             sequence_number,

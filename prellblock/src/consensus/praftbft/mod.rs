@@ -15,6 +15,7 @@ mod state;
 
 pub use error::Error;
 
+use crate::block_storage::BlockStorage;
 use flatten_vec::FlattenVec;
 use pinxit::{Identity, PeerId, Signed};
 use prellblock_client_api::Transaction;
@@ -49,6 +50,7 @@ pub struct PRaftBFT {
     peers: HashMap<PeerId, SocketAddr>,
     /// Our own identity, used for signing messages.
     identity: Identity,
+    block_storage: BlockStorage,
     /// Trigger processing of transactions.
     waker: Waker,
 }
@@ -59,7 +61,11 @@ impl PRaftBFT {
     /// The instance is identified `identity` and in a group with other `peers`.
     /// **Warning:** This starts a new thread for processing transactions in the background.
     #[must_use]
-    pub fn new(identity: Identity, peers: HashMap<PeerId, SocketAddr>) -> Arc<Self> {
+    pub fn new(
+        identity: Identity,
+        peers: HashMap<PeerId, SocketAddr>,
+        block_storage: BlockStorage,
+    ) -> Arc<Self> {
         log::debug!("Started consensus with peers: {:?}", peers);
         assert!(
             peers.get(identity.id()).is_some(),
@@ -85,6 +91,7 @@ impl PRaftBFT {
             leader_state,
             identity,
             peers,
+            block_storage,
             waker,
         };
 

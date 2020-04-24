@@ -10,6 +10,7 @@
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
 pub mod batcher;
+pub mod block_storage;
 pub mod consensus;
 pub mod data_broadcaster;
 pub mod data_storage;

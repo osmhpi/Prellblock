@@ -15,6 +15,9 @@
 # Data storage
 /data/
 
+# Block storage
+/blocks/
+
 # Flamegraphs
 /perf.data*
 /flamegraph*.svg

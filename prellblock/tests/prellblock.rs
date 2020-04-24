@@ -2,6 +2,7 @@ use balise::server::TlsIdentity;
 use pinxit::Identity;
 use prellblock::{
     batcher::Batcher,
+    block_storage::BlockStorage,
     consensus::Consensus,
     data_broadcaster::Broadcaster,
     data_storage::DataStorage,
@@ -32,8 +33,9 @@ fn test_prellblock() {
     peers.insert(identity.id().clone(), turi_address.parse().unwrap());
     // skype_chat.insert(Felix, MArtin)
     // waitinbg for lock on mutex mutx?
+    let block_storage = BlockStorage::new("../blocks/test-prellblock").unwrap();
 
-    let consensus = Consensus::new(identity, peers);
+    let consensus = Consensus::new(identity, peers, block_storage);
 
     let broadcaster = Broadcaster::new(peer_addresses);
     let broadcaster = Arc::new(broadcaster);
@@ -59,13 +61,13 @@ fn test_prellblock() {
         });
     }
 
-    let storage = DataStorage::new("../data/test-prellblock").unwrap();
-    let storage = Arc::new(storage);
+    let data_storage = DataStorage::new("../data/test-prellblock").unwrap();
+    let data_storage = Arc::new(data_storage);
 
     let calculator = Calculator::new();
     let calculator = Arc::new(calculator.into());
 
-    let peer_inbox = PeerInbox::new(calculator, storage, consensus, permission_checker);
+    let peer_inbox = PeerInbox::new(calculator, data_storage, consensus, permission_checker);
     let peer_inbox = Arc::new(peer_inbox);
 
     // execute the receiver in a new thread
