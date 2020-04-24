@@ -9,7 +9,7 @@ pub type StreamImpl = TlsStream<TcpStream>;
 
 impl<'a> super::StreamGuard<'a> {
     pub fn tcp_stream(&self) -> &TcpStream {
-        self.stream.get_ref()
+        self.stream.as_ref().unwrap().get_ref()
     }
 }
 

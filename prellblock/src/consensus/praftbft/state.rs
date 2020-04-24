@@ -64,7 +64,7 @@ pub(super) struct FollowerState {
     pub(super) round_states: RingBuffer<RoundState>,
 }
 
-const RING_BUFFER_SIZE: usize = 32;
+const RING_BUFFER_SIZE: usize = 1024;
 
 impl FollowerState {
     /// Create a new `FollowerState`.

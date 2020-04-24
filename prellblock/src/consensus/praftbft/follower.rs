@@ -2,14 +2,27 @@ use super::{
     super::{BlockHash, Body},
     error::PhaseName,
     message::ConsensusMessage,
-    state::{Phase, PhaseMeta, RoundState},
+    state::{FollowerState, Phase, PhaseMeta, RoundState},
     Error, PRaftBFT,
 };
 use pinxit::{PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
+use std::sync::{LockResult, MutexGuard};
 
 #[allow(clippy::single_match_else)]
 impl PRaftBFT {
+    /// Wait until we reached the sequence number the message is at.
+    fn follower_state_in_sequence(
+        &self,
+        sequence_number: u64,
+    ) -> LockResult<MutexGuard<FollowerState>> {
+        self.follower_state_sequence_changed
+            .wait_while(self.follower_state.lock()?, |follower_state| {
+                follower_state.sequence + 1 < sequence_number
+            })
+        // self.follower_state.lock()
+    }
+
     fn handle_prepare_message(
         &self,
         peer_id: &PeerId,
@@ -17,7 +30,7 @@ impl PRaftBFT {
         sequence_number: u64,
         block_hash: BlockHash,
     ) -> Result<ConsensusMessage, Error> {
-        let mut follower_state = self.follower_state.lock().unwrap();
+        let mut follower_state = self.follower_state_in_sequence(sequence_number).unwrap();
         log::trace!("Handle Prepare message #{}.", sequence_number);
         follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
 
@@ -60,7 +73,7 @@ impl PRaftBFT {
         ackprepare_signatures: Vec<(PeerId, Signature)>,
         data: Vec<Signed<Transaction>>,
     ) -> Result<ConsensusMessage, Error> {
-        let mut follower_state = self.follower_state.lock().unwrap();
+        let mut follower_state = self.follower_state_in_sequence(sequence_number).unwrap();
         log::trace!("Handle Append message #{}.", sequence_number);
         follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
 
@@ -168,7 +181,7 @@ impl PRaftBFT {
         block_hash: BlockHash,
         ackappend_signatures: Vec<(PeerId, Signature)>,
     ) -> Result<ConsensusMessage, Error> {
-        let mut follower_state = self.follower_state.lock().unwrap();
+        let mut follower_state = self.follower_state_in_sequence(sequence_number).unwrap();
         log::trace!("Handle Commit message #{}.", sequence_number);
         follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
 
@@ -234,6 +247,7 @@ impl PRaftBFT {
         assert!(old_round_state.buffered_commit_message.is_none());
 
         follower_state.sequence = sequence_number;
+        self.follower_state_sequence_changed.notify_all();
 
         // Write Blocks to BlockStorage
         let _ = body;

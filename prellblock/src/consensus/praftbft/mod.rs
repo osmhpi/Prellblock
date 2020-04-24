@@ -16,20 +16,19 @@ mod state;
 pub use error::Error;
 
 use flatten_vec::FlattenVec;
+use leader::Leader;
 use pinxit::{Identity, PeerId, Signed};
 use prellblock_client_api::Transaction;
 use state::{FollowerState, LeaderState};
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    sync::{mpsc, Arc, Mutex},
+    sync::{Arc, Condvar, Mutex},
     thread,
+    thread::JoinHandle,
 };
 
-const MAX_TRANSACTIONS_PER_BLOCK: usize = 25;
-
-type Waker = mpsc::SyncSender<()>;
-type Sleeper = mpsc::Receiver<()>;
+const MAX_TRANSACTIONS_PER_BLOCK: usize = 1;
 
 /// Prellblock Raft BFT consensus algorithm.
 ///
@@ -43,14 +42,13 @@ pub struct PRaftBFT {
     // - Nachrichten über Peer Sender senden
     // - Nachrichten von PeerInbox empfangen
     // - fertige Blöcke übergeben an prellblock
-    queue: Mutex<FlattenVec<Signed<Transaction>>>,
+    queue: Arc<Mutex<FlattenVec<Signed<Transaction>>>>,
+    leader_handle: Option<JoinHandle<()>>,
     follower_state: Mutex<FollowerState>,
-    leader_state: Option<Mutex<LeaderState>>,
+    follower_state_sequence_changed: Condvar,
     peers: HashMap<PeerId, SocketAddr>,
     /// Our own identity, used for signing messages.
     identity: Identity,
-    /// Trigger processing of transactions.
-    waker: Waker,
 }
 
 impl PRaftBFT {
@@ -66,26 +64,32 @@ impl PRaftBFT {
             "The identity is not part of the peers list."
         );
 
-        let (waker, sleeper) = mpsc::sync_channel(0);
-
         // TODO: Remove this.
         let leader_id =
-            PeerId::from_hex("98dcfa6fa5fe22e457bfff6cce55a7fa713f88a0766ffa890b804056e823d66f")
+            PeerId::from_hex("c72d59b472b5f511a88f3f1f8804c498d891ffd91583fec9f23541b9fefd3585")
                 .unwrap();
 
-        let leader_state = if *identity.id() == leader_id {
-            Some(Mutex::default())
+        let leader = Leader {
+            identity: identity.clone(),
+            queue: Arc::default(),
+            peers: peers.clone(),
+            leader_state: LeaderState::default(),
+        };
+        let queue = leader.queue.clone();
+
+        let leader_handle = if identity.id() == &leader_id {
+            Some(thread::spawn(move || leader.process_transactions()))
         } else {
             None
         };
 
         let praftbft = Self {
-            queue: Mutex::default(),
+            queue,
+            leader_handle,
             follower_state: Mutex::new(FollowerState::new()),
-            leader_state,
-            identity,
+            follower_state_sequence_changed: Condvar::default(),
             peers,
-            waker,
+            identity,
         };
 
         // TODO: Remove this.
@@ -94,25 +98,15 @@ impl PRaftBFT {
             follower_state.leader = Some(leader_id);
         }
 
-        let praftbft = Arc::new(praftbft);
-        {
-            let praftbft = praftbft.clone();
-            thread::spawn(move || praftbft.process_transactions(&sleeper));
-        }
-        praftbft
+        Arc::new(praftbft)
     }
 
     /// Stores incoming `Transaction`s in the Consensus' `queue`.
     pub fn take_transactions(&self, transactions: Vec<Signed<Transaction>>) {
         let mut queue = self.queue.lock().unwrap();
         queue.push(transactions);
-
-        if queue.len() >= MAX_TRANSACTIONS_PER_BLOCK {
-            drop(queue);
-            // TODO: Restart thread for processing messages.
-            self.waker
-                .send(())
-                .expect("Processing thread is not running.");
+        if let Some(leader_handle) = &self.leader_handle {
+            leader_handle.thread().unpark();
         }
     }
 

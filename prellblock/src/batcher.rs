@@ -12,8 +12,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-const MAX_TRANSACTIONS_PER_BATCH: usize = 5;
-const MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_secs(1);
+const MAX_TRANSACTIONS_PER_BATCH: usize = 4000;
+const MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_millis(2000);
 
 /// A Batcher for messages.
 pub struct Batcher {

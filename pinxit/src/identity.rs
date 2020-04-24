@@ -17,6 +17,15 @@ impl fmt::Debug for Identity {
     }
 }
 
+impl Clone for Identity {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            secret: SecretKey::from_bytes(self.secret.as_bytes()).unwrap(),
+        }
+    }
+}
+
 impl Identity {
     pub(crate) fn from_secret_key(secret: SecretKey) -> Self {
         let id = PeerId((&secret).into());

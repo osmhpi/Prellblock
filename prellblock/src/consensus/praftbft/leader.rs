@@ -1,15 +1,30 @@
 use super::{
-    super::Body, message::ConsensusMessage, PRaftBFT, Sleeper, MAX_TRANSACTIONS_PER_BLOCK,
+    super::Body, flatten_vec::FlattenVec, message::ConsensusMessage, state::LeaderState,
+    MAX_TRANSACTIONS_PER_BLOCK,
 };
 use crate::{
     peer::{message as peer_message, Sender},
     thread_group::ThreadGroup,
     BoxError,
 };
-use pinxit::{PeerId, Signable, Signature};
-use std::sync::mpsc;
+use pinxit::{Identity, PeerId, Signable, Signature, Signed};
+use prellblock_client_api::Transaction;
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::{mpsc, Arc, Mutex},
+};
 
-impl PRaftBFT {
+pub(super) struct Leader {
+    /// The identity is used to sign consensus messages.
+    pub(super) identity: Identity,
+    /// A queue of messages.
+    pub(super) queue: Arc<Mutex<FlattenVec<Signed<Transaction>>>>,
+    pub(super) peers: HashMap<PeerId, SocketAddr>,
+    pub(super) leader_state: LeaderState,
+}
+
+impl Leader {
     fn broadcast_until_majority<F>(
         &self,
         message: ConsensusMessage,
@@ -73,26 +88,12 @@ impl PRaftBFT {
     /// This function waits until it is triggered to process transactions.
     // TODO: split this function into smaller phases
     #[allow(clippy::too_many_lines)]
-    pub(super) fn process_transactions(&self, sleeper: &Sleeper) {
+    pub(super) fn process_transactions(mut self) {
         loop {
             // TODO: sleep until timeout
-            sleeper.recv().expect(
-                "The consensus died. Stopping processing transaction in background thread.",
-            );
-
-            let leader_state = match &self.leader_state {
-                Some(leader_state) => leader_state,
-                None => {
-                    // log::trace!("I am not a leader. Let me sleep.");
-                    continue;
-                }
-            };
-            // TODO: Remove this.
-            // Die when we are not the leader.
-            assert_eq!(
-                Some(self.identity.id()),
-                self.follower_state.lock().unwrap().leader.as_ref()
-            );
+            while self.queue.lock().unwrap().len() < MAX_TRANSACTIONS_PER_BLOCK {
+                std::thread::park();
+            }
 
             // TODO: use > 0 instead, when in timeout
             while self.queue.lock().unwrap().len() >= MAX_TRANSACTIONS_PER_BLOCK {
@@ -109,11 +110,10 @@ impl PRaftBFT {
                         break;
                     }
                 }
-                let mut leader_state = leader_state.lock().unwrap();
-                let sequence_number = leader_state.sequence + 1;
+                let sequence_number = self.leader_state.sequence + 1;
                 let body = Body {
                     height: sequence_number,
-                    prev_block_hash: leader_state.last_block_hash,
+                    prev_block_hash: self.leader_state.last_block_hash,
                     transactions,
                 };
                 let hash = body.hash();
@@ -130,7 +130,7 @@ impl PRaftBFT {
                 //    --------------| |-------------------   //
                 //                  |_|                      //
                 // ----------------------------------------- //
-                let leader_term = leader_state.leader_term;
+                let leader_term = self.leader_state.leader_term;
                 let prepare_message = ConsensusMessage::Prepare {
                     leader_term,
                     sequence_number,
@@ -237,8 +237,8 @@ impl PRaftBFT {
                 );
 
                 // after we collected enough signatures, we can update our state
-                leader_state.sequence = sequence_number;
-                leader_state.last_block_hash = hash;
+                self.leader_state.sequence = sequence_number;
+                self.leader_state.last_block_hash = hash;
 
                 // ------------------------------------------- //
                 //     _____                          _ _      //
@@ -280,5 +280,16 @@ impl PRaftBFT {
                 }
             }
         }
+    }
+
+    /// Check whether a number represents a supermajority (>2/3) compared
+    /// to the peers in the consenus.
+    fn supermajority_reached(&self, number: usize) -> bool {
+        let len = self.peers.len();
+        if len < 4 {
+            panic!("Cannot find consensus for less than four peers.");
+        }
+        let supermajority = len * 2 / 3 + 1;
+        number >= supermajority
     }
 }
