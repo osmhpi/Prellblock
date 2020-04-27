@@ -41,7 +41,7 @@ impl PRaftBFT {
     }
 
     pub(super) fn broadcast_view_change(&self, new_leader_term: usize) -> Result<(), Error> {
-        log::trace!("Broadcasting ViewChange Message");
+        log::trace!("Broadcasting ViewChange Message.");
         let view_change_message = ConsensusMessage::ViewChange { new_leader_term };
         let validate_ack_view_change = move |response: &ConsensusMessage| {
             // This is done for every ACKCOMMIT.
@@ -75,7 +75,7 @@ impl PRaftBFT {
         }
 
         log::trace!(
-            "Received leader term {} on current leader term {}",
+            "Received leader term {} on current leader term {}.",
             new_leader_term,
             follower_state.leader_term
         );
@@ -90,7 +90,7 @@ impl PRaftBFT {
                     ViewPhase::ViewReceiving(ViewPhaseMeta { messages }),
                 )?;
                 log::trace!(
-                    "Changed State to ViewReceiving for Leader Term {}",
+                    "Changed State to ViewReceiving for Leader Term {}.",
                     new_leader_term
                 );
             }
@@ -106,7 +106,7 @@ impl PRaftBFT {
                         ViewPhase::ViewChanging(ViewPhaseMeta { messages }),
                     )?;
                     log::trace!(
-                        "Changed to ViewChanging State for Leader Term {}",
+                        "Changed to ViewChanging State for Leader Term {}.",
                         new_leader_term
                     );
                     self.broadcast_view_change(new_leader_term)?;
@@ -122,7 +122,7 @@ impl PRaftBFT {
                 let mut messages = meta.messages.clone();
                 messages.insert(peer_id, signature);
                 if self.supermajority_reached(messages.len()) {
-                    log::trace!("Supermajority reached!");
+                    log::trace!("Supermajority reached.");
                     follower_state.set_view_phase(new_leader_term, ViewPhase::Changed)?;
                     let (lock, cvar) = &*self.view_change_cvar.clone();
                     let view_changed = lock.lock().unwrap();
@@ -150,7 +150,7 @@ impl PRaftBFT {
                             match broadcast_meta
                                 .broadcast_until_majority(new_view_message, validate_new_view)
                             {
-                                Ok(_) => log::trace!("Succesfully broadcasted NewView Message"),
+                                Ok(_) => log::trace!("Succesfully broadcasted NewView Message."),
                                 Err(err) => {
                                     log::warn!("Error while Broadcasting NewView Message: {}", err)
                                 }
@@ -168,13 +168,13 @@ impl PRaftBFT {
                     if *view_changed >= new_leader_term {
                         let leader_term = *view_changed;
                         // NewView arrived in Time
-                        log::info!("NewView arrived in time");
+                        log::trace!("NewView arrived in time.");
 
                         let mut follower_state = self.follower_state.lock().unwrap();
                         // The ViewChange was successfull:
                         // Update the leader_term of the follower_state to the new leaderterm
                         log::debug!(
-                            "Changed from leader term {} to leader term {}",
+                            "Changed from leader term {} to leader term {}.",
                             follower_state.leader_term,
                             leader_term
                         );
@@ -191,7 +191,7 @@ impl PRaftBFT {
                         }
                     } else {
                         assert!(timeout_result.timed_out());
-                        log::info!("NewView has not arrived in time");
+                        log::trace!("NewView has not arrived in time.");
 
                         // resend ViewChange for v + 1
                         self.broadcast_view_change(new_leader_term + 1)?

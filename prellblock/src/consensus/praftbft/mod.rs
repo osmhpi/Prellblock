@@ -202,7 +202,7 @@ impl BroadcastMeta {
             let verify_response = verify_response.clone();
             let tx = tx.clone();
             thread_group.spawn(
-                &format!("Send consensus message to {}", peer_address),
+                &format!("Send consensus message to {}.", peer_address),
                 move || {
                     let send_message_and_verify_response = || {
                         let mut sender = Sender::new(peer_address);
