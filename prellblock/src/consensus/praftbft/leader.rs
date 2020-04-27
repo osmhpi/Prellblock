@@ -13,7 +13,10 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::{mpsc, Arc, Mutex},
+    time::{Duration, Instant},
 };
+
+const BLOCK_GENERATION_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(super) struct Leader {
     /// The identity is used to sign consensus messages.
@@ -90,13 +93,18 @@ impl Leader {
     #[allow(clippy::too_many_lines)]
     pub(super) fn process_transactions(mut self) {
         loop {
-            // TODO: sleep until timeout
-            while self.queue.lock().unwrap().len() < MAX_TRANSACTIONS_PER_BLOCK {
-                std::thread::park();
-            }
+            let unpark_reason = thread_park_while_timeout(BLOCK_GENERATION_TIMEOUT, || {
+                self.queue.lock().unwrap().len() < MAX_TRANSACTIONS_PER_BLOCK
+            });
 
-            // TODO: use > 0 instead, when in timeout
-            while self.queue.lock().unwrap().len() >= MAX_TRANSACTIONS_PER_BLOCK {
+            let minimum_queue_len = match unpark_reason {
+                UnparkReason::Condition => MAX_TRANSACTIONS_PER_BLOCK,
+                // We want to propose a block with a minimum of 1 transaction
+                // when timed out.
+                UnparkReason::Timeout => 1,
+            };
+
+            while self.queue.lock().unwrap().len() >= minimum_queue_len {
                 let mut transactions = Vec::with_capacity(MAX_TRANSACTIONS_PER_BLOCK);
 
                 // TODO: Check size of transactions cumulated.
@@ -292,4 +300,25 @@ impl Leader {
         let supermajority = len * 2 / 3 + 1;
         number >= supermajority
     }
+}
+
+/// Park the current thread while `condition` is true and the timeout is not reached.
+///
+/// Or in terms of the standard library:
+/// Block the current thread until `condition` is false or the timeout is reached.
+fn thread_park_while_timeout(dur: Duration, mut condition: impl FnMut() -> bool) -> UnparkReason {
+    let start = Instant::now();
+    while condition() {
+        let timeout = match dur.checked_sub(start.elapsed()) {
+            Some(timeout) => timeout,
+            None => return UnparkReason::Timeout,
+        };
+        std::thread::park_timeout(timeout);
+    }
+    UnparkReason::Condition
+}
+
+enum UnparkReason {
+    Condition,
+    Timeout,
 }
