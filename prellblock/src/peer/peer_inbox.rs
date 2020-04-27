@@ -47,11 +47,12 @@ impl PeerInbox {
 
         match &*transaction {
             Transaction::KeyValue { key, value } => {
+                // TODO: Deserialize value.
                 log::info!(
-                    "Client {} set {} to {} (via another RPU)",
+                    "Client {} set {} to {:?} (via another RPU)",
                     &transaction.signer(),
                     key,
-                    value
+                    value,
                 );
 
                 // TODO: Continue with warning or error?

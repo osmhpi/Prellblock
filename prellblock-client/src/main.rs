@@ -12,7 +12,6 @@ use rand::{
     thread_rng, RngCore, SeedableRng,
 };
 use serde::Deserialize;
-use serde_json::json;
 use std::{fs, net::SocketAddr, str, time::Instant};
 use structopt::StructOpt;
 
@@ -84,7 +83,7 @@ async fn main() {
                 "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc",
             )
             .unwrap();
-            let value = json!(value);
+            let value = postcard::to_stdvec(&value).unwrap();
 
             let transaction = Transaction::KeyValue { key, value }
                 .sign(&identity)
@@ -130,7 +129,7 @@ async fn main() {
                         rng.fill_bytes(&mut bytes);
                         hex::encode_to_slice(&bytes, &mut value).unwrap();
                         let value = str::from_utf8(&value[..size]).unwrap();
-                        let value = json!(value);
+                        let value = postcard::to_stdvec(value).unwrap();
                         let transaction = Transaction::KeyValue { key, value }
                             .sign(&identity)
                             .unwrap();

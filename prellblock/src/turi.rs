@@ -61,7 +61,8 @@ impl Turi {
 
         match &transaction as &Transaction {
             Transaction::KeyValue { key, value } => {
-                log::info!("Client {} set {} to {}.", peer_id, key, value);
+                // TODO: Deserialize value.
+                log::info!("Client {} set {} to {:?}.", peer_id, key, value);
             }
         }
 

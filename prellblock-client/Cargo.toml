@@ -14,11 +14,11 @@ balise = { path= "../balise", features = ["client", "tls"] }
 hex = "0.4.2"
 log = "0.4.8"
 pinxit = { path = "../pinxit" }
+postcard = "0.5.0"
 prellblock-client-api = { path = "../prellblock-client-api" }
 pretty_env_logger = "0.4.0"
 rand = "0.7.3"
 serde = { version = "1.0.105", features = ["derive"] }
-serde_json = "1.0.51"
 structopt = "0.3.12"
 tokio = { version = "0.2.19", features = ["rt-threaded", "macros"] }
 toml = "0.5.6"

@@ -31,14 +31,14 @@ pub enum Transaction {
         /// The key.
         key: String,
         /// The value.
-        value: serde_json::Value,
+        value: Vec<u8>,
     },
 }
 
 impl Signable for Transaction {
-    type SignableData = String;
-    type Error = serde_json::error::Error;
+    type SignableData = Vec<u8>;
+    type Error = postcard::Error;
     fn signable_data(&self) -> Result<Self::SignableData, Self::Error> {
-        serde_json::to_string(self)
+        postcard::to_stdvec(self)
     }
 }

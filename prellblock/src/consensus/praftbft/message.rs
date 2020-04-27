@@ -82,8 +82,8 @@ pub enum ConsensusMessage {
 }
 
 impl Signable for ConsensusMessage {
-    type SignableData = String;
-    type Error = serde_json::error::Error;
+    type SignableData = Vec<u8>;
+    type Error = postcard::Error;
     fn signable_data(&self) -> Result<Self::SignableData, Self::Error> {
         match self {
             Self::Append {
@@ -99,9 +99,9 @@ impl Signable for ConsensusMessage {
                     block_hash,
                     ackprepare_signatures,
                 );
-                serde_json::to_string(&sign_data)
+                postcard::to_stdvec(&sign_data)
             }
-            _ => serde_json::to_string(self),
+            _ => postcard::to_stdvec(self),
         }
     }
 }

@@ -22,7 +22,7 @@ type ServerResult = Result<Response, BoxError>;
 /// A transparent response to a `Request`.
 ///
 /// Use the `handle` method to create a matching response.
-pub struct Response(pub(crate) serde_json::Value);
+pub struct Response(pub(crate) Vec<u8>);
 
 #[cfg(feature = "tls")]
 pub use native_tls::Identity as TlsIdentity;
@@ -160,8 +160,8 @@ where
             };
 
             // serialize response
-            let mut vec = vec![0; 4];
-            serde_json::to_writer(&mut vec, &res)?;
+            let vec = vec![0; 4];
+            let mut vec = postcard::serialize_with_flavor(&res, postcard::flavors::StdVec(vec))?;
 
             // send response
             let size: u32 = (vec.len() - 4).try_into()?;
@@ -175,15 +175,11 @@ where
         Ok(())
     }
 
-    async fn handle_request(
-        &self,
-        addr: &SocketAddr,
-        req: &[u8],
-    ) -> Result<serde_json::Value, BoxError> {
+    async fn handle_request(&self, addr: &SocketAddr, req: &[u8]) -> Result<Vec<u8>, BoxError> {
         // TODO: Remove this.
         let _ = self;
         // Deserialize request.
-        let req: T = serde_json::from_slice(req)?;
+        let req: T = postcard::from_bytes(req)?;
         log::trace!("Received request from {}: {:?}", addr, req);
         // handle the actual request
         let res = (self.handler.clone())(req).await.map(|response| response.0);
@@ -218,6 +214,6 @@ where
     F: Future<Output = Result<R::Response, BoxError>>,
 {
     let res = handler(params).await?;
-    let data = serde_json::to_value(&res)?;
+    let data = postcard::to_stdvec(&res)?;
     Ok(Response(data))
 }

@@ -127,8 +127,8 @@ where
 {
     let req: T = req.into();
     // serialize request
-    let mut vec = vec![0; 4];
-    serde_json::to_writer(&mut vec, &req)?;
+    let vec = vec![0; 4];
+    let mut vec = postcard::serialize_with_flavor(&req, postcard::flavors::StdVec(vec))?;
     // send request
     let size: u32 = (vec.len() - 4).try_into()?;
     vec[..4].copy_from_slice(&size.to_le_bytes());
@@ -141,6 +141,9 @@ where
     let mut buf = vec![0; len];
     stream.read_exact(&mut buf).await?;
 
-    let res = serde_json::from_slice(&buf)?;
+    let res = match postcard::from_bytes(&buf)? {
+        Ok(data) => Ok(postcard::from_bytes(data)?),
+        Err(err) => Err(err),
+    };
     Ok(res)
 }

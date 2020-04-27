@@ -38,7 +38,7 @@ impl BlockStorage {
     ///
     /// The data will be accessible by the sequence number?.
     pub fn write_block(&self, block: &Block) -> Result<(), BoxError> {
-        let value = serde_json::to_vec(&block)?;
+        let value = postcard::to_stdvec(&block)?;
 
         self.blocks
             .insert(block.sequence_number().to_be_bytes(), value)?;

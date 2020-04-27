@@ -3,6 +3,7 @@ use blake2::{
     Blake2b, Digest,
 };
 use pinxit::{PeerId, Signature, Signed};
+
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -39,9 +40,9 @@ pub struct Body {
 impl Body {
     /// Calculate the hash of the blocks body.
     pub(crate) fn hash(&self) -> BlockHash {
-        let val = serde_json::to_string(self).unwrap();
+        let val = postcard::to_stdvec(self).unwrap();
 
-        let result = Blake2b::digest(val.as_bytes());
+        let result = Blake2b::digest(&val);
 
         let mut body_hash = BlockHash([0; HASH_SIZE]);
         body_hash.0.copy_from_slice(&result);

@@ -36,7 +36,7 @@ impl DataStorage {
     /// Write a value to the store.
     ///
     /// The data will be associated with the peer via its id.
-    pub fn write<K>(&self, peer: &PeerId, key: K, value: &serde_json::Value) -> Result<(), BoxError>
+    pub fn write<K>(&self, peer: &PeerId, key: K, value: &[u8]) -> Result<(), BoxError>
     where
         K: AsRef<[u8]>,
     {
@@ -49,7 +49,7 @@ impl DataStorage {
         // insert value with timestamp
         let now: DateTime<Utc> = Utc::now();
         let time = now.timestamp_millis().to_be_bytes();
-        let value = serde_json::to_vec(&value)?;
+        let value = postcard::to_stdvec(&value)?;
         key_tree.insert(&time, value)?;
 
         // Demo that it's working.
