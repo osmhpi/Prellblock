@@ -6,7 +6,11 @@
 use pinxit::{Identity, Signable};
 use prellblock_client::Client;
 use prellblock_client_api::{message, Transaction};
-use rand::{seq::SliceRandom, thread_rng, RngCore};
+use rand::{
+    rngs::{OsRng, StdRng},
+    seq::SliceRandom,
+    thread_rng, RngCore, SeedableRng,
+};
 use serde::Deserialize;
 use serde_json::json;
 use std::{fs, net::SocketAddr, str, time::Instant};
@@ -58,7 +62,8 @@ struct RpuConfig {
     turi_address: SocketAddr,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     pretty_env_logger::init();
     log::info!("Little Kitty =^.^=");
 
@@ -85,7 +90,7 @@ fn main() {
                 .sign(&identity)
                 .unwrap();
 
-            match client.send_request(message::Execute(transaction)) {
+            match client.send_request(message::Execute(transaction)).await {
                 Err(err) => log::error!("Failed to send transaction: {}.", err),
                 Ok(()) => log::debug!("Transaction ok!"),
             }
@@ -107,8 +112,8 @@ fn main() {
             let mut worker_handles = Vec::new();
             for _ in 0..workers {
                 let key = key.clone();
-                worker_handles.push(std::thread::spawn(move || {
-                    let mut rng = thread_rng();
+                worker_handles.push(tokio::spawn(async move {
+                    let mut rng = StdRng::from_rng(OsRng {}).unwrap();
                     let mut client = Client::new(turi_address);
                     let identity = Identity::from_hex(
                         "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc",
@@ -129,7 +134,7 @@ fn main() {
                         let transaction = Transaction::KeyValue { key, value }
                             .sign(&identity)
                             .unwrap();
-                        match client.send_request(message::Execute(transaction)) {
+                        match client.send_request(message::Execute(transaction)).await {
                             Err(err) => log::error!("Failed to send transaction: {}.", err),
                             Ok(()) => log::debug!("Transaction ok!"),
                         }
@@ -139,7 +144,7 @@ fn main() {
             }
 
             for (n, worker) in worker_handles.into_iter().enumerate() {
-                if let Ok(time_diff) = worker.join() {
+                if let Ok(time_diff) = worker.await {
                     let avg_time_per_tx = time_diff / transactions;
                     let avg_tps = 1.0 / avg_time_per_tx.as_secs_f64();
                     log::info!(

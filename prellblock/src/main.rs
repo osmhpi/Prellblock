@@ -10,6 +10,7 @@
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
 use balise::server::TlsIdentity;
+use futures::future;
 use pinxit::Identity;
 use prellblock::{
     batcher::Batcher,
@@ -18,17 +19,13 @@ use prellblock::{
     data_storage::DataStorage,
     peer::{Calculator, PeerInbox, Receiver},
     permission_checker::PermissionChecker,
-    thread_group::ThreadGroup,
     turi::Turi,
     world_state::WorldState,
 };
 use serde::Deserialize;
-use std::{
-    env, fs, io,
-    net::{SocketAddr, TcpListener},
-    sync::Arc,
-};
+use std::{env, fs, io, net::SocketAddr, sync::Arc};
 use structopt::StructOpt;
+use tokio::net::TcpListener;
 
 // https://crates.io/crates/structopt
 
@@ -57,7 +54,8 @@ struct RpuPrivateConfig {
     tls_id: String,   // native_tls::Identity (pkcs12 -> .pfx)
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     pretty_env_logger::init();
     log::info!("Kitty =^.^=");
 
@@ -76,7 +74,6 @@ fn main() {
     let private_config_data =
         fs::read_to_string(format!("./config/{0}/{0}.toml", opt.name)).unwrap();
     let private_config: RpuPrivateConfig = toml::from_str(&private_config_data).unwrap();
-    let mut thread_group = ThreadGroup::new();
     let peers = config
         .rpu
         .iter()
@@ -101,28 +98,24 @@ fn main() {
     let broadcaster = Arc::new(broadcaster);
 
     let batcher = Batcher::new(broadcaster);
-    let batcher = Arc::new(batcher);
 
     let world_state = WorldState::with_fake_data();
     let permission_checker = PermissionChecker::new(world_state);
     let permission_checker = Arc::new(permission_checker);
 
     // execute the turi in a new thread
-    {
+    let turi_task = {
         let public_config = public_config.clone();
         let private_config = private_config.clone();
         let permission_checker = permission_checker.clone();
 
-        thread_group.spawn(
-            format!("Turi ({})", public_config.turi_address),
-            move || {
-                let tls_identity = load_identity_from_env(private_config.tls_id)?;
-                let listener = TcpListener::bind(public_config.turi_address)?;
-                let turi = Turi::new(tls_identity, batcher, permission_checker);
-                turi.serve(&listener)
-            },
-        );
-    }
+        tokio::spawn(async move {
+            let tls_identity = load_identity_from_env(private_config.tls_id)?;
+            let mut listener = TcpListener::bind(public_config.turi_address).await?;
+            let turi = Turi::new(tls_identity, batcher, permission_checker);
+            turi.serve(&mut listener).await
+        })
+    };
 
     let storage = DataStorage::new(&format!("./data/{}", opt.name)).unwrap();
     let storage = Arc::new(storage);
@@ -134,18 +127,23 @@ fn main() {
     let peer_inbox = Arc::new(peer_inbox);
 
     // execute the receiver in a new thread
-    thread_group.spawn(
-        format!("Peer Receiver ({})", public_config.peer_address),
-        move || {
-            let tls_identity = load_identity_from_env(private_config.tls_id)?;
-            let listener = TcpListener::bind(public_config.peer_address)?;
-            let receiver = Receiver::new(tls_identity, peer_inbox);
-            receiver.serve(&listener)
-        },
-    );
+    let peer_receiver_task = tokio::spawn(async move {
+        let tls_identity = load_identity_from_env(private_config.tls_id)?;
+        let mut listener = TcpListener::bind(public_config.peer_address).await?;
+        let receiver = Receiver::new(tls_identity, peer_inbox);
+        receiver.serve(&mut listener).await
+    });
 
-    // wait for all threads
-    thread_group.join_and_log();
+    // wait for all tasks
+    future::join(
+        async move {
+            log::error!("Turi ended: {:?}", turi_task.await);
+        },
+        async move {
+            log::error!("Peer recceiver ended: {:?}", peer_receiver_task.await);
+        },
+    )
+    .await;
     log::info!("Going to hunt some mice. I meant *NICE*. Bye.");
 }
 

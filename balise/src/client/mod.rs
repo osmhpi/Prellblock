@@ -6,11 +6,11 @@ use super::{BoxError, Request};
 use serde::Serialize;
 use std::{
     convert::TryInto,
-    io::{self, Read, Write},
-    marker::PhantomData,
+    marker::{PhantomData, Unpin},
     net::SocketAddr,
     time::{Duration, Instant},
 };
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// A client instance.
 ///
@@ -41,15 +41,15 @@ impl<T> Client<T> {
     }
 
     /// Send a request to the server specified.
-    pub fn send_request<Req>(&mut self, req: Req) -> Result<Req::Response, BoxError>
+    pub async fn send_request<Req>(&mut self, req: Req) -> Result<Req::Response, BoxError>
     where
         Req: Request<T>,
         T: Serialize,
     {
-        let (mut stream, addr) = self.stream()?;
+        let (mut stream, addr) = self.stream().await?;
 
         log::trace!("Sending request to {}: {:?}", addr, req);
-        let res = send_request(&mut *stream, req)?;
+        let res = send_request(&mut *stream, req).await?;
 
         log::trace!("Received response from {}: {:?}", addr, res);
         stream.done();
@@ -61,7 +61,7 @@ impl<T> Client<T> {
     /// A stream could be closed by the receiver while being
     /// in the pool. This is catched and a new stream will be
     /// returned in this case.
-    fn stream(&self) -> Result<(connection_pool::StreamGuard, SocketAddr), BoxError> {
+    async fn stream(&self) -> Result<(connection_pool::StreamGuard<'_>, SocketAddr), BoxError> {
         let deadline = Instant::now() + Duration::from_secs(15);
         let delay = Duration::from_secs(1);
 
@@ -70,7 +70,7 @@ impl<T> Client<T> {
                 return Err("Timeout: Could not send request.".into());
             }
 
-            let stream = match connection_pool::POOL.stream(self.addr) {
+            let stream = match connection_pool::POOL.stream(self.addr).await {
                 Ok(stream) => stream,
                 Err(err) => {
                     log::warn!(
@@ -85,42 +85,43 @@ impl<T> Client<T> {
             };
             let addr = stream.tcp_stream().peer_addr()?;
 
-            // check TCP connection functional
-            stream.tcp_stream().set_nonblocking(true)?;
+            // // check TCP connection functional
+            // stream.tcp_stream().set_nonblocking(true)?;
 
-            //read one byte without removing from message queue
-            let mut buf = [0; 1];
-            match stream.tcp_stream().peek(&mut buf) {
-                Ok(n) => {
-                    if n > 0 {
-                        log::warn!("The Receiver is not working correctly!");
-                    }
-                    // no connection
-                    let local_addr = stream.tcp_stream().local_addr().unwrap();
-                    log::trace!(
-                        "TCP connection from {} to {} seems to be broken.",
-                        local_addr,
-                        addr
-                    );
-                }
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    // blocking means stream is ok
-                    stream.tcp_stream().set_nonblocking(false)?;
-                    break (stream, addr);
-                }
-                Err(e) => return Err(e.into()),
-            }
+            // //read one byte without removing from message queue
+            // let mut buf = [0; 1];
+            // match stream.tcp_stream().peek(&mut buf) {
+            //     Ok(n) => {
+            //         if n > 0 {
+            //             log::warn!("The Receiver is not working correctly!");
+            //         }
+            //         // no connection
+            //         let local_addr = stream.tcp_stream().local_addr().unwrap();
+            //         log::trace!(
+            //             "TCP connection from {} to {} seems to be broken.",
+            //             local_addr,
+            //             addr
+            //         );
+            //     }
+            //     Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+            //         // blocking means stream is ok
+            //         stream.tcp_stream().set_nonblocking(false)?;
+            //         break (stream, addr);
+            //     }
+            //     Err(e) => return Err(e.into()),
+            // }
+            break (stream, addr);
         };
         Ok(res)
     }
 }
 
-fn send_request<S, Req, T>(
+async fn send_request<S, Req, T>(
     stream: &mut S,
     req: Req,
 ) -> Result<Result<Req::Response, String>, BoxError>
 where
-    S: Read + Write,
+    S: AsyncRead + AsyncWrite + Unpin,
     Req: Request<T>,
     T: Serialize,
 {
@@ -131,14 +132,14 @@ where
     // send request
     let size: u32 = (vec.len() - 4).try_into()?;
     vec[..4].copy_from_slice(&size.to_le_bytes());
-    stream.write_all(&vec)?;
+    stream.write_all(&vec).await?;
     // read response length
     let mut len_buf = [0; 4];
-    stream.read_exact(&mut len_buf)?;
+    stream.read_exact(&mut len_buf).await?;
     let len = u32::from_le_bytes(len_buf) as usize;
     // read message
     let mut buf = vec![0; len];
-    stream.read_exact(&mut buf)?;
+    stream.read_exact(&mut buf).await?;
 
     let res = serde_json::from_slice(&buf)?;
     Ok(res)

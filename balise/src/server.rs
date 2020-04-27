@@ -1,16 +1,22 @@
 //! A server for communicating between RPUs.
 
-use super::BoxError;
+use crate::{BoxError, Request};
 use serde::de::DeserializeOwned;
 use std::{
     convert::TryInto,
     fmt::Debug,
-    io::{self, Read, Write},
-    marker::PhantomData,
-    net::{SocketAddr, TcpListener},
-    path::Path,
+    future::Future,
+    io,
+    marker::{PhantomData, Unpin},
+    net::SocketAddr,
     sync::Arc,
 };
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    net::TcpListener,
+};
+
+type ServerResult = Result<Response, BoxError>;
 
 /// A transparent response to a `Request`.
 ///
@@ -18,26 +24,30 @@ use std::{
 pub struct Response(pub(crate) serde_json::Value);
 
 #[cfg(feature = "tls")]
-use native_tls::{Identity, Protocol, TlsAcceptor};
-
-#[cfg(feature = "tls")]
 pub use native_tls::Identity as TlsIdentity;
 
-#[cfg(not(feature = "tls"))]
-struct TlsAcceptor;
+#[cfg(feature = "tls")]
+use ::{
+    native_tls::{Identity, Protocol, TlsAcceptor},
+    std::path::Path,
+    tokio_tls::TlsAcceptor as AsyncTlsAcceptor,
+};
 
 #[cfg(not(feature = "tls"))]
-impl TlsAcceptor {
-    fn accept<T>(&self, stream: T) -> Result<T, String> {
+struct AsyncTlsAcceptor;
+
+#[cfg(not(feature = "tls"))]
+impl AsyncTlsAcceptor {
+    async fn accept<T>(&self, stream: T) -> Result<T, String> {
         Ok(stream)
     }
 }
 
 /// A Server (server) instance.
 pub struct Server<T, H> {
-    request_data: PhantomData<T>,
+    request_data: PhantomData<fn() -> T>,
     handler: H,
-    acceptor: Arc<TlsAcceptor>,
+    acceptor: Arc<AsyncTlsAcceptor>,
 }
 
 impl<T, H> Clone for Server<T, H>
@@ -53,10 +63,11 @@ where
     }
 }
 
-impl<T, H> Server<T, H>
+impl<T, H, F> Server<T, H>
 where
     T: DeserializeOwned + Debug,
-    H: Handler<T> + Clone,
+    H: FnOnce(T) -> F + Clone + Sync,
+    F: Future<Output = Result<Response, BoxError>> + Send,
 {
     /// Create a new server instance.
     ///
@@ -67,7 +78,7 @@ where
         Self {
             request_data: PhantomData,
             handler,
-            acceptor: Arc::new(TlsAcceptor),
+            acceptor: Arc::new(AsyncTlsAcceptor),
         }
     }
 
@@ -80,7 +91,7 @@ where
         let acceptor = TlsAcceptor::builder(identity)
             .min_protocol_version(Some(Protocol::Tlsv12))
             .build()?;
-        let acceptor = Arc::new(acceptor);
+        let acceptor = Arc::new(acceptor.into());
 
         Ok(Self {
             request_data: PhantomData,
@@ -90,7 +101,7 @@ where
     }
 
     /// The main server loop.
-    pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError>
+    pub async fn serve(self, listener: &mut TcpListener) -> Result<(), BoxError>
     where
         T: Send + 'static,
         H: Send + 'static,
@@ -99,40 +110,38 @@ where
             "Server is now listening on Port {}",
             listener.local_addr()?.port()
         );
-        for stream in listener.incoming() {
+        loop {
             // TODO: Is there a case where we should continue to listen for incoming streams?
-            let stream = stream?;
+            let (stream, _) = listener.accept().await?;
 
             let clone_self = self.clone();
 
             // handle the client in a new thread
-            std::thread::spawn(move || {
+            tokio::spawn(async move {
                 let peer_addr = stream.peer_addr().expect("Peer address");
                 log::info!("Connected: {}", peer_addr);
 
-                let result = clone_self
-                    .acceptor
-                    .accept(stream)
-                    .map_err(Into::into) //rust is geil.
-                    .and_then(|stream| clone_self.handle_client(peer_addr, stream));
+                let result = match clone_self.acceptor.accept(stream).await {
+                    Ok(stream) => clone_self.handle_client(peer_addr, stream).await,
+                    Err(err) => Err(err.into()),
+                };
                 match result {
                     Ok(()) => log::info!("Disconnected"),
                     Err(err) => log::warn!("Server error: {:?}", err),
                 }
             });
         }
-        Ok(())
     }
 
-    fn handle_client<S>(self, addr: SocketAddr, mut stream: S) -> Result<(), BoxError>
+    async fn handle_client<S>(self, addr: SocketAddr, mut stream: S) -> Result<(), BoxError>
     where
-        S: Read + Write,
+        S: AsyncRead + AsyncWrite + Unpin,
     {
         loop {
             // read message length
             let mut len_buf = [0; 4];
-            match stream.read_exact(&mut len_buf) {
-                Ok(()) => {}
+            match stream.read_exact(&mut len_buf).await {
+                Ok(_) => {}
                 Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => break,
                 Err(err) => return Err(err.into()),
             };
@@ -141,10 +150,10 @@ where
 
             // read message
             let mut buf = vec![0; len];
-            stream.read_exact(&mut buf)?;
+            stream.read_exact(&mut buf).await?;
 
             // handle the request
-            let res = match self.handle_request(&addr, &buf) {
+            let res = match self.handle_request(&addr, &buf).await {
                 Ok(res) => Ok(res),
                 Err(err) => Err(err.to_string()),
             };
@@ -156,7 +165,7 @@ where
             // send response
             let size: u32 = (vec.len() - 4).try_into()?;
             vec[..4].copy_from_slice(&size.to_le_bytes());
-            stream.write_all(&vec)?;
+            stream.write_all(&vec).await?;
 
             // Simulate connection drop
             // let _ = stream.shutdown(std::net::Shutdown::Both);
@@ -165,14 +174,18 @@ where
         Ok(())
     }
 
-    fn handle_request(&self, addr: &SocketAddr, req: &[u8]) -> Result<serde_json::Value, BoxError> {
+    async fn handle_request(
+        &self,
+        addr: &SocketAddr,
+        req: &[u8],
+    ) -> Result<serde_json::Value, BoxError> {
         // TODO: Remove this.
         let _ = self;
         // Deserialize request.
         let req: T = serde_json::from_slice(req)?;
         log::trace!("Received request from {}: {:?}", addr, req);
         // handle the actual request
-        let res = self.handler.handle(addr, req).map(|response| response.0);
+        let res = (self.handler.clone())(req).await.map(|response| response.0);
         log::trace!("Send response to {}: {:?}", addr, res);
         Ok(res?)
     }
@@ -196,8 +209,14 @@ pub fn load_identity(
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
-/// Handles a request and returns the corresponding response.
-pub trait Handler<T> {
-    /// Handle the request.
-    fn handle(&self, addr: &SocketAddr, req: T) -> Result<Response, BoxError>;
+/// Call the request `handler` and encode the response.
+pub async fn handle_params<T, R, H, F>(params: R, handler: H) -> ServerResult
+where
+    R: Request<T>,
+    H: FnOnce(R) -> F,
+    F: Future<Output = Result<R::Response, BoxError>>,
+{
+    let res = handler(params).await?;
+    let data = serde_json::to_value(&res)?;
+    Ok(Response(data))
 }

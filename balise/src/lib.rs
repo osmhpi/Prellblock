@@ -31,12 +31,13 @@
 //!
 //! // ---------------- Define API server ----------------
 //! use balise::{
-//!     handle_fn,
+//!     handler,
 //!     server,
-//!     server::{Handler, Response, Server},
+//!     server::{Response, Server},
 //!     Request,
 //! };
-//! use std::net::{SocketAddr, TcpListener};
+//! use std::net::SocketAddr;
+//! use tokio::net::TcpListener;
 //!
 //! type BoxError = Box<dyn std::error::Error + Send + Sync>;
 //!
@@ -45,11 +46,15 @@
 //!
 //! impl PingAPIServer {
 //!     /// The main server loop.
-//!     pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
+//!     pub async fn serve(self, listener: &mut TcpListener) -> Result<(), BoxError> {
 //!         #[cfg(not(feature = "tls"))]
 //!         {
-//!             let server = Server::new(self);
-//!             server.serve(listener);
+//!             let handler = handler!(PingAPIMessage, {
+//!                 Ping(_) => Ok(Pong),
+//!                 Add(params) => Ok(params.0 + params.1),
+//!             });
+//!             let server = Server::new(handler);
+//!             server.serve(listener).await
 //!         }
 //!
 //!         #[cfg(feature = "tls")]
@@ -60,31 +65,25 @@
 //!                 Err(err) => panic!("Could not start server: {}.", err),
 //!             }
 //!         }
+//!
 //!     }
 //! }
 //!
-//! impl Handler<PingAPIMessage> for PingAPIServer {
-//!     handle_fn!(self, PingAPIMessage, {
-//!         Ping(_) => Ok(Pong),
-//!         Add(params) => Ok(params.0 + params.1),
-//!     });
-//! }
-//!
 //! // ---------------- Start server and send request ----------------
-//!
-//! fn main() {
-//!     let bind_addr = "127.0.0.1:0"; // replace 0 with a useful port
-//!     let listener = TcpListener::bind(bind_addr).unwrap();
+//! #[tokio::main]
+//! async fn main() {
+//!     let bind_addr: SocketAddr = "127.0.0.1:0".parse().unwrap(); // replace 0 with a useful port
+//!     let mut listener = TcpListener::bind(bind_addr).await.unwrap();
 //!     let peer_addr = listener.local_addr().unwrap(); // address with allocated port
 //!
-//!     std::thread::spawn(move || {
+//!     tokio::spawn(async move {
 //!         let server = PingAPIServer;
-//!         server.serve(&listener).unwrap();
+//!         server.serve(&mut listener).await.unwrap();
 //!     });
 //!
 //!     // use a client to execute some requests
 //!     let mut client = PingAPIClient::new(peer_addr);
-//!     match client.send_request(ping_message::Ping) {
+//!     match client.send_request(ping_message::Ping).await {
 //!         Err(err) => log::error!("Failed to send Ping: {}", err),
 //!         Ok(res) => log::debug!("Ping response: {:?}", res),
 //!     }
@@ -116,14 +115,4 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 pub trait Request<T>: Serialize + Into<T> + Debug + Clone + Send + 'static {
     /// The type of the response.
     type Response: Serialize + DeserializeOwned + Debug + Send + 'static;
-
-    /// Call the request handler and encode the response.
-    #[cfg(feature = "server")]
-    fn handle(
-        self,
-        handler: impl FnOnce(Self) -> Result<Self::Response, BoxError>,
-    ) -> Result<server::Response, BoxError> {
-        let res = handler(self)?;
-        Ok(server::Response(serde_json::to_value(&res)?))
-    }
 }

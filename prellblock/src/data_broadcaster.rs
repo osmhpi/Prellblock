@@ -2,10 +2,10 @@
 
 use crate::{
     peer::{PeerMessage, Sender},
-    thread_group::ThreadGroup,
     BoxError,
 };
 use balise::Request;
+use futures::future::join_all;
 use std::net::SocketAddr;
 
 /// A broadcaster for peer messages.
@@ -23,23 +23,24 @@ impl Broadcaster {
     }
 
     /// Broadcast a batch to all known peers (stored in `peer_addresses`).
-    pub fn broadcast<T>(&self, message: &T) -> Result<(), BoxError>
+    pub async fn broadcast<T>(&self, message: &T) -> Result<(), BoxError>
     where
         T: Request<PeerMessage>,
     {
-        let mut thread_group = ThreadGroup::new();
-
         // Broadcast transaction to all RPUs.
-        for &peer_address in &self.peer_addresses {
+        let results = join_all(self.peer_addresses.iter().map(|peer_address| {
             let message = message.clone();
-            //let message = message::ExecuteBatch(batch);
-            thread_group.spawn(format!("Sender ({})", peer_address), move || {
-                let mut sender = Sender::new(peer_address);
-                sender.send_request(message)
-            });
+            async move {
+                let mut sender = Sender::new(*peer_address);
+                sender.send_request(message).await
+            }
+        }))
+        .await;
+
+        for result in results {
+            // Ignore result
+            let _ = result?;
         }
-        //join threads
-        thread_group.join_and_log();
         Ok(())
     }
 }

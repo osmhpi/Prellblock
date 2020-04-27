@@ -16,6 +16,7 @@ blake2 = "0.8.1"
 blocksberg = { path = "../blocksberg" }
 chrono = {version = "0.4.11", features = ["serde"]}
 err-derive = "0.2.3"
+futures = "0.3.4"
 lazy_static = "1.4.0"
 log = "0.4.8"
 pinxit = { path = "../pinxit" }
@@ -27,4 +28,5 @@ serde_json = "1.0.51"
 serde_yaml = "0.8.11"
 sled = { version = "0.31.0", features = ["compression"] }
 structopt = "0.3.12"
+tokio = { version = "0.2.19", features = ["rt-threaded", "macros", "time"] }
 toml = "0.5.6"

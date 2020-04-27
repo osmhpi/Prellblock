@@ -2,12 +2,12 @@
 
 use crate::{batcher::Batcher, permission_checker::PermissionChecker, BoxError};
 use balise::{
-    handle_fn,
-    server::{Handler, Server, TlsIdentity},
-    Request,
+    handler,
+    server::{Server, TlsIdentity},
 };
 use prellblock_client_api::{message, ClientMessage, Pong, Transaction};
-use std::{net::TcpListener, sync::Arc};
+use std::sync::Arc;
+use tokio::net::TcpListener;
 
 /// A receiver (server) instance.
 ///
@@ -38,13 +38,19 @@ impl Turi {
     }
 
     /// The main server loop.
-    pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
+    pub async fn serve(self, listener: &mut TcpListener) -> Result<(), BoxError> {
         let tls_identity = self.tls_identity.clone();
-        let server = Server::new(self, tls_identity)?;
-        server.serve(listener)
+        let server = Server::new(
+            handler!(ClientMessage, {
+                Ping(_) => Ok(Pong),
+                Execute(params) => self.handle_execute(params).await,
+            }),
+            tls_identity,
+        )?;
+        server.serve(listener).await
     }
 
-    fn handle_execute(&self, params: message::Execute) -> Result<(), BoxError> {
+    async fn handle_execute(&self, params: message::Execute) -> Result<(), BoxError> {
         let message::Execute(transaction) = params;
         // Check validity of transaction signature.
         let transaction = transaction.verify()?;
@@ -59,15 +65,8 @@ impl Turi {
             }
         }
 
-        self.batcher.clone().add_to_batch(transaction.into());
+        self.batcher.clone().add_to_batch(transaction.into()).await;
 
         Ok(())
     }
-}
-
-impl Handler<ClientMessage> for Turi {
-    handle_fn!(self, ClientMessage, {
-        Ping(_) => Ok(Pong),
-        Execute(params) => self.handle_execute(params),
-    });
 }

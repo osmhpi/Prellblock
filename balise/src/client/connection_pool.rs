@@ -37,20 +37,21 @@ impl ConnectionPool {
         }
     }
 
-    pub fn stream(&self, addr: SocketAddr) -> Result<StreamGuard, BoxError> {
-        let mut state = self
-            .changed
-            .wait_while(self.state.lock().unwrap(), |state| {
-                state.current_streams >= Self::MAX_STREAMS
-            })
-            .unwrap();
-        state.current_streams += 1;
-        let stream = state.streams.get_mut(&addr).and_then(Vec::pop);
-        drop(state);
+    pub async fn stream(&self, addr: SocketAddr) -> Result<StreamGuard<'_>, BoxError> {
+        let stream = {
+            let mut state = self
+                .changed
+                .wait_while(self.state.lock().unwrap(), |state| {
+                    state.current_streams >= Self::MAX_STREAMS
+                })
+                .unwrap();
+            state.current_streams += 1;
+            state.streams.get_mut(&addr).and_then(Vec::pop)
+        };
 
         let stream = match stream {
             Some(stream) => stream,
-            None => stream_impl::connect(&addr)?,
+            None => stream_impl::connect(&addr).await?,
         };
         Ok(StreamGuard {
             stream: Some(stream),

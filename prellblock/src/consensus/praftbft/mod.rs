@@ -24,9 +24,8 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::{Arc, Condvar, Mutex},
-    thread,
-    thread::JoinHandle,
 };
+use tokio::sync::Notify;
 
 const MAX_TRANSACTIONS_PER_BLOCK: usize = 1;
 
@@ -43,7 +42,7 @@ pub struct PRaftBFT {
     // - Nachrichten von PeerInbox empfangen
     // - fertige Blöcke übergeben an prellblock
     queue: Arc<Mutex<FlattenVec<Signed<Transaction>>>>,
-    leader_handle: Option<JoinHandle<()>>,
+    leader_notifier: Arc<Notify>,
     follower_state: Mutex<FollowerState>,
     follower_state_sequence_changed: Condvar,
     peers: HashMap<PeerId, SocketAddr>,
@@ -77,15 +76,14 @@ impl PRaftBFT {
         };
         let queue = leader.queue.clone();
 
-        let leader_handle = if identity.id() == &leader_id {
-            Some(thread::spawn(move || leader.process_transactions()))
-        } else {
-            None
-        };
+        let leader_notifier = Arc::new(Notify::new());
+        if identity.id() == &leader_id {
+            tokio::spawn(leader.process_transactions(leader_notifier.clone()));
+        }
 
         let praftbft = Self {
             queue,
-            leader_handle,
+            leader_notifier,
             follower_state: Mutex::new(FollowerState::new()),
             follower_state_sequence_changed: Condvar::default(),
             peers,
@@ -105,9 +103,7 @@ impl PRaftBFT {
     pub fn take_transactions(&self, transactions: Vec<Signed<Transaction>>) {
         let mut queue = self.queue.lock().unwrap();
         queue.push(transactions);
-        if let Some(leader_handle) = &self.leader_handle {
-            leader_handle.thread().unpark();
-        }
+        self.leader_notifier.notify();
     }
 
     /// Check whether a number represents a supermajority (>2/3) compared

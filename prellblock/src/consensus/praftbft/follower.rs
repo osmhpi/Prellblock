@@ -149,7 +149,8 @@ impl PRaftBFT {
                     block_hash: buffered_block_hash,
                     ackappend_signatures: buffered_ackappend_signatures,
                 } => {
-                    let commit_result = self.handle_commit_message(
+                    let commit_result = self.handle_commit_message_inner(
+                        &mut follower_state,
                         peer_id,
                         buffered_leader_term,
                         buffered_sequence_number,
@@ -157,8 +158,8 @@ impl PRaftBFT {
                         buffered_ackappend_signatures,
                     );
                     match commit_result {
-                        Ok(_) => log::trace!("Used out-of-order commit."),
-                        Err(err) => log::trace!("Failed to apply out-of-order commit: {}", err),
+                        Ok(_) => log::debug!("Used out-of-order commit."),
+                        Err(err) => log::debug!("Failed to apply out-of-order commit: {}", err),
                     }
                 }
                 _ => unreachable!(),
@@ -182,6 +183,26 @@ impl PRaftBFT {
         ackappend_signatures: Vec<(PeerId, Signature)>,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state_in_sequence(sequence_number).unwrap();
+        self.handle_commit_message_inner(
+            &mut follower_state,
+            peer_id,
+            leader_term,
+            sequence_number,
+            block_hash,
+            ackappend_signatures,
+        )
+    }
+    /// This function is used for out-of-order message reception and
+    /// applying these commits.
+    fn handle_commit_message_inner(
+        &self,
+        follower_state: &mut FollowerState,
+        peer_id: &PeerId,
+        leader_term: usize,
+        sequence_number: u64,
+        block_hash: BlockHash,
+        ackappend_signatures: Vec<(PeerId, Signature)>,
+    ) -> Result<ConsensusMessage, Error> {
         log::trace!("Handle Commit message #{}.", sequence_number);
         follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
 

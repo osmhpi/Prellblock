@@ -3,12 +3,12 @@
 use super::{PeerInbox, PeerMessage};
 use crate::BoxError;
 use balise::{
-    handle_fn,
-    server::{Handler, Server, TlsIdentity},
-    Request,
+    handler,
+    server::{Server, TlsIdentity},
 };
 
-use std::{net::TcpListener, sync::Arc};
+use std::sync::Arc;
+use tokio::net::TcpListener;
 
 /// A receiver (server) instance.
 ///
@@ -30,19 +30,18 @@ impl Receiver {
     }
 
     /// The main server loop.
-    pub fn serve(self, listener: &TcpListener) -> Result<(), BoxError> {
+    pub async fn serve(self, listener: &mut TcpListener) -> Result<(), BoxError> {
         let tls_identity = self.tls_identity.clone();
-        let server = Server::new(self, tls_identity)?;
-        server.serve(listener)
+        let server = Server::new(
+            handler!(PeerMessage, {
+                Add(params) =>  self.peer_inbox.handle_add(&params),
+                Sub(params) =>  self.peer_inbox.handle_sub(&params),
+                Ping(_) => self.peer_inbox.handle_ping(),
+                ExecuteBatch(params) => self.peer_inbox.handle_execute_batch(params),
+                Consensus(params) => self.peer_inbox.handle_consensus(params),
+            }),
+            tls_identity,
+        )?;
+        server.serve(listener).await
     }
-}
-
-impl Handler<PeerMessage> for Receiver {
-    handle_fn!(self, PeerMessage, {
-        Add(params) =>  self.peer_inbox.handle_add(&params),
-        Sub(params) =>  self.peer_inbox.handle_sub(&params),
-        Ping(_) => self.peer_inbox.handle_ping(),
-        ExecuteBatch(params) => self.peer_inbox.handle_execute_batch(params),
-        Consensus(params) => self.peer_inbox.handle_consensus(params),
-    });
 }

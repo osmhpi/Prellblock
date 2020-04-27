@@ -4,17 +4,18 @@ use super::{
 };
 use crate::{
     peer::{message as peer_message, Sender},
-    thread_group::ThreadGroup,
     BoxError,
 };
+use futures::stream::{FuturesUnordered, StreamExt};
 use pinxit::{Identity, PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    sync::{mpsc, Arc, Mutex},
-    time::{Duration, Instant},
+    sync::{Arc, Mutex},
+    time::Duration,
 };
+use tokio::{sync::Notify, time::timeout};
 
 const BLOCK_GENERATION_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -28,80 +29,73 @@ pub(super) struct Leader {
 }
 
 impl Leader {
-    fn broadcast_until_majority<F>(
+    async fn broadcast_until_majority<F>(
         &self,
         message: ConsensusMessage,
         verify_response: F,
     ) -> Result<Vec<(PeerId, Signature)>, BoxError>
     where
-        F: Fn(&ConsensusMessage) -> Result<(), BoxError> + Clone + Send + 'static,
+        F: Fn(&ConsensusMessage) -> Result<(), BoxError> + Clone + Send + Sync + 'static,
     {
         let message = message.sign(&self.identity)?;
         let signed_message = peer_message::Consensus(message);
 
-        let mut thread_group = ThreadGroup::new();
-        let (tx, rx) = mpsc::sync_channel(0);
+        let mut futures = FuturesUnordered::new();
 
         for &peer_address in self.peers.values() {
             let signed_message = signed_message.clone();
             let verify_response = verify_response.clone();
-            let tx = tx.clone();
-            thread_group.spawn(
-                &format!("Send consensus message to {}", peer_address),
-                move || {
-                    let send_message_and_verify_response = || {
-                        let mut sender = Sender::new(peer_address);
-                        let response = sender.send_request(signed_message)?;
-                        let signer = response.signer().clone();
-                        let verified_response = response.verify()?;
-                        verify_response(&*verified_response)?;
-                        Ok::<_, BoxError>((signer, verified_response.signature().clone()))
-                    };
 
-                    // The rx-side is closed when we probably collected enough signatures.
-                    let response =
-                        send_message_and_verify_response().map_err(|err| (peer_address, err));
-                    let _ = tx.send(response);
-                },
-            );
+            futures.push(tokio::spawn(async move {
+                let send_message_and_verify_response = async {
+                    let mut sender = Sender::new(peer_address);
+                    let response = sender.send_request(signed_message).await?;
+                    let signer = response.signer().clone();
+                    let verified_response = response.verify()?;
+                    verify_response(&*verified_response)?;
+                    Ok::<_, BoxError>((signer, verified_response.signature().clone()))
+                };
+
+                // TODO: Are seperate threads (tokio::spawn) faster?
+                match send_message_and_verify_response.await {
+                    Ok((peer_id, signature)) => Some((peer_id, signature)),
+                    Err(err) => {
+                        log::warn!("Consensus error from {}: {}", peer_address, err);
+                        None
+                    }
+                }
+            }));
         }
-
-        // IMPORTANT: when we do not drop this tx, the loop below will loop forever
-        drop(tx);
 
         let mut responses = Vec::new();
 
-        for result in rx {
+        while let Some(result) = futures.next().await {
             match result {
-                Ok((peer_id, signature)) => responses.push((peer_id, signature)),
-                Err((peer_address, err)) => {
-                    log::warn!("Consensus Error from {}: {}", peer_address, err);
-                }
+                Ok(Some(response)) => responses.push(response),
+                Ok(None) => {}
+                Err(err) => log::warn!("Failed to join task: {}", err),
             }
             if self.supermajority_reached(responses.len()) {
-                // TODO: once async io is used, drop the unused threads
                 return Ok(responses);
             }
         }
 
-        // All sender threads have died **before reaching supermajority**.
+        // All sender tasks have died **before reaching supermajority**.
         Err("Could not get supermajority.".into())
     }
 
     /// This function waits until it is triggered to process transactions.
     // TODO: split this function into smaller phases
     #[allow(clippy::too_many_lines)]
-    pub(super) fn process_transactions(mut self) {
+    pub(super) async fn process_transactions(mut self, notifier: Arc<Notify>) {
         loop {
-            let unpark_reason = thread_park_while_timeout(BLOCK_GENERATION_TIMEOUT, || {
-                self.queue.lock().unwrap().len() < MAX_TRANSACTIONS_PER_BLOCK
-            });
+            let timeout_result = timeout(BLOCK_GENERATION_TIMEOUT, notifier.notified()).await;
 
-            let minimum_queue_len = match unpark_reason {
-                UnparkReason::Condition => MAX_TRANSACTIONS_PER_BLOCK,
+            let minimum_queue_len = match timeout_result {
+                Ok(()) => MAX_TRANSACTIONS_PER_BLOCK,
                 // We want to propose a block with a minimum of 1 transaction
                 // when timed out.
-                UnparkReason::Timeout => 1,
+                Err(_) => 1,
             };
 
             while self.queue.lock().unwrap().len() >= minimum_queue_len {
@@ -166,8 +160,9 @@ impl Leader {
                         _ => Err("This is not an ACK PREPARE message.".into()),
                     }
                 };
-                let ackprepares =
-                    self.broadcast_until_majority(prepare_message, validate_ackprepares);
+                let ackprepares = self
+                    .broadcast_until_majority(prepare_message, validate_ackprepares)
+                    .await;
 
                 let ackprepares = match ackprepares {
                     Ok(ackprepares) => ackprepares,
@@ -225,7 +220,9 @@ impl Leader {
                         _ => Err("This is not an ack append message.".into()),
                     }
                 };
-                let ackappends = self.broadcast_until_majority(append_message, validate_ackappends);
+                let ackappends = self
+                    .broadcast_until_majority(append_message, validate_ackappends)
+                    .await;
                 let ackappends = match ackappends {
                     Ok(ackappends) => ackappends,
                     Err(err) => {
@@ -273,7 +270,9 @@ impl Leader {
                         _ => Err("This is not an ack commit message.".into()),
                     }
                 };
-                let ackcommits = self.broadcast_until_majority(commit_message, validate_ackcommits);
+                let ackcommits = self
+                    .broadcast_until_majority(commit_message, validate_ackcommits)
+                    .await;
                 match ackcommits {
                     Ok(_) => {
                         log::info!("Comitted block #{} on majority of RPUs.", sequence_number);
@@ -300,25 +299,4 @@ impl Leader {
         let supermajority = len * 2 / 3 + 1;
         number >= supermajority
     }
-}
-
-/// Park the current thread while `condition` is true and the timeout is not reached.
-///
-/// Or in terms of the standard library:
-/// Block the current thread until `condition` is false or the timeout is reached.
-fn thread_park_while_timeout(dur: Duration, mut condition: impl FnMut() -> bool) -> UnparkReason {
-    let start = Instant::now();
-    while condition() {
-        let timeout = match dur.checked_sub(start.elapsed()) {
-            Some(timeout) => timeout,
-            None => return UnparkReason::Timeout,
-        };
-        std::thread::park_timeout(timeout);
-    }
-    UnparkReason::Condition
-}
-
-enum UnparkReason {
-    Condition,
-    Timeout,
 }

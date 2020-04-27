@@ -1,15 +1,16 @@
 use super::BoxError;
-use std::net::{SocketAddr, TcpStream};
+use std::net::SocketAddr;
+use tokio::net::TcpStream;
 
 pub type StreamImpl = TcpStream;
 
 impl<'a> super::StreamGuard<'a> {
-    pub const fn tcp_stream(&self) -> &TcpStream {
-        &self.stream
+    pub fn tcp_stream(&self) -> &TcpStream {
+        self.stream.as_ref().unwrap()
     }
 }
 
-pub fn connect(addr: &SocketAddr) -> Result<StreamImpl, BoxError> {
-    let stream = TcpStream::connect(addr)?;
+pub async fn connect(addr: &SocketAddr) -> Result<StreamImpl, BoxError> {
+    let stream = TcpStream::connect(addr).await?;
     Ok(stream)
 }

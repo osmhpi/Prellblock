@@ -179,18 +179,18 @@ macro_rules! define_api {
 
 /// Implement a handle function. Used in the `Handler` trait.
 #[macro_export]
-macro_rules! handle_fn {
+macro_rules! handler {
     (
-        $self:ident, $T:ident, {
+        $T:ident, {
             $(
                 $name:ident($params:pat) => $handler:expr,
             )*
         }
     ) => {
-        fn handle(&$self, _addr: &::std::net::SocketAddr, req: $T) -> Result<$crate::server::Response, Box<std::error::Error + Send + Sync + 'static>> {
+        move |req| async move {
             match req {
                 $(
-                    $T::$name(params) => params.handle(|$params| $handler),
+                    $T::$name(params) => $crate::server::handle_params(params, |$params| async move { $handler }).await,
                 )*
             }
         }
