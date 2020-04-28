@@ -1,4 +1,5 @@
 use balise::server::TlsIdentity;
+use futures::{select, FutureExt};
 use pinxit::Identity;
 use prellblock::{
     batcher::Batcher,
@@ -10,7 +11,7 @@ use prellblock::{
     turi::Turi,
     world_state::WorldState,
 };
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 
 #[tokio::test]
@@ -69,15 +70,14 @@ async fn test_prellblock() {
         receiver.serve(&mut listener).await
     });
 
-    // TODO: wait for all tasks -> in tests only wait that there is no error
+    // wait for all tasks -> in tests only wait that there is no error
     // in the first 5 seconds
-    let _ = (turi_task, peer_receiver_task);
-    // future::select_all(&[turi_task, peer_receiver_task, async {
-    //     tokio::time::delay_for(Duration::from_secs(5)).await;
-    //     Ok(())
-    // }])
-    // .await
-    // .0
-    // .unwrap();
+    select! {
+        result = turi_task.fuse() => panic!("Turi ended: {:?}", result),
+        result = peer_receiver_task.fuse() => panic!("Peer recceiver ended: {:?}", result),
+        _ = tokio::time::delay_for(Duration::from_secs(5)).fuse() => {
+            // No error during startup
+        },
+    };
     log::info!("Going to hunt some mice. I meant *NICE*. Bye.");
 }
