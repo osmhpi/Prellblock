@@ -52,7 +52,7 @@ impl<T> Client<T> {
         let res = send_request(&mut *stream, req).await?;
 
         log::trace!("Received response from {}: {:?}", addr, res);
-        stream.done();
+        stream.done().await;
         Ok(res?)
     }
 

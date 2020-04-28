@@ -92,7 +92,7 @@ async fn main() {
     let hex_identity =
         fs::read_to_string(&private_config.identity).expect("Could not load identity file.");
     let identity = Identity::from_hex(&hex_identity).expect("Identity could not be loaded.");
-    let consensus = Consensus::new(identity, peers);
+    let consensus = Consensus::new(identity, peers).await;
 
     let broadcaster = Broadcaster::new(peer_addresses);
     let broadcaster = Arc::new(broadcaster);
@@ -110,7 +110,7 @@ async fn main() {
         let permission_checker = permission_checker.clone();
 
         tokio::spawn(async move {
-            let tls_identity = load_identity_from_env(private_config.tls_id)?;
+            let tls_identity = load_identity_from_env(private_config.tls_id).await?;
             let mut listener = TcpListener::bind(public_config.turi_address).await?;
             let turi = Turi::new(tls_identity, batcher, permission_checker);
             turi.serve(&mut listener).await
@@ -128,7 +128,7 @@ async fn main() {
 
     // execute the receiver in a new thread
     let peer_receiver_task = tokio::spawn(async move {
-        let tls_identity = load_identity_from_env(private_config.tls_id)?;
+        let tls_identity = load_identity_from_env(private_config.tls_id).await?;
         let mut listener = TcpListener::bind(public_config.peer_address).await?;
         let receiver = Receiver::new(tls_identity, peer_inbox);
         receiver.serve(&mut listener).await
@@ -147,7 +147,7 @@ async fn main() {
     log::info!("Going to hunt some mice. I meant *NICE*. Bye.");
 }
 
-fn load_identity_from_env(tls_identity_path: String) -> Result<TlsIdentity, io::Error> {
+async fn load_identity_from_env(tls_identity_path: String) -> Result<TlsIdentity, io::Error> {
     let password = env::var("TLS_PASSWORD").unwrap_or_else(|_| "prellblock".to_string());
-    balise::server::load_identity(tls_identity_path, &password)
+    balise::server::load_identity(tls_identity_path, &password).await
 }

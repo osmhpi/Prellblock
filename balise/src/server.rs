@@ -12,6 +12,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{
+    fs,
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpListener,
 };
@@ -196,7 +197,7 @@ where
 /// `identity_path` is a file path to a `.pfx` file containing the server's identity.
 /// This file could be protected by a `password`.
 #[cfg(feature = "tls")]
-pub fn load_identity(
+pub async fn load_identity(
     identity_path: impl AsRef<Path>,
     password: &str,
 ) -> Result<Identity, io::Error> {
@@ -204,7 +205,7 @@ pub fn load_identity(
         "Loading server identity from {}.",
         identity_path.as_ref().display()
     );
-    let identity = std::fs::read(identity_path)?;
+    let identity = fs::read(identity_path).await?;
     Identity::from_pkcs12(&identity, password)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }

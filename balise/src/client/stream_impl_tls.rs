@@ -1,7 +1,7 @@
 use super::BoxError;
 use native_tls::{Certificate, TlsConnector};
-use std::{fs, net::SocketAddr};
-use tokio::net::TcpStream;
+use std::net::SocketAddr;
+use tokio::{fs, net::TcpStream};
 use tokio_tls::{TlsConnector as AsyncTlsConnector, TlsStream};
 
 pub type StreamImpl = TlsStream<TcpStream>;
@@ -14,7 +14,7 @@ impl<'a> super::StreamGuard<'a> {
 
 pub async fn connect(addr: &SocketAddr) -> Result<StreamImpl, BoxError> {
     // open certificate file
-    let buffer = fs::read("./certificates/ca/ca_prellblock-ca.cert")?;
+    let buffer = fs::read("./certificates/ca/ca_prellblock-ca.cert").await?;
     //load certificate from file
     let cert = Certificate::from_pem(&buffer)?;
     // new builder with trusted root cert

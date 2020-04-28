@@ -37,8 +37,8 @@ impl Receiver {
                 Add(params) =>  self.peer_inbox.handle_add(&params),
                 Sub(params) =>  self.peer_inbox.handle_sub(&params),
                 Ping(_) => self.peer_inbox.handle_ping(),
-                ExecuteBatch(params) => self.peer_inbox.handle_execute_batch(params),
-                Consensus(params) => self.peer_inbox.handle_consensus(params),
+                ExecuteBatch(params) => self.peer_inbox.handle_execute_batch(params).await,
+                Consensus(params) => self.peer_inbox.handle_consensus(params).await,
             }),
             tls_identity,
         )?;

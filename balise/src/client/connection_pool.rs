@@ -12,42 +12,46 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     ops::{Deref, DerefMut},
-    sync::{Condvar, Mutex},
+    sync::Arc,
 };
 use stream_impl::StreamImpl;
+use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 
 pub struct ConnectionPool {
-    state: Mutex<State>,
-    changed: Condvar,
+    states: Mutex<HashMap<SocketAddr, State>>,
 }
 
-#[derive(Default)]
 struct State {
-    streams: HashMap<SocketAddr, Vec<StreamImpl>>,
-    current_streams: usize,
+    streams: Vec<StreamImpl>,
+    current_streams: Arc<Semaphore>,
 }
 
 impl ConnectionPool {
-    const MAX_STREAMS: usize = 512;
+    const MAX_STREAMS: usize = 64;
 
     fn new() -> Self {
         Self {
-            state: Mutex::default(),
-            changed: Condvar::default(),
+            states: Mutex::default(),
         }
     }
 
     pub async fn stream(&self, addr: SocketAddr) -> Result<StreamGuard<'_>, BoxError> {
-        let stream = {
-            let mut state = self
-                .changed
-                .wait_while(self.state.lock().unwrap(), |state| {
-                    state.current_streams >= Self::MAX_STREAMS
-                })
-                .unwrap();
-            state.current_streams += 1;
-            state.streams.get_mut(&addr).and_then(Vec::pop)
+        let mut states = self.states.lock().await;
+        let (current_streams, stream) = if let Some(state) = states.get_mut(&addr) {
+            (state.current_streams.clone(), state.streams.pop())
+        } else {
+            let current_streams = Arc::new(Semaphore::new(Self::MAX_STREAMS));
+            states.insert(
+                addr,
+                State {
+                    streams: Vec::new(),
+                    current_streams: current_streams.clone(),
+                },
+            );
+            (current_streams, None)
         };
+        drop(states);
+        let permit = current_streams.acquire_owned().await;
 
         let stream = match stream {
             Some(stream) => stream,
@@ -57,29 +61,15 @@ impl ConnectionPool {
             stream: Some(stream),
             addr,
             pool: self,
+            permit,
         })
     }
 
-    fn add_stream(&self, addr: SocketAddr, stream: StreamImpl) {
-        let mut state = self.state.lock().unwrap();
-        match state.streams.get_mut(&addr) {
-            None => {
-                state.streams.insert(addr, vec![stream]);
-            }
-            Some(stream_vec) => {
-                if stream_vec.len() < Self::MAX_STREAMS {
-                    stream_vec.push(stream)
-                }
-            }
-        }
-        state.current_streams -= 1;
-        self.changed.notify_all();
-    }
-
-    fn lost_stream(&self) {
-        let mut state = self.state.lock().unwrap();
-        state.current_streams -= 1;
-        self.changed.notify_all();
+    /// Add an existing `stream` back into the pool for the given `addr`.
+    async fn add_stream(&self, addr: SocketAddr, stream: StreamImpl) {
+        let mut states = self.states.lock().await;
+        let state = states.get_mut(&addr).unwrap();
+        state.streams.push(stream);
     }
 }
 
@@ -87,21 +77,17 @@ pub struct StreamGuard<'a> {
     stream: Option<StreamImpl>,
     addr: SocketAddr,
     pool: &'a ConnectionPool,
+    /// This has to be stored in the guard.
+    /// On dorp, this will signal the semaphore (number of connections).
+    #[allow(dead_code)]
+    permit: OwnedSemaphorePermit,
 }
 
 impl<'a> StreamGuard<'a> {
-    pub fn done(mut self) {
+    pub async fn done(mut self) {
         log::trace!("Putting stream into connection pool.");
         if let Some(stream) = self.stream.take() {
-            self.pool.add_stream(self.addr, stream);
-        }
-    }
-}
-
-impl<'a> Drop for StreamGuard<'a> {
-    fn drop(&mut self) {
-        if self.stream.is_some() {
-            self.pool.lost_stream();
+            self.pool.add_stream(self.addr, stream).await;
         }
     }
 }

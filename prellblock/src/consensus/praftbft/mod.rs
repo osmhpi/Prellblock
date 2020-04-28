@@ -20,12 +20,8 @@ use leader::Leader;
 use pinxit::{Identity, PeerId, Signed};
 use prellblock_client_api::Transaction;
 use state::{FollowerState, LeaderState};
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::{Arc, Condvar, Mutex},
-};
-use tokio::sync::Notify;
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use tokio::sync::{watch, Mutex, Notify};
 
 const MAX_TRANSACTIONS_PER_BLOCK: usize = 1;
 
@@ -44,7 +40,9 @@ pub struct PRaftBFT {
     queue: Arc<Mutex<FlattenVec<Signed<Transaction>>>>,
     leader_notifier: Arc<Notify>,
     follower_state: Mutex<FollowerState>,
-    follower_state_sequence_changed: Condvar,
+    // For unblocking waiting out-of-order messages.
+    sequence_changed_notifier: watch::Sender<()>,
+    sequence_changed_receiver: watch::Receiver<()>,
     peers: HashMap<PeerId, SocketAddr>,
     /// Our own identity, used for signing messages.
     identity: Identity,
@@ -55,8 +53,7 @@ impl PRaftBFT {
     ///
     /// The instance is identified `identity` and in a group with other `peers`.
     /// **Warning:** This starts a new thread for processing transactions in the background.
-    #[must_use]
-    pub fn new(identity: Identity, peers: HashMap<PeerId, SocketAddr>) -> Arc<Self> {
+    pub async fn new(identity: Identity, peers: HashMap<PeerId, SocketAddr>) -> Arc<Self> {
         log::debug!("Started consensus with peers: {:?}", peers);
         assert!(
             peers.get(identity.id()).is_some(),
@@ -65,7 +62,7 @@ impl PRaftBFT {
 
         // TODO: Remove this.
         let leader_id =
-            PeerId::from_hex("c72d59b472b5f511a88f3f1f8804c498d891ffd91583fec9f23541b9fefd3585")
+            PeerId::from_hex("98dcfa6fa5fe22e457bfff6cce55a7fa713f88a0766ffa890b804056e823d66f")
                 .unwrap();
 
         let leader = Leader {
@@ -81,18 +78,20 @@ impl PRaftBFT {
             tokio::spawn(leader.process_transactions(leader_notifier.clone()));
         }
 
+        let (sequence_changed_notifier, sequence_changed_receiver) = watch::channel(());
         let praftbft = Self {
             queue,
             leader_notifier,
             follower_state: Mutex::new(FollowerState::new()),
-            follower_state_sequence_changed: Condvar::default(),
+            sequence_changed_notifier,
+            sequence_changed_receiver,
             peers,
             identity,
         };
 
         // TODO: Remove this.
         {
-            let mut follower_state = praftbft.follower_state.lock().unwrap();
+            let mut follower_state = praftbft.follower_state.lock().await;
             follower_state.leader = Some(leader_id);
         }
 
@@ -100,8 +99,8 @@ impl PRaftBFT {
     }
 
     /// Stores incoming `Transaction`s in the Consensus' `queue`.
-    pub fn take_transactions(&self, transactions: Vec<Signed<Transaction>>) {
-        let mut queue = self.queue.lock().unwrap();
+    pub async fn take_transactions(&self, transactions: Vec<Signed<Transaction>>) {
+        let mut queue = self.queue.lock().await;
         queue.push(transactions);
         self.leader_notifier.notify();
     }

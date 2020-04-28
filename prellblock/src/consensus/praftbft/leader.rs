@@ -9,13 +9,11 @@ use crate::{
 use futures::stream::{FuturesUnordered, StreamExt};
 use pinxit::{Identity, PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::{Arc, Mutex},
-    time::Duration,
+use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
+use tokio::{
+    sync::{Mutex, Notify},
+    time::timeout,
 };
-use tokio::{sync::Notify, time::timeout};
 
 const BLOCK_GENERATION_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -98,11 +96,11 @@ impl Leader {
                 Err(_) => 1,
             };
 
-            while self.queue.lock().unwrap().len() >= minimum_queue_len {
+            while self.queue.lock().await.len() >= minimum_queue_len {
                 let mut transactions = Vec::with_capacity(MAX_TRANSACTIONS_PER_BLOCK);
 
                 // TODO: Check size of transactions cumulated.
-                while let Some(transaction) = self.queue.lock().unwrap().next() {
+                while let Some(transaction) = self.queue.lock().await.next() {
                     // pack block
                     // TODO: Validate transaction.
 

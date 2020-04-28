@@ -62,14 +62,17 @@ impl PeerInbox {
     }
 
     /// Handle a batch of `execute` `Signable` messages.
-    pub fn handle_execute_batch(&self, params: message::ExecuteBatch) -> Result<(), BoxError> {
+    pub async fn handle_execute_batch(
+        &self,
+        params: message::ExecuteBatch,
+    ) -> Result<(), BoxError> {
         let message::ExecuteBatch(batch) = params;
         for message in &batch {
             if let Err(err) = self.handle_execute(message) {
                 log::error!("Error while handling message: {}", err);
             }
         }
-        self.consensus.take_transactions(batch);
+        self.consensus.take_transactions(batch).await;
         Ok(())
     }
 
@@ -90,10 +93,10 @@ impl PeerInbox {
     }
 
     /// Forward messages to the consensus algorithm.
-    pub fn handle_consensus(
+    pub async fn handle_consensus(
         &self,
         params: message::Consensus,
     ) -> Result<Signed<ConsensusMessage>, BoxError> {
-        Ok(self.consensus.handle_message(params.0)?)
+        Ok(self.consensus.handle_message(params.0).await?)
     }
 }

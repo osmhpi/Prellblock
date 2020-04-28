@@ -7,30 +7,41 @@ use super::{
 };
 use pinxit::{PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
-use std::sync::{LockResult, MutexGuard};
+use tokio::sync::MutexGuard;
 
 #[allow(clippy::single_match_else)]
 impl PRaftBFT {
     /// Wait until we reached the sequence number the message is at.
-    fn follower_state_in_sequence(
+    async fn follower_state_in_sequence(
         &self,
         sequence_number: u64,
-    ) -> LockResult<MutexGuard<FollowerState>> {
-        self.follower_state_sequence_changed
-            .wait_while(self.follower_state.lock()?, |follower_state| {
-                follower_state.sequence + 1 < sequence_number
-            })
+    ) -> MutexGuard<'_, FollowerState> {
+        let mut receiver = self.sequence_changed_receiver.clone();
+        loop {
+            let follower_state = self.follower_state.lock().await;
+            if follower_state.sequence + 1 >= sequence_number {
+                return follower_state;
+            }
+            drop(follower_state);
+            // Wait until sequence number changed.
+            let _ = receiver.recv().await;
+        }
+        // TODO: Find logic
+        // self.follower_state_sequence_changed
+        //     .wait_while(self.follower_state.lock()?, |follower_state| {
+        //         follower_state.sequence + 1 < sequence_number
+        //     })
         // self.follower_state.lock()
     }
 
-    fn handle_prepare_message(
+    async fn handle_prepare_message(
         &self,
         peer_id: &PeerId,
         leader_term: usize,
         sequence_number: u64,
         block_hash: BlockHash,
     ) -> Result<ConsensusMessage, Error> {
-        let mut follower_state = self.follower_state_in_sequence(sequence_number).unwrap();
+        let mut follower_state = self.follower_state_in_sequence(sequence_number).await;
         log::trace!("Handle Prepare message #{}.", sequence_number);
         follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
 
@@ -64,7 +75,7 @@ impl PRaftBFT {
         Ok(ackprepare_message)
     }
 
-    fn handle_append_message(
+    async fn handle_append_message(
         &self,
         peer_id: &PeerId,
         leader_term: usize,
@@ -73,7 +84,7 @@ impl PRaftBFT {
         ackprepare_signatures: Vec<(PeerId, Signature)>,
         data: Vec<Signed<Transaction>>,
     ) -> Result<ConsensusMessage, Error> {
-        let mut follower_state = self.follower_state_in_sequence(sequence_number).unwrap();
+        let mut follower_state = self.follower_state_in_sequence(sequence_number).await;
         log::trace!("Handle Append message #{}.", sequence_number);
         follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
 
@@ -149,14 +160,16 @@ impl PRaftBFT {
                     block_hash: buffered_block_hash,
                     ackappend_signatures: buffered_ackappend_signatures,
                 } => {
-                    let commit_result = self.handle_commit_message_inner(
-                        &mut follower_state,
-                        peer_id,
-                        buffered_leader_term,
-                        buffered_sequence_number,
-                        buffered_block_hash,
-                        buffered_ackappend_signatures,
-                    );
+                    let commit_result = self
+                        .handle_commit_message_inner(
+                            &mut follower_state,
+                            peer_id,
+                            buffered_leader_term,
+                            buffered_sequence_number,
+                            buffered_block_hash,
+                            buffered_ackappend_signatures,
+                        )
+                        .await;
                     match commit_result {
                         Ok(_) => log::debug!("Used out-of-order commit."),
                         Err(err) => log::debug!("Failed to apply out-of-order commit: {}", err),
@@ -174,7 +187,7 @@ impl PRaftBFT {
         Ok(ackappend_message)
     }
 
-    fn handle_commit_message(
+    async fn handle_commit_message(
         &self,
         peer_id: &PeerId,
         leader_term: usize,
@@ -182,7 +195,7 @@ impl PRaftBFT {
         block_hash: BlockHash,
         ackappend_signatures: Vec<(PeerId, Signature)>,
     ) -> Result<ConsensusMessage, Error> {
-        let mut follower_state = self.follower_state_in_sequence(sequence_number).unwrap();
+        let mut follower_state = self.follower_state_in_sequence(sequence_number).await;
         self.handle_commit_message_inner(
             &mut follower_state,
             peer_id,
@@ -191,10 +204,11 @@ impl PRaftBFT {
             block_hash,
             ackappend_signatures,
         )
+        .await
     }
     /// This function is used for out-of-order message reception and
     /// applying these commits.
-    fn handle_commit_message_inner(
+    async fn handle_commit_message_inner(
         &self,
         follower_state: &mut FollowerState,
         peer_id: &PeerId,
@@ -268,7 +282,7 @@ impl PRaftBFT {
         assert!(old_round_state.buffered_commit_message.is_none());
 
         follower_state.sequence = sequence_number;
-        self.follower_state_sequence_changed.notify_all();
+        let _ = self.sequence_changed_notifier.broadcast(());
 
         // Write Blocks to BlockStorage
         let _ = body;
@@ -282,7 +296,7 @@ impl PRaftBFT {
     }
 
     /// Process the incoming `ConsensusMessages` (`PREPARE`, `ACKPREPARE`, `APPEND`, `ACKAPPEND`, `COMMIT`).
-    pub fn handle_message(
+    pub async fn handle_message(
         &self,
         message: Signed<ConsensusMessage>,
     ) -> Result<Signed<ConsensusMessage>, Error> {
@@ -299,33 +313,42 @@ impl PRaftBFT {
                 leader_term,
                 sequence_number,
                 block_hash,
-            } => self.handle_prepare_message(&peer_id, leader_term, sequence_number, block_hash)?,
+            } => {
+                self.handle_prepare_message(&peer_id, leader_term, sequence_number, block_hash)
+                    .await?
+            }
             ConsensusMessage::Append {
                 leader_term,
                 sequence_number,
                 block_hash,
                 ackprepare_signatures,
                 data,
-            } => self.handle_append_message(
-                &peer_id,
-                leader_term,
-                sequence_number,
-                block_hash,
-                ackprepare_signatures,
-                data,
-            )?,
+            } => {
+                self.handle_append_message(
+                    &peer_id,
+                    leader_term,
+                    sequence_number,
+                    block_hash,
+                    ackprepare_signatures,
+                    data,
+                )
+                .await?
+            }
             ConsensusMessage::Commit {
                 leader_term,
                 sequence_number,
                 block_hash,
                 ackappend_signatures,
-            } => self.handle_commit_message(
-                &peer_id,
-                leader_term,
-                sequence_number,
-                block_hash,
-                ackappend_signatures,
-            )?,
+            } => {
+                self.handle_commit_message(
+                    &peer_id,
+                    leader_term,
+                    sequence_number,
+                    block_hash,
+                    ackappend_signatures,
+                )
+                .await?
+            }
             _ => unimplemented!(),
         };
 
