@@ -47,21 +47,22 @@
 //! impl PingAPIServer {
 //!     /// The main server loop.
 //!     pub async fn serve(self, listener: &mut TcpListener) -> Result<(), BoxError> {
+//!         let handler = handler!(PingAPIMessage, {
+//!             Ping(_) => Ok(Pong),
+//!             Add(params) => Ok(params.0 + params.1),
+//!         });
+//!
 //!         #[cfg(not(feature = "tls"))]
 //!         {
-//!             let handler = handler!(PingAPIMessage, {
-//!                 Ping(_) => Ok(Pong),
-//!                 Add(params) => Ok(params.0 + params.1),
-//!             });
 //!             let server = Server::new(handler);
 //!             server.serve(listener).await
 //!         }
 //!
 //!         #[cfg(feature = "tls")]
 //!         {
-//!             let tls_identity = server::load_identity("path_to.pfx".to_string(), "password").unwrap();
-//!             match Server::new(self, tls_identity) {
-//!                 Ok(server) => server.serve(listener),
+//!             let tls_identity = server::load_identity("path_to.pfx".to_string(), "password").await.unwrap();
+//!             match Server::new(handler, tls_identity) {
+//!                 Ok(server) => server.serve(listener).await,
 //!                 Err(err) => panic!("Could not start server: {}.", err),
 //!             }
 //!         }

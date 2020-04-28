@@ -7,39 +7,33 @@ use prellblock::{
     data_storage::DataStorage,
     peer::{Calculator, PeerInbox, Receiver},
     permission_checker::PermissionChecker,
-    thread_group::ThreadGroup,
     turi::Turi,
     world_state::WorldState,
 };
-use std::{collections::HashMap, net::TcpListener, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use tokio::net::TcpListener;
 
-#[test]
-fn test_prellblock() {
+#[tokio::test]
+async fn test_prellblock() {
     pretty_env_logger::init();
     log::info!("Kitty =^.^=");
 
     //// TEST-CONFIG
-    let turi_address = "127.0.0.1:2480";
-    let peer_address = "127.0.0.1:3131";
-
-    // load and parse config
-    let mut thread_group = ThreadGroup::new();
+    let turi_address: SocketAddr = "127.0.0.1:2480".parse().unwrap();
+    let peer_address: SocketAddr = "127.0.0.1:3131".parse().unwrap();
 
     let mut peers = HashMap::new();
     let peer_addresses = Vec::new();
 
     let identity = Identity::generate();
-    peers.insert(identity.id().clone(), turi_address.parse().unwrap());
-    // skype_chat.insert(Felix, MArtin)
-    // waitinbg for lock on mutex mutx?
+    peers.insert(identity.id().clone(), turi_address);
 
-    let consensus = Consensus::new(identity, peers);
+    let consensus = Consensus::new(identity, peers).await;
 
     let broadcaster = Broadcaster::new(peer_addresses);
     let broadcaster = Arc::new(broadcaster);
 
     let batcher = Batcher::new(broadcaster);
-    let batcher = Arc::new(batcher);
 
     let world_state = WorldState::default();
     let permission_checker = PermissionChecker::new(world_state);
@@ -49,15 +43,15 @@ fn test_prellblock() {
         TlsIdentity::from_pkcs12(include_bytes!("test-identity.pfx"), "prellblock").unwrap();
 
     // execute the turi in a new thread
-    {
+    let turi_task = {
         let permission_checker = permission_checker.clone();
         let test_identity = test_identity.clone();
-        thread_group.spawn(format!("Turi ({})", turi_address), move || {
-            let listener = TcpListener::bind(turi_address)?;
+        tokio::spawn(async move {
+            let mut listener = TcpListener::bind(turi_address).await?;
             let turi = Turi::new(test_identity, batcher, permission_checker);
-            turi.serve(&listener)
-        });
-    }
+            turi.serve(&mut listener).await
+        })
+    };
 
     let storage = DataStorage::new("../data/test-prellblock").unwrap();
     let storage = Arc::new(storage);
@@ -69,13 +63,21 @@ fn test_prellblock() {
     let peer_inbox = Arc::new(peer_inbox);
 
     // execute the receiver in a new thread
-    thread_group.spawn(format!("Peer Receiver ({})", peer_address), move || {
-        let listener = TcpListener::bind(peer_address)?;
+    let peer_receiver_task = tokio::spawn(async move {
+        let mut listener = TcpListener::bind(peer_address).await?;
         let receiver = Receiver::new(test_identity, peer_inbox);
-        receiver.serve(&listener)
+        receiver.serve(&mut listener).await
     });
 
-    // wait for all threads -> not gonna do that in the test
-    // thread_group.join_and_log();
+    // TODO: wait for all tasks -> in tests only wait that there is no error
+    // in the first 5 seconds
+    let _ = (turi_task, peer_receiver_task);
+    // future::select_all(&[turi_task, peer_receiver_task, async {
+    //     tokio::time::delay_for(Duration::from_secs(5)).await;
+    //     Ok(())
+    // }])
+    // .await
+    // .0
+    // .unwrap();
     log::info!("Going to hunt some mice. I meant *NICE*. Bye.");
 }
