@@ -10,7 +10,7 @@ use prellblock::{
     peer::{Calculator, PeerInbox, Receiver},
     permission_checker::PermissionChecker,
     turi::Turi,
-    world_state::WorldState,
+    world_state::WorldStateService,
 };
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
@@ -39,7 +39,7 @@ async fn test_prellblock() {
 
     let batcher = Batcher::new(broadcaster);
 
-    let world_state = WorldState::default();
+    let world_state = WorldStateService::default();
     let permission_checker = PermissionChecker::new(world_state);
     let permission_checker = Arc::new(permission_checker);
 

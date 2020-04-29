@@ -14,9 +14,10 @@ balise = { path = "../balise", features = ["server", "client", "tls"] }
 bincode = "1.2.1"
 blake2 = "0.8.1"
 blocksberg = { path = "../blocksberg" }
-chrono = {version = "0.4.11", features = ["serde"]}
+chrono = { version = "0.4.11", features = ["serde"] }
 err-derive = "0.2.3"
 futures = "0.3.4"
+im = { version = "14.3.0", features = ["serde"] }
 lazy_static = "1.4.0"
 log = "0.4.8"
 pinxit = { path = "../pinxit" }

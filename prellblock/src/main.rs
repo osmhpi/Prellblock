@@ -21,7 +21,7 @@ use prellblock::{
     peer::{Calculator, PeerInbox, Receiver},
     permission_checker::PermissionChecker,
     turi::Turi,
-    world_state::WorldState,
+    world_state::{WorldState, WorldStateService},
 };
 use serde::Deserialize;
 use std::{env, fs, io, net::SocketAddr, sync::Arc};
@@ -103,7 +103,7 @@ async fn main() {
 
     let batcher = Batcher::new(broadcaster);
 
-    let world_state = WorldState::with_fake_data();
+    let world_state = WorldStateService::with_world_state(WorldState::with_fake_data());
     let permission_checker = PermissionChecker::new(world_state);
     let permission_checker = Arc::new(permission_checker);
 

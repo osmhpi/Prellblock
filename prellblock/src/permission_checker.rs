@@ -1,6 +1,6 @@
 //! Module to check permissions of transactions.
 
-use crate::world_state::WorldState;
+use crate::world_state::WorldStateService;
 use err_derive::Error;
 use pinxit::PeerId;
 use prellblock_client_api::Transaction;
@@ -20,13 +20,13 @@ pub enum PermissionError {
 
 /// A `PermissionChecker` is used to check whether accounts are allowed to carry out transactions.
 pub struct PermissionChecker {
-    world_state: WorldState,
+    world_state: WorldStateService,
 }
 
 impl PermissionChecker {
     /// Create a new instance of `PermissionChecker`.
     #[must_use]
-    pub const fn new(world_state: WorldState) -> Self {
+    pub const fn new(world_state: WorldStateService) -> Self {
         Self { world_state }
     }
 
@@ -38,7 +38,7 @@ impl PermissionChecker {
     ) -> Result<(), PermissionError> {
         match transaction {
             Transaction::KeyValue { .. } => {
-                if let Some(account) = self.world_state.accounts.get(peer_id) {
+                if let Some(account) = self.world_state.get().accounts.get(peer_id) {
                     if account.writing_rights {
                         Ok(())
                     } else {
