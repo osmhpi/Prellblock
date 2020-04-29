@@ -1,4 +1,4 @@
-//! The datastorage is a temporary storage for incoming transactions persisted on disk.
+//! The `DataStorage` is a temporary storage for incoming transactions persisted on disk.
 
 use chrono::{DateTime, Utc};
 use pinxit::PeerId;
@@ -6,7 +6,7 @@ use sled::{Config, Db, IVec, Tree};
 
 use crate::BoxError;
 
-const ROOT_TREE_NAME: &[u8; 4] = b"root";
+const ROOT_TREE_NAME: &[u8] = b"root";
 
 /// A `DataStorage` provides persistent storage on disk.
 ///
@@ -28,12 +28,9 @@ impl DataStorage {
             .compression_factor(20);
 
         let database = config.open()?;
-        let tree_root = database.open_tree(ROOT_TREE_NAME)?;
+        let root = database.open_tree(ROOT_TREE_NAME)?;
 
-        Ok(Self {
-            root: tree_root,
-            database,
-        })
+        Ok(Self { database, root })
     }
 
     /// Write a value to the store.

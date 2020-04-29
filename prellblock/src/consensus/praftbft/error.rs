@@ -31,16 +31,24 @@ pub enum Error {
     WrongLeader(PeerId),
 
     /// The current sequence number is already higher.
-    #[error(display = "Sequence number is too low.")]
-    SequenceNumberTooSmall,
+    #[error(display = "Sequence number {} is too low.", 0)]
+    SequenceNumberTooSmall(u64),
 
     /// The current sequence number is already higher.
-    #[error(display = "Sequence number is too big.")]
-    SequenceNumberTooBig,
+    #[error(display = "Sequence number {} is too big.", 0)]
+    SequenceNumberTooBig(u64),
+
+    /// The current sequence number is already higher.
+    #[error(display = "Request ViewChange to term {} failed: term too low.", 0)]
+    LeaderTermTooSmall(usize),
+
+    /// The current sequence number is already higher.
+    #[error(display = "Request ViewChange to term {} failed: term too high.", 0)]
+    LeaderTermTooBig(usize),
 
     /// The current sequence number is different from the expected one.
-    #[error(display = "Sequence number is wrong.")]
-    WrongSequenceNumber,
+    #[error(display = "Sequence number {} is wrong.", 0)]
+    WrongSequenceNumber(u64),
 
     /// This peer is not allowed to take part in the consensus.
     #[error(

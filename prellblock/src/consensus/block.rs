@@ -10,8 +10,8 @@ use std::fmt;
 /// A `Block` stores transactions verified by the blockchain.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Block {
-    body: Body,
-    signatures: Vec<(PeerId, Signature)>,
+    pub(crate) body: Body,
+    pub(crate) signatures: Vec<(PeerId, Signature)>,
 }
 
 impl Block {
@@ -19,6 +19,11 @@ impl Block {
     #[must_use]
     pub fn hash(&self) -> BlockHash {
         self.body.hash()
+    }
+
+    /// Return the `Block`s sequence number.
+    pub(crate) const fn sequence_number(&self) -> u64 {
+        self.body.height
     }
 }
 

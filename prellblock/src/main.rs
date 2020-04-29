@@ -14,6 +14,7 @@ use futures::future;
 use pinxit::Identity;
 use prellblock::{
     batcher::Batcher,
+    block_storage::BlockStorage,
     consensus::Consensus,
     data_broadcaster::Broadcaster,
     data_storage::DataStorage,
@@ -92,7 +93,10 @@ async fn main() {
     let hex_identity =
         fs::read_to_string(&private_config.identity).expect("Could not load identity file.");
     let identity = Identity::from_hex(&hex_identity).expect("Identity could not be loaded.");
-    let consensus = Consensus::new(identity, peers).await;
+
+    let block_storage = BlockStorage::new(&format!("./blocks/{}", opt.name)).unwrap();
+
+    let consensus = Consensus::new(identity, peers, block_storage).await;
 
     let broadcaster = Broadcaster::new(peer_addresses);
     let broadcaster = Arc::new(broadcaster);
@@ -117,13 +121,13 @@ async fn main() {
         })
     };
 
-    let storage = DataStorage::new(&format!("./data/{}", opt.name)).unwrap();
-    let storage = Arc::new(storage);
+    let data_storage = DataStorage::new(&format!("./data/{}", opt.name)).unwrap();
+    let data_storage = Arc::new(data_storage);
 
     let calculator = Calculator::new();
     let calculator = Arc::new(calculator.into());
 
-    let peer_inbox = PeerInbox::new(calculator, storage, consensus, permission_checker);
+    let peer_inbox = PeerInbox::new(calculator, data_storage, consensus, permission_checker);
     let peer_inbox = Arc::new(peer_inbox);
 
     // execute the receiver in a new thread

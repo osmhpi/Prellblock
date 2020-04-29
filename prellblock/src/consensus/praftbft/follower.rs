@@ -1,5 +1,5 @@
 use super::{
-    super::{BlockHash, Body},
+    super::{Block, BlockHash, Body},
     error::PhaseName,
     message::ConsensusMessage,
     state::{FollowerState, Phase, PhaseMeta, RoundState},
@@ -26,12 +26,6 @@ impl PRaftBFT {
             // Wait until sequence number changed.
             let _ = receiver.recv().await;
         }
-        // TODO: Find logic
-        // self.follower_state_sequence_changed
-        //     .wait_while(self.follower_state.lock()?, |follower_state| {
-        //         follower_state.sequence + 1 < sequence_number
-        //     })
-        // self.follower_state.lock()
     }
 
     async fn handle_prepare_message(
@@ -42,8 +36,11 @@ impl PRaftBFT {
         block_hash: BlockHash,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state_in_sequence(sequence_number).await;
-        log::trace!("Handle Prepare message #{}.", sequence_number);
-        follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
+        if !self.is_current_leader(leader_term, peer_id) {
+            log::warn!("Received message from invalid leader (ID: {}).", peer_id);
+            return Err(Error::WrongLeader(peer_id.clone()));
+        }
+        follower_state.verify_message_meta(leader_term, sequence_number)?;
 
         // Check whether the state for the sequence is Waiting.
         // We only allow to receive messages once.
@@ -56,7 +53,7 @@ impl PRaftBFT {
         }
 
         // All checks passed, update our state.
-        let leader = follower_state.leader.clone().unwrap();
+        let leader = self.leader(follower_state.leader_term).clone();
         follower_state
             .round_state_mut(sequence_number)
             .unwrap()
@@ -86,7 +83,11 @@ impl PRaftBFT {
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state_in_sequence(sequence_number).await;
         log::trace!("Handle Append message #{}.", sequence_number);
-        follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
+        if !self.is_current_leader(leader_term, peer_id) {
+            log::warn!("Received message from invalid leader (ID: {}).", peer_id);
+            return Err(Error::WrongLeader(peer_id.clone()));
+        }
+        follower_state.verify_message_meta(leader_term, sequence_number)?;
 
         // Check whether the state for the sequence is Prepare.
         // We only allow to receive messages once.
@@ -94,7 +95,7 @@ impl PRaftBFT {
         let meta = match &round_state.phase {
             Phase::Prepare(meta) => meta.clone(),
             Phase::Waiting => {
-                let leader = follower_state.leader.clone().unwrap();
+                let leader = self.leader(follower_state.leader_term).clone();
                 PhaseMeta { leader, block_hash }
             }
             _ => {
@@ -110,7 +111,7 @@ impl PRaftBFT {
         }
 
         if sequence_number != follower_state.sequence + 1 {
-            return Err(Error::WrongSequenceNumber);
+            return Err(Error::WrongSequenceNumber(sequence_number));
         }
 
         // Check validity of ACKPREPARE Signatures.
@@ -205,6 +206,18 @@ impl PRaftBFT {
             ackappend_signatures,
         )
         .await
+
+        // +--------------------------------------------+
+        // | TODO: Use this when view change is needed. |
+        // +--------------------------------------------+
+        // let new_leader_term = follower_state.leader_term + 1;
+        // let messages = HashMap::new();
+        // follower_state.set_view_phase(
+        //     new_leader_term,
+        //     ViewPhase::ViewChanging(ViewPhaseMeta { messages }),
+        // )?;
+        // drop(follower_state);
+        // self.broadcast_view_change(new_leader_term).await.unwrap();
     }
     /// This function is used for out-of-order message reception and
     /// applying these commits.
@@ -218,7 +231,11 @@ impl PRaftBFT {
         ackappend_signatures: Vec<(PeerId, Signature)>,
     ) -> Result<ConsensusMessage, Error> {
         log::trace!("Handle Commit message #{}.", sequence_number);
-        follower_state.verify_message_meta(peer_id, leader_term, sequence_number)?;
+        if !self.is_current_leader(leader_term, peer_id) {
+            log::warn!("Received message from invalid leader (ID: {}).", peer_id);
+            return Err(Error::WrongLeader(peer_id.clone()));
+        }
+        follower_state.verify_message_meta(leader_term, sequence_number)?;
 
         // Check whether the state for the sequence is Append.
         // We only allow to receive messages once.
@@ -241,7 +258,7 @@ impl PRaftBFT {
                     expected: PhaseName::Append,
                 });
             }
-            Phase::Append(meta, body) => (meta, body),
+            Phase::Append(meta, body) => (meta, body.clone()),
             _ => {
                 return Err(Error::WrongPhase {
                     current: round_state.phase.to_phase_name(),
@@ -255,7 +272,7 @@ impl PRaftBFT {
         }
 
         if sequence_number != follower_state.sequence + 1 {
-            return Err(Error::WrongSequenceNumber);
+            return Err(Error::WrongSequenceNumber(sequence_number));
         }
 
         // Check validity of ACKAPPEND Signatures.
@@ -267,9 +284,9 @@ impl PRaftBFT {
             sequence_number,
             block_hash,
         };
-        for (peer_id, signature) in ackappend_signatures {
+        for (peer_id, signature) in &ackappend_signatures {
             // Frage: Was tun bei faulty signature? Abbrechen oder weiter bei Supermajority?
-            peer_id.verify(&ackprepare_message, &signature)?;
+            peer_id.verify(&ackprepare_message, signature)?;
         }
 
         follower_state
@@ -284,14 +301,18 @@ impl PRaftBFT {
         follower_state.sequence = sequence_number;
         let _ = self.sequence_changed_notifier.broadcast(());
 
-        // Write Blocks to BlockStorage
-        let _ = body;
+        // Write Block to BlockStorage
+        self.block_storage
+            .write_block(&Block {
+                body,
+                signatures: ackappend_signatures,
+            })
+            .unwrap();
         log::debug!(
             "Committed block #{} with hash {:?}.",
             sequence_number,
             block_hash
         );
-
         Ok(ConsensusMessage::AckCommit)
     }
 
@@ -301,12 +322,13 @@ impl PRaftBFT {
         message: Signed<ConsensusMessage>,
     ) -> Result<Signed<ConsensusMessage>, Error> {
         // Only RPUs are allowed.
-        if !self.peers.contains_key(message.signer()) {
+        if !self.peer_ids().any(|peer_id| message.signer() == peer_id) {
             return Err(Error::InvalidPeer(message.signer().clone()));
         }
 
         let message = message.verify()?;
         let peer_id = message.signer().clone();
+        let signature = message.signature().clone();
 
         let response = match message.into_inner() {
             ConsensusMessage::Prepare {
@@ -349,10 +371,21 @@ impl PRaftBFT {
                 )
                 .await?
             }
+            ConsensusMessage::ViewChange { new_leader_term } => {
+                self.handle_view_change(peer_id, signature, new_leader_term)
+                    .await?
+            }
+            ConsensusMessage::NewView {
+                leader_term,
+                view_change_signatures,
+            } => {
+                self.handle_new_view(&peer_id, leader_term, view_change_signatures)
+                    .await?
+            }
             _ => unimplemented!(),
         };
 
-        let signed_response = response.sign(&self.identity).unwrap();
+        let signed_response = response.sign(&self.broadcast_meta.identity).unwrap();
         Ok(signed_response)
     }
 }

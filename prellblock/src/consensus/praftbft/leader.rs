@@ -1,92 +1,82 @@
 use super::{
-    super::Body, flatten_vec::FlattenVec, message::ConsensusMessage, state::LeaderState,
+    super::Body, message::ConsensusMessage, state::LeaderState, PRaftBFT, ViewChangeSignatures,
     MAX_TRANSACTIONS_PER_BLOCK,
 };
-use crate::{
-    peer::{message as peer_message, Sender},
-    BoxError,
-};
-use futures::stream::{FuturesUnordered, StreamExt};
-use pinxit::{Identity, PeerId, Signable, Signature, Signed};
-use prellblock_client_api::Transaction;
-use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
+use std::{ops::Deref, sync::Arc, time::Duration};
 use tokio::{
-    sync::{Mutex, Notify},
+    sync::{watch, Notify},
     time::timeout,
 };
 
 const BLOCK_GENERATION_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(super) struct Leader {
-    /// The identity is used to sign consensus messages.
-    pub(super) identity: Identity,
-    /// A queue of messages.
-    pub(super) queue: Arc<Mutex<FlattenVec<Signed<Transaction>>>>,
-    pub(super) peers: HashMap<PeerId, SocketAddr>,
+    pub(super) praftbft: Arc<PRaftBFT>,
     pub(super) leader_state: LeaderState,
 }
 
-impl Leader {
-    async fn broadcast_until_majority<F>(
-        &self,
-        message: ConsensusMessage,
-        verify_response: F,
-    ) -> Result<Vec<(PeerId, Signature)>, BoxError>
-    where
-        F: Fn(&ConsensusMessage) -> Result<(), BoxError> + Clone + Send + Sync + 'static,
-    {
-        let message = message.sign(&self.identity)?;
-        let signed_message = peer_message::Consensus(message);
-
-        let mut futures = FuturesUnordered::new();
-
-        for &peer_address in self.peers.values() {
-            let signed_message = signed_message.clone();
-            let verify_response = verify_response.clone();
-
-            futures.push(tokio::spawn(async move {
-                let send_message_and_verify_response = async {
-                    let mut sender = Sender::new(peer_address);
-                    let response = sender.send_request(signed_message).await?;
-                    let signer = response.signer().clone();
-                    let verified_response = response.verify()?;
-                    verify_response(&*verified_response)?;
-                    Ok::<_, BoxError>((signer, verified_response.signature().clone()))
-                };
-
-                // TODO: Are seperate threads (tokio::spawn) faster?
-                match send_message_and_verify_response.await {
-                    Ok((peer_id, signature)) => Some((peer_id, signature)),
-                    Err(err) => {
-                        log::warn!("Consensus error from {}: {}", peer_address, err);
-                        None
-                    }
-                }
-            }));
-        }
-
-        let mut responses = Vec::new();
-
-        while let Some(result) = futures.next().await {
-            match result {
-                Ok(Some(response)) => responses.push(response),
-                Ok(None) => {}
-                Err(err) => log::warn!("Failed to join task: {}", err),
-            }
-            if self.supermajority_reached(responses.len()) {
-                return Ok(responses);
-            }
-        }
-
-        // All sender tasks have died **before reaching supermajority**.
-        Err("Could not get supermajority.".into())
+impl Deref for Leader {
+    type Target = PRaftBFT;
+    fn deref(&self) -> &Self::Target {
+        &self.praftbft
     }
+}
 
+impl Leader {
     /// This function waits until it is triggered to process transactions.
     // TODO: split this function into smaller phases
     #[allow(clippy::too_many_lines)]
-    pub(super) async fn process_transactions(mut self, notifier: Arc<Notify>) {
+    pub(super) async fn process_transactions(
+        mut self,
+        notifier: Arc<Notify>,
+        mut leader_term_receiver: watch::Receiver<(usize, ViewChangeSignatures)>,
+    ) {
         loop {
+            // Wait when we are not the leader.
+            let mut view_change_signatures = None;
+            let mut leader_term = self
+                .leader_state
+                .leader_term
+                .max(leader_term_receiver.borrow().0);
+            while !self.is_current_leader(leader_term, self.peer_id()) {
+                log::trace!("I am not the current leader.");
+                let new_data = leader_term_receiver.recv().await.unwrap();
+                leader_term = new_data.0;
+                view_change_signatures = Some(new_data.1);
+            }
+
+            // Update leader state with data from the follower state when we are the new leader.
+            if let Some(view_change_signatures) = view_change_signatures {
+                // Send new view message.
+                match self
+                    .send_new_view(leader_term, view_change_signatures)
+                    .await
+                {
+                    Ok(_) => log::trace!("Succesfully broadcasted NewView Message."),
+                    Err(err) => {
+                        log::warn!("Error while Broadcasting NewView Message: {}", err);
+                        // After not reaching the majority, we need to wait until the next time
+                        // we are elected. (At least one round later).
+                        self.leader_state.leader_term = leader_term + 1;
+                        continue;
+                    }
+                }
+
+                let (sequence, last_block_hash) = {
+                    let follower_state = self.follower_state.lock().await;
+                    (follower_state.sequence, follower_state.last_block_hash())
+                };
+                log::info!(
+                    "I am the new leader in view {}. (last block: #{})",
+                    leader_term,
+                    sequence
+                );
+                self.queue.lock().await.clear();
+                self.leader_state.leader_term = leader_term;
+                self.leader_state.sequence = sequence;
+                self.leader_state.last_block_hash = last_block_hash;
+            }
+
             let timeout_result = timeout(BLOCK_GENERATION_TIMEOUT, notifier.notified()).await;
 
             let minimum_queue_len = match timeout_result {
@@ -130,7 +120,6 @@ impl Leader {
                 //    --------------| |-------------------   //
                 //                  |_|                      //
                 // ----------------------------------------- //
-                let leader_term = self.leader_state.leader_term;
                 let prepare_message = ConsensusMessage::Prepare {
                     leader_term,
                     sequence_number,
@@ -285,16 +274,5 @@ impl Leader {
                 }
             }
         }
-    }
-
-    /// Check whether a number represents a supermajority (>2/3) compared
-    /// to the peers in the consenus.
-    fn supermajority_reached(&self, number: usize) -> bool {
-        let len = self.peers.len();
-        if len < 4 {
-            panic!("Cannot find consensus for less than four peers.");
-        }
-        let supermajority = len * 2 / 3 + 1;
-        number >= supermajority
     }
 }

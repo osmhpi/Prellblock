@@ -63,6 +63,22 @@ pub enum ConsensusMessage {
     },
     /// A `ConsensusMessage` signalizing the Leader that a Follower has applied the transactions.
     AckCommit,
+    /// A `ConsensusMessage` to propose a Leader Change because of faulty behaviour.
+    ViewChange {
+        /// The Leader Term we want to swap to.
+        new_leader_term: usize,
+    },
+    /// A `ConsensusMessage` signalizing the sender RPU that another RPU received the `ViewChange` message.
+    AckViewChange,
+    /// A `ConsensusMessage` signalizing that the new leader has accepted their term.
+    NewView {
+        /// The Leader term we swapped to.
+        leader_term: usize,
+        /// The ViewChange signatures of 2f + 1 Replicas
+        view_change_signatures: Vec<(PeerId, Signature)>,
+    },
+    /// A `ConsensusMessage` signalizing the sender RPU that another RPU received the `NewView` message.
+    AckNewView,
 }
 
 impl Signable for ConsensusMessage {

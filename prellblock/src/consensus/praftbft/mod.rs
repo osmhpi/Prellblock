@@ -5,6 +5,8 @@
 //!
 //! [Benchmark Results](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
 
+#![allow(clippy::mutex_atomic)]
+
 mod error;
 mod flatten_vec;
 mod follower;
@@ -12,25 +14,34 @@ mod leader;
 pub mod message;
 mod ring_buffer;
 mod state;
+mod view_change;
 
 pub use error::Error;
 
+use crate::{
+    block_storage::BlockStorage,
+    peer::{message as peer_message, Sender},
+    BoxError,
+};
 use flatten_vec::FlattenVec;
+use futures::{stream::FuturesUnordered, StreamExt};
 use leader::Leader;
-use pinxit::{Identity, PeerId, Signed};
+use message::ConsensusMessage;
+use pinxit::{Identity, PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
 use state::{FollowerState, LeaderState};
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, ops::Deref, sync::Arc};
 use tokio::sync::{watch, Mutex, Notify};
 
-const MAX_TRANSACTIONS_PER_BLOCK: usize = 1;
+const MAX_TRANSACTIONS_PER_BLOCK: usize = 4000;
+
+type ViewChangeSignatures = Vec<(PeerId, Signature)>;
 
 /// Prellblock Raft BFT consensus algorithm.
 ///
 /// See the [paper](https://www.scs.stanford.edu/17au-cs244b/labs/projects/clow_jiang.pdf).
 pub struct PRaftBFT {
     // Was muss der können?
-
     // - Peer Inbox -> Transaktionen entgegennehmen (und im RAM behalten)
     // - Ordering betreiben
     // - Transaktionen sammeln bis Trigger zum Block vorschlagen
@@ -43,9 +54,18 @@ pub struct PRaftBFT {
     // For unblocking waiting out-of-order messages.
     sequence_changed_notifier: watch::Sender<()>,
     sequence_changed_receiver: watch::Receiver<()>,
-    peers: HashMap<PeerId, SocketAddr>,
-    /// Our own identity, used for signing messages.
-    identity: Identity,
+    broadcast_meta: BroadcastMeta,
+    view_change_sender: watch::Sender<usize>,
+    view_change_receiver: watch::Receiver<usize>,
+    leader_term_sender: watch::Sender<(usize, ViewChangeSignatures)>,
+    block_storage: BlockStorage,
+}
+
+impl Deref for PRaftBFT {
+    type Target = BroadcastMeta;
+    fn deref(&self) -> &Self::Target {
+        &self.broadcast_meta
+    }
 }
 
 impl PRaftBFT {
@@ -53,49 +73,54 @@ impl PRaftBFT {
     ///
     /// The instance is identified `identity` and in a group with other `peers`.
     /// **Warning:** This starts a new thread for processing transactions in the background.
-    pub async fn new(identity: Identity, peers: HashMap<PeerId, SocketAddr>) -> Arc<Self> {
+    pub async fn new(
+        identity: Identity,
+        peers: Vec<(PeerId, SocketAddr)>,
+        block_storage: BlockStorage,
+    ) -> Arc<Self> {
         log::debug!("Started consensus with peers: {:?}", peers);
-        assert!(
-            peers.get(identity.id()).is_some(),
-            "The identity is not part of the peers list."
-        );
-
-        // TODO: Remove this.
-        let leader_id =
-            PeerId::from_hex("98dcfa6fa5fe22e457bfff6cce55a7fa713f88a0766ffa890b804056e823d66f")
-                .unwrap();
-
-        let leader = Leader {
-            identity: identity.clone(),
-            queue: Arc::default(),
-            peers: peers.clone(),
-            leader_state: LeaderState::default(),
-        };
-        let queue = leader.queue.clone();
-
-        let leader_notifier = Arc::new(Notify::new());
-        if identity.id() == &leader_id {
-            tokio::spawn(leader.process_transactions(leader_notifier.clone()));
+        let mut exists = false;
+        for (peer_id, _) in peers.clone() {
+            if identity.id() == &peer_id {
+                exists = true;
+            }
         }
+        assert!(exists, "The identity is not part of the peers list.");
 
+        let broadcast_meta = BroadcastMeta { peers, identity };
+
+        let follower_state = FollowerState::new();
+        let leader_state = LeaderState::new(&follower_state);
+        let leader_term = follower_state.leader_term;
+        let follower_state = Mutex::new(follower_state);
+        let leader_notifier = Arc::new(Notify::new());
         let (sequence_changed_notifier, sequence_changed_receiver) = watch::channel(());
+        let (view_change_sender, view_change_receiver) = watch::channel(leader_term);
+        let (leader_term_sender, leader_term_receiver) =
+            watch::channel((leader_term, ViewChangeSignatures::new()));
         let praftbft = Self {
-            queue,
-            leader_notifier,
-            follower_state: Mutex::new(FollowerState::new()),
+            queue: Arc::default(),
+            leader_notifier: leader_notifier.clone(),
+            follower_state,
             sequence_changed_notifier,
             sequence_changed_receiver,
-            peers,
-            identity,
+            broadcast_meta,
+            view_change_sender,
+            view_change_receiver,
+            leader_term_sender,
+            block_storage,
         };
 
-        // TODO: Remove this.
-        {
-            let mut follower_state = praftbft.follower_state.lock().await;
-            follower_state.leader = Some(leader_id);
-        }
+        let praftbft = Arc::new(praftbft);
 
-        Arc::new(praftbft)
+        let leader = Leader {
+            praftbft: praftbft.clone(),
+            leader_state,
+        };
+
+        tokio::spawn(leader.process_transactions(leader_notifier, leader_term_receiver));
+
+        praftbft
     }
 
     /// Stores incoming `Transaction`s in the Consensus' `queue`.
@@ -105,14 +130,104 @@ impl PRaftBFT {
         self.leader_notifier.notify();
     }
 
+    /// Checks whether a number represents f + 1 nodes
+    fn nonfaulty_reached(&self, number: usize) -> bool {
+        let majority = (self.peers_len() - 1) / 3 + 1;
+        number >= majority
+    }
+}
+
+#[derive(Clone)]
+pub struct BroadcastMeta {
+    peers: Vec<(PeerId, SocketAddr)>,
+    identity: Identity,
+}
+
+impl BroadcastMeta {
+    /// Retrieve the consesus' own identity's id.
+    const fn peer_id(&self) -> &PeerId {
+        self.identity.id()
+    }
+
+    /// The number of peers in the consensus.
+    fn peers_len(&self) -> usize {
+        self.peers.len()
+    }
+
+    fn peer_ids(&self) -> impl Iterator<Item = &PeerId> {
+        self.peers.iter().map(|(peer_id, _)| peer_id)
+    }
+
+    fn is_current_leader(&self, leader_term: usize, peer_id: &PeerId) -> bool {
+        peer_id.clone() == self.leader(leader_term).clone()
+    }
+
+    fn leader(&self, leader_term: usize) -> &PeerId {
+        &self.peers[leader_term % self.peers_len()].0
+    }
+
+    async fn broadcast_until_majority<F>(
+        &self,
+        message: ConsensusMessage,
+        verify_response: F,
+    ) -> Result<Vec<(PeerId, Signature)>, BoxError>
+    where
+        F: Fn(&ConsensusMessage) -> Result<(), BoxError> + Clone + Send + Sync + 'static,
+    {
+        let message = message.sign(&self.identity)?;
+        let signed_message = peer_message::Consensus(message);
+
+        let mut futures = FuturesUnordered::new();
+
+        for &(_, peer_address) in &self.peers {
+            let signed_message = signed_message.clone();
+            let verify_response = verify_response.clone();
+
+            futures.push(tokio::spawn(async move {
+                let send_message_and_verify_response = async {
+                    let mut sender = Sender::new(peer_address);
+                    let response = sender.send_request(signed_message).await?;
+                    let signer = response.signer().clone();
+                    let verified_response = response.verify()?;
+                    verify_response(&*verified_response)?;
+                    Ok::<_, BoxError>((signer, verified_response.signature().clone()))
+                };
+                // TODO: Are seperate threads (tokio::spawn) faster?
+                match send_message_and_verify_response.await {
+                    Ok((peer_id, signature)) => Some((peer_id, signature)),
+                    Err(err) => {
+                        log::warn!("Consensus error from {}: {}", peer_address, err);
+                        None
+                    }
+                }
+            }));
+        }
+
+        let mut responses = Vec::new();
+
+        while let Some(result) = futures.next().await {
+            match result {
+                Ok(Some(response)) => responses.push(response),
+                Ok(None) => {}
+                Err(err) => log::warn!("Failed to join task: {}", err),
+            }
+            if self.supermajority_reached(responses.len()) {
+                return Ok(responses);
+            }
+        }
+
+        // All sender tasks have died **before reaching supermajority**.
+        Err("Could not get supermajority.".into())
+    }
+
     /// Check whether a number represents a supermajority (>2/3) compared
-    /// to the peers in the consenus.
-    fn supermajority_reached(&self, number: usize) -> bool {
-        let len = self.peers.len();
-        if len < 4 {
+    /// to the total number of peers (`peer_count`) in the consenus.
+    fn supermajority_reached(&self, response_len: usize) -> bool {
+        let peer_count = self.peers.len();
+        if peer_count < 4 {
             panic!("Cannot find consensus for less than four peers.");
         }
-        let supermajority = len * 2 / 3 + 1;
-        number >= supermajority
+        let supermajority = peer_count * 2 / 3 + 1;
+        response_len >= supermajority
     }
 }

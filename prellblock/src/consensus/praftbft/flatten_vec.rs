@@ -19,15 +19,23 @@ impl<T> FlattenVec<T> {
         }
     }
 
+    /// Add items.
     pub fn push(&mut self, vec: Vec<T>) {
         log::trace!("Push {} transactions.", vec.len());
         self.data.push_back(vec);
     }
 
+    /// Get number of all items.
     pub fn len(&self) -> usize {
         let iter_len: usize = self.iter.len();
         let data_sum: usize = self.data.iter().map(Vec::len).sum();
         iter_len + data_sum
+    }
+
+    /// Remove all items.
+    pub fn clear(&mut self) {
+        self.iter = Vec::new().into_iter();
+        self.data.clear();
     }
 }
 
