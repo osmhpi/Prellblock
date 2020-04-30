@@ -1,7 +1,7 @@
 //! Contains the states used in the consensus.
 
 use super::{
-    super::{BlockHash, Body, SequenceNumber},
+    super::{BlockHash, BlockNumber, Body, LeaderTerm},
     message::ConsensusMessage,
     ring_buffer::RingBuffer,
     Error,
@@ -23,7 +23,7 @@ pub(super) enum Phase {
     Committed(BlockHash),
 }
 
-/// This contains state needed for every sequence.
+/// This contains state needed for every block.
 ///
 /// Enables out-of-order reception of messages.
 /// It is possible that `ConsensusMessage::Commit` or `ConsensusMessage::Append`
@@ -79,8 +79,8 @@ pub(super) struct ViewPhaseMeta {
 }
 
 pub(super) struct FollowerState {
-    pub(super) leader_term: usize,
-    pub(super) sequence: SequenceNumber,
+    pub(super) leader_term: LeaderTerm,
+    pub(super) block_number: BlockNumber,
     pub(super) round_states: RingBuffer<RoundState>,
     pub(super) view_state: RingBuffer<ViewPhase>,
 }
@@ -90,12 +90,12 @@ const RING_BUFFER_SIZE: usize = 1024;
 impl FollowerState {
     /// Create a new `FollowerState` from a `world_state`.
     pub(super) fn from_world_state(world_state: &WorldState) -> Self {
-        let start = world_state.sequence_number;
+        let start = world_state.block_number;
         let mut state = Self {
-            leader_term: 0,
-            sequence: start,
-            round_states: RingBuffer::new(RoundState::default(), RING_BUFFER_SIZE, start),
-            view_state: RingBuffer::new(ViewPhase::Waiting, RING_BUFFER_SIZE, start),
+            leader_term: LeaderTerm::default(),
+            block_number: start,
+            round_states: RingBuffer::new(RoundState::default(), RING_BUFFER_SIZE, start.into()),
+            view_state: RingBuffer::new(ViewPhase::Waiting, RING_BUFFER_SIZE, start.into()),
         };
 
         state.round_state_mut(start).unwrap().phase = Phase::Committed(world_state.last_block_hash);
@@ -106,8 +106,8 @@ impl FollowerState {
     /// Validate that there is a leader and the received message is from this leader.
     pub(super) fn verify_message_meta(
         &self,
-        leader_term: usize,
-        sequence_number: SequenceNumber,
+        leader_term: LeaderTerm,
+        block_number: BlockNumber,
     ) -> Result<(), Error> {
         // We only handle the current leader term.
         if leader_term != self.leader_term {
@@ -117,48 +117,52 @@ impl FollowerState {
         }
 
         // Only process new messages.
-        if sequence_number <= self.sequence {
-            let error = Error::SequenceNumberTooSmall(sequence_number);
+        if block_number <= self.block_number {
+            let error = Error::BlockNumberTooSmall(block_number);
             log::warn!("{}", error);
             return Err(error);
         }
         Ok(())
     }
 
-    /// Get the `RoundState` for the given `sequence` if it exists.
+    /// Get the `RoundState` for the given `block` if it exists.
     /// This function is necessary because `ConsensusMessage`s can arrive out of order.
-    pub fn round_state(&self, sequence: SequenceNumber) -> Result<&RoundState, Error> {
+    pub fn round_state(&self, block_number: BlockNumber) -> Result<&RoundState, Error> {
         self.round_states
-            .get(sequence)
-            .ok_or(Error::SequenceNumberTooBig(sequence))
+            .get(block_number.into())
+            .ok_or(Error::BlockNumberTooBig(block_number))
     }
 
-    /// Set the `RoundState` for a given `sequence`.
-    pub fn round_state_mut(&mut self, sequence: SequenceNumber) -> Result<&mut RoundState, Error> {
+    /// Set the `RoundState` for a given `block`.
+    pub fn round_state_mut(&mut self, block_number: BlockNumber) -> Result<&mut RoundState, Error> {
         self.round_states
-            .get_mut(sequence)
-            .ok_or(Error::SequenceNumberTooBig(sequence))
+            .get_mut(block_number.into())
+            .ok_or(Error::BlockNumberTooBig(block_number))
     }
 
     /// Get the `ViewPhase` for the given `leader_term` if it exists.
     /// This function is necessary because `ConsensusMessage`s can arrive out of order.
-    pub fn view_phase(&self, leader_term: usize) -> Result<&ViewPhase, Error> {
+    pub fn view_phase(&self, leader_term: LeaderTerm) -> Result<&ViewPhase, Error> {
         self.view_state
-            .get(leader_term as u64)
+            .get(leader_term.into())
             .ok_or(Error::LeaderTermTooBig(leader_term))
     }
 
     /// Set the `ViewPhase` for a given `leader_term`.
-    pub fn set_view_phase(&mut self, leader_term: usize, phase: ViewPhase) -> Result<(), Error> {
+    pub fn set_view_phase(
+        &mut self,
+        leader_term: LeaderTerm,
+        phase: ViewPhase,
+    ) -> Result<(), Error> {
         *self
             .view_state
-            .get_mut(leader_term as u64)
+            .get_mut(leader_term.into())
             .ok_or(Error::LeaderTermTooBig(leader_term))? = phase;
         Ok(())
     }
 
-    fn block_hash(&self, index: SequenceNumber) -> BlockHash {
-        if let Some(round_state) = self.round_states.get(index) {
+    fn block_hash(&self, index: BlockNumber) -> BlockHash {
+        if let Some(round_state) = self.round_states.get(index.into()) {
             match &round_state.phase {
                 Phase::Committed(last_block_hash) => *last_block_hash,
                 _ => unreachable!(),
@@ -170,24 +174,24 @@ impl FollowerState {
 
     /// Get the block hash of the previously committed block.
     pub fn last_block_hash(&self) -> BlockHash {
-        self.block_hash(self.sequence)
+        self.block_hash(self.block_number)
     }
 }
 
 #[derive(Default)]
 pub(super) struct LeaderState {
-    pub(super) sequence: SequenceNumber,
+    pub(super) block: BlockNumber,
     pub(super) last_block_hash: BlockHash,
-    pub(super) leader_term: usize,
+    pub(super) leader_term: LeaderTerm,
 }
 
 impl LeaderState {
     /// Create a new `LeaderState` from a `follower_state`.
     pub(super) fn new(follower_state: &FollowerState) -> Self {
         // TODO: Error handling with genesis block?
-        // if sequence == 0 { genesis block not found } else { you f***d up }
+        // if block == 0 { genesis block not found } else { you f***d up }
         Self {
-            sequence: follower_state.sequence,
+            block: follower_state.block_number,
             last_block_hash: follower_state.last_block_hash(),
             leader_term: follower_state.leader_term,
         }

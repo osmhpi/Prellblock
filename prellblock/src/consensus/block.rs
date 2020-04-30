@@ -1,15 +1,12 @@
+use crate::consensus::block_number::BlockNumber;
 use blake2::{
     digest::{generic_array::typenum::Unsigned, FixedOutput},
     Blake2b, Digest,
 };
 use pinxit::{PeerId, Signature, Signed};
-
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-
-/// The number of the block in the chain (=sequence).
-pub type SequenceNumber = u64;
 
 /// A `Block` stores transactions verified by the blockchain.
 #[derive(Serialize, Deserialize, Debug)]
@@ -25,8 +22,8 @@ impl Block {
         self.body.hash()
     }
 
-    /// Return the `Block`s sequence number.
-    pub(crate) const fn sequence_number(&self) -> SequenceNumber {
+    /// Return the `Block`s block number.
+    pub(crate) const fn block_number(&self) -> BlockNumber {
         self.body.height
     }
 }
@@ -35,7 +32,7 @@ impl Block {
 /// and an Array of the actual `Transaction`s with their corresponding Signature in the `Block`.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Body {
-    pub(crate) height: SequenceNumber,
+    pub(crate) height: BlockNumber,
     pub(crate) prev_block_hash: BlockHash,
     pub(crate) transactions: Vec<Signed<Transaction>>,
 }

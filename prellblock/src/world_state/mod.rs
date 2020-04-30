@@ -8,7 +8,7 @@ pub(crate) use account::Account;
 
 use crate::{
     block_storage::BlockStorage,
-    consensus::{Block, BlockHash, SequenceNumber},
+    consensus::{Block, BlockHash, BlockNumber},
     BoxError,
 };
 use im::{HashMap, Vector};
@@ -134,8 +134,8 @@ pub struct WorldState {
     pub peers: Vector<(PeerId, SocketAddr)>,
     /// Field storing the Transactiondata.
     pub data: HashMap<PeerId, HashMap<String, Vec<u8>>>,
-    /// Sequence number of the last `Block` applied to the `WorldState`.
-    pub sequence_number: SequenceNumber,
+    /// Block number of the last `Block` applied to the `WorldState`.
+    pub block_number: BlockNumber,
     /// Hash of the last `Block` in the `BlockStorage`.
     pub last_block_hash: BlockHash,
 }
@@ -155,7 +155,7 @@ impl WorldState {
             accounts,
             peers: Vector::default(),
             data: HashMap::new(),
-            sequence_number: 0,
+            block_number: BlockNumber::default(),
             last_block_hash: BlockHash::default(),
         }
     }
@@ -167,7 +167,7 @@ impl WorldState {
         }
         // TODO: validate block (peers, signatures, etc)
         self.last_block_hash = block.body.hash();
-        self.sequence_number = block.body.height;
+        self.block_number = block.body.height;
         for transaction in block.body.transactions {
             self.apply_transaction(transaction);
         }

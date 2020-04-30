@@ -3,7 +3,7 @@ use super::{
     state::{ViewPhase, ViewPhaseMeta},
     Error, PRaftBFT, ViewChangeSignatures,
 };
-use crate::BoxError;
+use crate::{consensus::LeaderTerm, BoxError};
 use pinxit::{PeerId, Signature};
 use std::{collections::HashMap, time::Duration};
 
@@ -11,7 +11,7 @@ impl PRaftBFT {
     pub(super) async fn handle_new_view(
         &self,
         peer_id: &PeerId,
-        leader_term: usize,
+        leader_term: LeaderTerm,
         view_change_signatures: Vec<(PeerId, Signature)>,
     ) -> Result<ConsensusMessage, Error> {
         log::trace!("Received NewView Message.");
@@ -39,7 +39,10 @@ impl PRaftBFT {
         Ok(ConsensusMessage::AckNewView)
     }
 
-    pub(super) async fn broadcast_view_change(&self, new_leader_term: usize) -> Result<(), Error> {
+    pub(super) async fn broadcast_view_change(
+        &self,
+        new_leader_term: LeaderTerm,
+    ) -> Result<(), Error> {
         log::trace!("Broadcasting ViewChange Message.");
         let view_change_message = ConsensusMessage::ViewChange { new_leader_term };
         let validate_ack_view_change = move |response: &ConsensusMessage| {
@@ -68,7 +71,7 @@ impl PRaftBFT {
         &self,
         peer_id: PeerId,
         signature: Signature,
-        new_leader_term: usize,
+        new_leader_term: LeaderTerm,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state.lock().await;
         // Only higher leader terms than current one accepted
@@ -193,7 +196,7 @@ impl PRaftBFT {
 
     pub(super) async fn send_new_view(
         &self,
-        leader_term: usize,
+        leader_term: LeaderTerm,
         signatures: ViewChangeSignatures,
     ) -> Result<(), BoxError> {
         // let mut sigs = vec![];

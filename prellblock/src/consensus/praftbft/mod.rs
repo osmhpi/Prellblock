@@ -19,6 +19,7 @@ pub use error::Error;
 
 use crate::{
     block_storage::BlockStorage,
+    consensus::LeaderTerm,
     peer::{message as peer_message, Sender},
     world_state::WorldStateService,
     BoxError,
@@ -56,12 +57,12 @@ pub struct PRaftBFT {
     follower_state: Mutex<FollowerState>,
     world_state: WorldStateService,
     // For unblocking waiting out-of-order messages.
-    sequence_changed_notifier: watch::Sender<()>,
-    sequence_changed_receiver: watch::Receiver<()>,
+    block_changed_notifier: watch::Sender<()>,
+    block_changed_receiver: watch::Receiver<()>,
     broadcast_meta: BroadcastMeta,
-    new_view_sender: watch::Sender<usize>,
-    new_view_receiver: watch::Receiver<usize>,
-    enough_view_changes_sender: watch::Sender<(usize, ViewChangeSignatures)>,
+    new_view_sender: watch::Sender<LeaderTerm>,
+    new_view_receiver: watch::Receiver<LeaderTerm>,
+    enough_view_changes_sender: watch::Sender<(LeaderTerm, ViewChangeSignatures)>,
     block_storage: BlockStorage,
 }
 
@@ -103,7 +104,7 @@ impl PRaftBFT {
         let leader_term = follower_state.leader_term;
         let follower_state = Mutex::new(follower_state);
         let leader_notifier = Arc::new(Notify::new());
-        let (sequence_changed_notifier, sequence_changed_receiver) = watch::channel(());
+        let (block_changed_notifier, block_changed_receiver) = watch::channel(());
         let (new_view_sender, new_view_receiver) = watch::channel(leader_term);
         let (enough_view_changes_sender, enough_view_changes_receiver) =
             watch::channel((leader_term, ViewChangeSignatures::new()));
@@ -112,8 +113,8 @@ impl PRaftBFT {
             leader_notifier: leader_notifier.clone(),
             follower_state,
             world_state,
-            sequence_changed_notifier,
-            sequence_changed_receiver,
+            block_changed_notifier,
+            block_changed_receiver,
             broadcast_meta,
             new_view_sender,
             new_view_receiver,
@@ -142,7 +143,7 @@ impl PRaftBFT {
 
     /// Stores incoming `Transaction`s in the Consensus' `queue`.
     pub async fn take_transactions(&self, transactions: Vec<Signed<Transaction>>) {
-        // Add timestamp and sequence number at time of arrival for censorship protection.
+        // Add timestamp and block number at time of arrival for censorship protection.
         let new_entries = transactions
             .into_iter()
             .map(|transaction| (Instant::now(), transaction));
@@ -183,12 +184,14 @@ impl BroadcastMeta {
         self.peers().into_iter().map(|(peer_id, _)| peer_id)
     }
 
-    fn is_current_leader(&self, leader_term: usize, peer_id: &PeerId) -> bool {
+    fn is_current_leader(&self, leader_term: LeaderTerm, peer_id: &PeerId) -> bool {
         peer_id.clone() == self.leader(leader_term)
     }
 
-    fn leader(&self, leader_term: usize) -> PeerId {
-        self.peers()[leader_term % self.peers_len()].0.clone()
+    fn leader(&self, leader_term: LeaderTerm) -> PeerId {
+        let index = u64::from(leader_term) % (self.peers_len() as u64);
+        #[allow(clippy::cast_possible_truncation)]
+        self.peers()[index as usize].0.clone()
     }
 
     async fn broadcast_until_majority<F>(

@@ -1,6 +1,8 @@
 use super::{
-    super::Body, message::ConsensusMessage, state::LeaderState, PRaftBFT, ViewChangeSignatures,
-    MAX_TRANSACTIONS_PER_BLOCK,
+    super::{Body, LeaderTerm},
+    message::ConsensusMessage,
+    state::LeaderState,
+    PRaftBFT, ViewChangeSignatures, MAX_TRANSACTIONS_PER_BLOCK,
 };
 use pinxit::Signed;
 use prellblock_client_api::Transaction;
@@ -31,7 +33,7 @@ impl Leader {
     pub(super) async fn process_transactions(
         mut self,
         notifier: Arc<Notify>,
-        mut enough_view_changes_receiver: watch::Receiver<(usize, ViewChangeSignatures)>,
+        mut enough_view_changes_receiver: watch::Receiver<(LeaderTerm, ViewChangeSignatures)>,
     ) {
         loop {
             // Wait when we are not the leader.
@@ -64,18 +66,21 @@ impl Leader {
                     }
                 }
 
-                let (sequence, last_block_hash) = {
+                let (block, last_block_hash) = {
                     let follower_state = self.follower_state.lock().await;
-                    (follower_state.sequence, follower_state.last_block_hash())
+                    (
+                        follower_state.block_number,
+                        follower_state.last_block_hash(),
+                    )
                 };
                 log::info!(
                     "I am the new leader in view {}. (last block: #{})",
                     leader_term,
-                    sequence
+                    block
                 );
 
                 self.leader_state.leader_term = leader_term;
-                self.leader_state.sequence = sequence;
+                self.leader_state.block = block;
                 self.leader_state.last_block_hash = last_block_hash;
             }
 
@@ -103,9 +108,9 @@ impl Leader {
                     }
                 }
 
-                let sequence_number = self.leader_state.sequence + 1;
+                let block_number = self.leader_state.block + 1;
                 let body = Body {
-                    height: sequence_number,
+                    height: block_number,
                     prev_block_hash: self.leader_state.last_block_hash,
                     transactions,
                 };
@@ -125,7 +130,7 @@ impl Leader {
                 // ----------------------------------------- //
                 let prepare_message = ConsensusMessage::Prepare {
                     leader_term,
-                    sequence_number,
+                    block_number,
                     block_hash: hash,
                 };
 
@@ -134,12 +139,12 @@ impl Leader {
                     match response {
                         ConsensusMessage::AckPrepare {
                             leader_term: ack_leader_term,
-                            sequence_number: ack_sequence_number,
+                            block_number: ack_block_number,
                             block_hash: ack_block_hash,
                         } => {
                             // Check whether the ACKPREPARE is for the same message.
                             if *ack_leader_term == leader_term
-                                && *ack_sequence_number == sequence_number
+                                && *ack_block_number == block_number
                                 && *ack_block_hash == hash
                             {
                                 Ok(())
@@ -159,7 +164,7 @@ impl Leader {
                     Err(err) => {
                         log::error!(
                             "Consensus error during PREPARE phase for block #{}: {}",
-                            sequence_number,
+                            block_number,
                             err
                         );
                         // TODO: retry the transactions
@@ -168,7 +173,7 @@ impl Leader {
                 };
                 log::trace!(
                     "Prepare #{} phase ended. Got ACKPREPARE signatures: {:?}",
-                    sequence_number,
+                    block_number,
                     ackprepares,
                 );
 
@@ -184,7 +189,7 @@ impl Leader {
                 // ------------------------------------------- //
                 let append_message = ConsensusMessage::Append {
                     leader_term,
-                    sequence_number,
+                    block_number,
                     block_hash: hash,
                     ackprepare_signatures: ackprepares,
                     data: transactions,
@@ -194,12 +199,12 @@ impl Leader {
                     match response {
                         ConsensusMessage::AckAppend {
                             leader_term: ack_leader_term,
-                            sequence_number: ack_sequence_number,
+                            block_number: ack_block_number,
                             block_hash: ack_block_hash,
                         } => {
                             // Check whether the ACKPREPARE is for the same message.
                             if *ack_leader_term == leader_term
-                                && *ack_sequence_number == sequence_number
+                                && *ack_block_number == block_number
                                 && *ack_block_hash == hash
                             {
                                 Ok(())
@@ -218,7 +223,7 @@ impl Leader {
                     Err(err) => {
                         log::error!(
                             "Consensus error during APPEND phase for block #{}: {}",
-                            sequence_number,
+                            block_number,
                             err
                         );
                         // TODO: retry the transactions
@@ -227,12 +232,12 @@ impl Leader {
                 };
                 log::trace!(
                     "Append Phase #{} ended. Got ACKAPPEND signatures: {:?}",
-                    sequence_number,
+                    block_number,
                     ackappends,
                 );
 
                 // after we collected enough signatures, we can update our state
-                self.leader_state.sequence = sequence_number;
+                self.leader_state.block = block_number;
                 self.leader_state.last_block_hash = hash;
 
                 // ------------------------------------------- //
@@ -248,7 +253,7 @@ impl Leader {
 
                 let commit_message = ConsensusMessage::Commit {
                     leader_term,
-                    sequence_number,
+                    block_number,
                     block_hash: hash,
                     ackappend_signatures: ackappends,
                 };
@@ -265,12 +270,12 @@ impl Leader {
                     .await;
                 match ackcommits {
                     Ok(_) => {
-                        log::info!("Comitted block #{} on majority of RPUs.", sequence_number);
+                        log::info!("Comitted block #{} on majority of RPUs.", block_number);
                     }
                     Err(err) => {
                         log::error!(
                             "Consensus error during COMMIT phase for block #{}: {}",
-                            sequence_number,
+                            block_number,
                             err
                         );
                     }

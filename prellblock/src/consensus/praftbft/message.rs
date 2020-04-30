@@ -1,4 +1,4 @@
-use crate::consensus::{BlockHash, SequenceNumber};
+use crate::consensus::{BlockHash, BlockNumber, LeaderTerm};
 use pinxit::{PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
@@ -7,31 +7,31 @@ use serde::{Deserialize, Serialize};
 #[allow(clippy::module_name_repetitions)]
 /// Messages used for finding a consensus.
 pub enum ConsensusMessage {
-    /// The first `ConsensusMessage`. Checks for Validity of `view_number` and `sequence_number`.
+    /// The first `ConsensusMessage`. Checks for Validity of `view_number` and `block_number`.
     Prepare {
         /// The current number of the view (selected leader).
-        leader_term: usize,
-        /// The current sequence number (block height) of this round.
-        sequence_number: SequenceNumber,
+        leader_term: LeaderTerm,
+        /// The current block number (block height) of this round.
+        block_number: BlockNumber,
         /// The hash of this rounds block.
         block_hash: BlockHash,
     },
     /// A `ConsensusMessage` that is a direct answer to `ConsensusMessage::Prepare`.
-    /// Only sent if the `view_number` and `sequence_number` are accepted.
+    /// Only sent if the `view_number` and `block_number` are accepted.
     AckPrepare {
         /// The current number of the view (selected leader).
-        leader_term: usize,
-        /// The current sequence number (block height) of this round.
-        sequence_number: SequenceNumber,
+        leader_term: LeaderTerm,
+        /// The current block number (block height) of this round.
+        block_number: BlockNumber,
         /// The hash of this rounds block.
         block_hash: BlockHash,
     },
     /// A `ConsensusMessage` that prepares the followers for the appending of a `Block` to the blockchain.
     Append {
         /// The current number of the view (selected leader).
-        leader_term: usize,
-        /// The current sequence number (block height) of this round.
-        sequence_number: SequenceNumber,
+        leader_term: LeaderTerm,
+        /// The current block number (block height) of this round.
+        block_number: BlockNumber,
         /// The hash of this rounds block.
         block_hash: BlockHash,
         /// The signatures of all (2f+1) `AckPrepare` signatures.
@@ -44,18 +44,18 @@ pub enum ConsensusMessage {
     /// A `ConsensusMessage` signalizing that the `Block` is accepted by the Follower.
     AckAppend {
         /// The current number of the view (selected leader).
-        leader_term: usize,
-        /// The current sequence number (block height) of this round.
-        sequence_number: SequenceNumber,
+        leader_term: LeaderTerm,
+        /// The current block number (block height) of this round.
+        block_number: BlockNumber,
         /// The hash of this rounds block.
         block_hash: BlockHash,
     },
     /// A `ConsensusMessage` signalizing the Followers to Store the Block in the `BlockStorage` together with the `ACKAPPEND`-Signatures.
     Commit {
         /// The current number of the view (selected leader).
-        leader_term: usize,
-        /// The current sequence number (block height) of this round.
-        sequence_number: SequenceNumber,
+        leader_term: LeaderTerm,
+        /// The current block number (block height) of this round.
+        block_number: BlockNumber,
         /// The hash of this rounds block.
         block_hash: BlockHash,
         /// The signatures of all (2f+1) `AckAppend` signatures.
@@ -66,14 +66,14 @@ pub enum ConsensusMessage {
     /// A `ConsensusMessage` to propose a Leader Change because of faulty behaviour.
     ViewChange {
         /// The Leader Term we want to swap to.
-        new_leader_term: usize,
+        new_leader_term: LeaderTerm,
     },
     /// A `ConsensusMessage` signalizing the sender RPU that another RPU received the `ViewChange` message.
     AckViewChange,
     /// A `ConsensusMessage` signalizing that the new leader has accepted their term.
     NewView {
         /// The Leader term we swapped to.
-        leader_term: usize,
+        leader_term: LeaderTerm,
         /// The ViewChange signatures of 2f + 1 Replicas
         view_change_signatures: Vec<(PeerId, Signature)>,
     },
@@ -88,17 +88,12 @@ impl Signable for ConsensusMessage {
         match self {
             Self::Append {
                 leader_term,
-                sequence_number,
+                block_number,
                 block_hash,
                 ackprepare_signatures,
                 ..
             } => {
-                let sign_data = (
-                    leader_term,
-                    sequence_number,
-                    block_hash,
-                    ackprepare_signatures,
-                );
+                let sign_data = (leader_term, block_number, block_hash, ackprepare_signatures);
                 postcard::to_stdvec(&sign_data)
             }
             _ => postcard::to_stdvec(self),

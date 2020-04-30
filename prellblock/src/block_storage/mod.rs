@@ -1,7 +1,7 @@
 //! The `BlockStorage` is a permantent storage for validated Blocks persisted on disk.
 
 use crate::{
-    consensus::{Block, BlockHash, SequenceNumber},
+    consensus::{Block, BlockHash, BlockNumber},
     BoxError,
 };
 
@@ -40,14 +40,14 @@ impl BlockStorage {
 
     /// Write a value to the store.
     ///
-    /// The data will be accessible by the sequence number?.
+    /// The data will be accessible by the block number?.
     pub fn write_block(&self, block: &Block) -> Result<(), BoxError> {
         let (last_block_hash, last_block_height) =
             if let Some(last_block) = self.read(..).next_back() {
                 let last_block = last_block?;
                 (last_block.hash(), last_block.body.height)
             } else {
-                (BlockHash::default(), 0)
+                (BlockHash::default(), BlockNumber::default())
             };
 
         if last_block_hash != block.body.prev_block_hash {
@@ -60,21 +60,21 @@ impl BlockStorage {
 
         let value = postcard::to_stdvec(&block)?;
         self.blocks
-            .insert(block.sequence_number().to_be_bytes(), value)?;
+            .insert(block.block_number().to_be_bytes(), value)?;
         Ok(())
     }
 
     /// Read a range of blocks from the store.
     pub fn read<R>(&self, range: R) -> impl DoubleEndedIterator<Item = Result<Block, BoxError>>
     where
-        R: RangeBounds<SequenceNumber>,
+        R: RangeBounds<BlockNumber>,
     {
         let start = range.start_bound();
         let end = range.end_bound();
         self.blocks
             .range((
-                map_bound_from_sequence_number(start),
-                map_bound_from_sequence_number(end),
+                map_bound_from_block_number(start),
+                map_bound_from_block_number(end),
             ))
             .values()
             .map(|result| {
@@ -85,7 +85,7 @@ impl BlockStorage {
     }
 }
 
-fn map_bound_from_sequence_number(bound: Bound<&SequenceNumber>) -> Bound<[u8; 8]> {
+fn map_bound_from_block_number(bound: Bound<&BlockNumber>) -> Bound<impl AsRef<[u8]>> {
     map_bound(bound, |v| v.to_be_bytes())
 }
 

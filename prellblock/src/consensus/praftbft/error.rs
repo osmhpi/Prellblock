@@ -1,5 +1,5 @@
 use super::state::Phase;
-use crate::consensus::SequenceNumber;
+use crate::consensus::{BlockNumber, LeaderTerm};
 use err_derive::Error;
 use pinxit::PeerId;
 
@@ -31,25 +31,25 @@ pub enum Error {
     #[error(display = "The RPU {} is not the current leader.", 0)]
     WrongLeader(PeerId),
 
-    /// The current sequence number is already higher.
-    #[error(display = "Sequence number {} is too low.", 0)]
-    SequenceNumberTooSmall(SequenceNumber),
+    /// The current block number is already higher.
+    #[error(display = "Block number {} is too low.", 0)]
+    BlockNumberTooSmall(BlockNumber),
 
-    /// The current sequence number is already higher.
-    #[error(display = "Sequence number {} is too big.", 0)]
-    SequenceNumberTooBig(SequenceNumber),
+    /// The current block number is already higher.
+    #[error(display = "Block number {} is too big.", 0)]
+    BlockNumberTooBig(BlockNumber),
 
-    /// The current sequence number is already higher.
+    /// The current block number is already higher.
     #[error(display = "Request ViewChange to term {} failed: term too low.", 0)]
-    LeaderTermTooSmall(usize),
+    LeaderTermTooSmall(LeaderTerm),
 
-    /// The current sequence number is already higher.
+    /// The current block number is already higher.
     #[error(display = "Request ViewChange to term {} failed: term too high.", 0)]
-    LeaderTermTooBig(usize),
+    LeaderTermTooBig(LeaderTerm),
 
-    /// The current sequence number is different from the expected one.
-    #[error(display = "Sequence number {} is wrong.", 0)]
-    WrongSequenceNumber(SequenceNumber),
+    /// The current block number is different from the expected one.
+    #[error(display = "Block number {} is wrong.", 0)]
+    WrongBlockNumber(BlockNumber),
 
     /// This peer is not allowed to take part in the consensus.
     #[error(
