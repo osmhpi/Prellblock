@@ -21,6 +21,7 @@ pub use error::Error;
 use crate::{
     block_storage::BlockStorage,
     peer::{message as peer_message, Sender},
+    world_state::WorldStateService,
     BoxError,
 };
 use flatten_vec::FlattenVec;
@@ -51,6 +52,7 @@ pub struct PRaftBFT {
     queue: Arc<Mutex<FlattenVec<Signed<Transaction>>>>,
     leader_notifier: Arc<Notify>,
     follower_state: Mutex<FollowerState>,
+    world_state: WorldStateService,
     // For unblocking waiting out-of-order messages.
     sequence_changed_notifier: watch::Sender<()>,
     sequence_changed_receiver: watch::Receiver<()>,
@@ -77,6 +79,7 @@ impl PRaftBFT {
         identity: Identity,
         peers: Vec<(PeerId, SocketAddr)>,
         block_storage: BlockStorage,
+        world_state: WorldStateService,
     ) -> Arc<Self> {
         log::debug!("Started consensus with peers: {:?}", peers);
         let mut exists = false;
@@ -89,7 +92,7 @@ impl PRaftBFT {
 
         let broadcast_meta = BroadcastMeta { peers, identity };
 
-        let follower_state = FollowerState::new();
+        let follower_state = FollowerState::from_world_state(&world_state.get());
         let leader_state = LeaderState::new(&follower_state);
         let leader_term = follower_state.leader_term;
         let follower_state = Mutex::new(follower_state);
@@ -102,6 +105,7 @@ impl PRaftBFT {
             queue: Arc::default(),
             leader_notifier: leader_notifier.clone(),
             follower_state,
+            world_state,
             sequence_changed_notifier,
             sequence_changed_receiver,
             broadcast_meta,

@@ -300,14 +300,19 @@ impl PRaftBFT {
 
         follower_state.sequence = sequence_number;
         let _ = self.sequence_changed_notifier.broadcast(());
-
         // Write Block to BlockStorage
-        self.block_storage
-            .write_block(&Block {
-                body,
-                signatures: ackappend_signatures,
-            })
-            .unwrap();
+        let block = Block {
+            body,
+            signatures: ackappend_signatures,
+        };
+
+        self.block_storage.write_block(&block).unwrap();
+
+        // Write Block to WorldState
+        let mut world_state = self.world_state.get_writable().await;
+        world_state.apply_block(block).unwrap();
+        world_state.save();
+
         log::debug!(
             "Committed block #{} with hash {:?}.",
             sequence_number,

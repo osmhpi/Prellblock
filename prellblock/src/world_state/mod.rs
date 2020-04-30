@@ -6,9 +6,13 @@ mod account;
 
 pub(crate) use account::Account;
 
-use crate::{block_storage::BlockStorage, consensus::BlockHash, BoxError};
+use crate::{
+    block_storage::BlockStorage,
+    consensus::{Block, BlockHash},
+    BoxError,
+};
 use im::HashMap;
-use pinxit::PeerId;
+use pinxit::{PeerId, Signed};
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -50,28 +54,8 @@ impl WorldStateService {
     pub fn from_block_storage(block_storage: &BlockStorage) -> Result<Self, BoxError> {
         let mut world_state = WorldState::default();
 
-        let mut last_block_hash = BlockHash::default();
         for block in block_storage.read(..) {
-            let block = block?;
-            if block.body.prev_block_hash != last_block_hash {
-                return Err("Last block hash is not equal to hash of last block.".into());
-            }
-            // TODO: validate block (peers, signatures, etc)
-            last_block_hash = block.body.hash();
-            for transaction in block.body.transactions {
-                let signer = transaction.signer().clone();
-                match transaction.unverified() {
-                    Transaction::KeyValue { key, value } => {
-                        if let Some(namespace) = world_state.data.get_mut(&signer) {
-                            namespace.insert(key, value);
-                        } else {
-                            let mut namespace = HashMap::new();
-                            namespace.insert(key, value);
-                            world_state.data.insert(signer, namespace);
-                        }
-                    }
-                }
-            }
+            world_state.apply_block(block?)?;
         }
 
         log::info!("Current WorldState: {:#}", world_state);
@@ -145,6 +129,10 @@ pub struct WorldState {
     pub accounts: HashMap<PeerId, Account>,
     /// Field storing the Transactiondata.
     pub data: HashMap<PeerId, HashMap<String, Vec<u8>>>,
+    /// Sequence number of the last `Block` applied to the `WorldState`.
+    pub sequence_number: u64,
+    /// Hash of the last `Block` in the `BlockStorage`.
+    pub last_block_hash: BlockHash,
 }
 
 impl WorldState {
@@ -161,6 +149,38 @@ impl WorldState {
         Self {
             accounts,
             data: HashMap::new(),
+            sequence_number: 0,
+            last_block_hash: BlockHash::default(),
+        }
+    }
+
+    /// Apply a block to the current world state.
+    pub fn apply_block(&mut self, block: Block) -> Result<(), BoxError> {
+        if block.body.prev_block_hash != self.last_block_hash {
+            return Err("Last block hash is not equal to hash of last block.".into());
+        }
+        // TODO: validate block (peers, signatures, etc)
+        self.last_block_hash = block.body.hash();
+        self.sequence_number = block.body.height;
+        for transaction in block.body.transactions {
+            self.apply_transaction(transaction);
+        }
+        Ok(())
+    }
+
+    /// Apply a transaction to the current world state.
+    pub fn apply_transaction(&mut self, transaction: Signed<Transaction>) {
+        let signer = transaction.signer().clone();
+        match transaction.unverified() {
+            Transaction::KeyValue { key, value } => {
+                if let Some(namespace) = self.data.get_mut(&signer) {
+                    namespace.insert(key, value);
+                } else {
+                    let mut namespace = HashMap::new();
+                    namespace.insert(key, value);
+                    self.data.insert(signer.clone(), namespace);
+                }
+            }
         }
     }
 }

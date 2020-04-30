@@ -102,7 +102,7 @@ async fn main() {
         world_state.save();
     }
 
-    let consensus = Consensus::new(identity, peers, block_storage).await;
+    let consensus = Consensus::new(identity, peers, block_storage, world_state.clone()).await;
 
     let broadcaster = Broadcaster::new(peer_addresses);
     let broadcaster = Arc::new(broadcaster);

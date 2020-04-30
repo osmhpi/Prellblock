@@ -6,6 +6,7 @@ use super::{
     ring_buffer::RingBuffer,
     Error,
 };
+use crate::world_state::WorldState;
 use pinxit::{PeerId, Signature};
 use std::collections::HashMap;
 
@@ -87,18 +88,17 @@ pub(super) struct FollowerState {
 const RING_BUFFER_SIZE: usize = 1024;
 
 impl FollowerState {
-    /// Create a new `FollowerState`.
-    pub(super) fn new() -> Self {
+    /// Create a new `FollowerState` from a `world_state`.
+    pub(super) fn from_world_state(world_state: &WorldState) -> Self {
+        let start = world_state.sequence_number;
         let mut state = Self {
             leader_term: 0,
-            sequence: 0,
-            round_states: RingBuffer::new(RoundState::default(), RING_BUFFER_SIZE, 0),
-            view_state: RingBuffer::new(ViewPhase::Waiting, RING_BUFFER_SIZE, 0),
+            sequence: start,
+            round_states: RingBuffer::new(RoundState::default(), RING_BUFFER_SIZE, start),
+            view_state: RingBuffer::new(ViewPhase::Waiting, RING_BUFFER_SIZE, start),
         };
 
-        // TODO: remove this fake genesis block
-        let fake_genesis_block_hash = BlockHash::default();
-        state.round_state_mut(0).unwrap().phase = Phase::Committed(fake_genesis_block_hash);
+        state.round_state_mut(start).unwrap().phase = Phase::Committed(world_state.last_block_hash);
 
         state
     }

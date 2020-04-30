@@ -31,15 +31,15 @@ async fn test_prellblock() {
     peers.push((identity.id().clone(), turi_address));
 
     let block_storage = BlockStorage::new("../blocks/test-prellblock").unwrap();
+    let world_state = WorldStateService::default();
 
-    let consensus = Consensus::new(identity, peers, block_storage).await;
+    let consensus = Consensus::new(identity, peers, block_storage, world_state.clone()).await;
 
     let broadcaster = Broadcaster::new(peer_addresses);
     let broadcaster = Arc::new(broadcaster);
 
     let batcher = Batcher::new(broadcaster);
 
-    let world_state = WorldStateService::default();
     let permission_checker = PermissionChecker::new(world_state);
     let permission_checker = Arc::new(permission_checker);
 
