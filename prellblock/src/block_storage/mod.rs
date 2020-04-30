@@ -1,6 +1,9 @@
 //! The `BlockStorage` is a permantent storage for validated Blocks persisted on disk.
 
-use crate::{consensus::Block, BoxError};
+use crate::{
+    consensus::{Block, BlockHash},
+    BoxError,
+};
 
 use sled::{Config, Tree};
 use std::ops::{Bound, RangeBounds};
@@ -39,6 +42,22 @@ impl BlockStorage {
     ///
     /// The data will be accessible by the sequence number?.
     pub fn write_block(&self, block: &Block) -> Result<(), BoxError> {
+        let (last_block_hash, last_block_height) =
+            if let Some(last_block) = self.read(..).next_back() {
+                let last_block = last_block?;
+                (last_block.hash(), last_block.body.height)
+            } else {
+                (BlockHash::default(), 0)
+            };
+
+        if last_block_hash != block.body.prev_block_hash {
+            return Err("Block hash does not match the previous block hash.".into());
+        }
+
+        if last_block_height + 1 != block.body.height {
+            return Err("Block height does not fit the previous block height.".into());
+        }
+
         let value = postcard::to_stdvec(&block)?;
         self.blocks
             .insert(block.sequence_number().to_be_bytes(), value)?;
@@ -46,7 +65,7 @@ impl BlockStorage {
     }
 
     /// Read a range of blocks from the store.
-    pub fn read<R>(&self, range: R) -> impl Iterator<Item = Result<Block, BoxError>>
+    pub fn read<R>(&self, range: R) -> impl DoubleEndedIterator<Item = Result<Block, BoxError>>
     where
         R: RangeBounds<u64>,
     {

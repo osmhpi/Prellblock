@@ -6,7 +6,7 @@ mod account;
 
 pub(crate) use account::Account;
 
-use crate::{block_storage::BlockStorage, BoxError};
+use crate::{block_storage::BlockStorage, consensus::BlockHash, BoxError};
 use im::HashMap;
 use pinxit::PeerId;
 use prellblock_client_api::Transaction;
@@ -50,8 +50,14 @@ impl WorldStateService {
     pub fn from_block_storage(block_storage: &BlockStorage) -> Result<Self, BoxError> {
         let mut world_state = WorldState::default();
 
+        let mut last_block_hash = BlockHash::default();
         for block in block_storage.read(..) {
             let block = block?;
+            if block.body.prev_block_hash != last_block_hash {
+                return Err("Last block hash is not equal to hash of last block.".into());
+            }
+            // TODO: validate block (peers, signatures, etc)
+            last_block_hash = block.body.hash();
             for transaction in block.body.transactions {
                 let signer = transaction.signer().clone();
                 match transaction.unverified() {
