@@ -99,6 +99,11 @@ impl<T> Signed<T> {
     pub const fn signer(&self) -> &PeerId {
         &self.signer
     }
+
+    /// Get the signature of the message.
+    pub const fn signature(&self) -> &Signature {
+        &self.signature
+    }
 }
 
 impl<T> Signed<T>
@@ -115,6 +120,16 @@ where
     pub fn verify_ref(&self) -> Result<VerifiedRef<T>, Error> {
         self.signer.verify(&self.body, &self.signature)?;
         Ok(VerifiedRef(self))
+    }
+
+    /// Get the unverified body.
+    pub fn unverified(self) -> T {
+        self.body
+    }
+
+    /// Get the unverified body.
+    pub fn unverified_ref(&self) -> &T {
+        &self.body
     }
 }
 

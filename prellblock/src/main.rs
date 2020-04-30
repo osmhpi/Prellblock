@@ -95,6 +95,12 @@ async fn main() {
     let identity = Identity::from_hex(&hex_identity).expect("Identity could not be loaded.");
 
     let block_storage = BlockStorage::new(&format!("./blocks/{}", opt.name)).unwrap();
+    let world_state = WorldStateService::from_block_storage(&block_storage).unwrap();
+    {
+        let mut world_state = world_state.get_writable().await;
+        world_state.accounts = WorldState::with_fake_data().accounts;
+        world_state.save();
+    }
 
     let consensus = Consensus::new(identity, peers, block_storage).await;
 
@@ -103,7 +109,6 @@ async fn main() {
 
     let batcher = Batcher::new(broadcaster);
 
-    let world_state = WorldStateService::with_world_state(WorldState::with_fake_data());
     let permission_checker = PermissionChecker::new(world_state);
     let permission_checker = Arc::new(permission_checker);
 

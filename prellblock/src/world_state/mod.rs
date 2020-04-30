@@ -6,8 +6,10 @@ mod account;
 
 pub(crate) use account::Account;
 
+use crate::{block_storage::BlockStorage, BoxError};
 use im::HashMap;
 use pinxit::PeerId;
+use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt, fs,
@@ -43,6 +45,32 @@ impl WorldStateService {
             world_state: Arc::new(world_state.into()),
             writer: Arc::new(Semaphore::new(1)),
         }
+    }
+    /// Create a new `WorldStateService` initalized with the blocks from a `block_storage`.
+    pub fn from_block_storage(block_storage: &BlockStorage) -> Result<Self, BoxError> {
+        let mut world_state = WorldState::default();
+
+        for block in block_storage.read(..) {
+            let block = block?;
+            for transaction in block.body.transactions {
+                let signer = transaction.signer().clone();
+                match transaction.unverified() {
+                    Transaction::KeyValue { key, value } => {
+                        if let Some(namespace) = world_state.data.get_mut(&signer) {
+                            namespace.insert(key, value);
+                        } else {
+                            let mut namespace = HashMap::new();
+                            namespace.insert(key, value);
+                            world_state.data.insert(signer, namespace);
+                        }
+                    }
+                }
+            }
+        }
+
+        log::info!("Current WorldState: {:#}", world_state);
+
+        Ok(Self::with_world_state(world_state))
     }
 
     /// Create a new `WorldStateService`.
