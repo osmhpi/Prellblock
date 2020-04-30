@@ -1,4 +1,5 @@
 use super::state::Phase;
+use crate::consensus::SequenceNumber;
 use err_derive::Error;
 use pinxit::PeerId;
 
@@ -32,11 +33,11 @@ pub enum Error {
 
     /// The current sequence number is already higher.
     #[error(display = "Sequence number {} is too low.", 0)]
-    SequenceNumberTooSmall(u64),
+    SequenceNumberTooSmall(SequenceNumber),
 
     /// The current sequence number is already higher.
     #[error(display = "Sequence number {} is too big.", 0)]
-    SequenceNumberTooBig(u64),
+    SequenceNumberTooBig(SequenceNumber),
 
     /// The current sequence number is already higher.
     #[error(display = "Request ViewChange to term {} failed: term too low.", 0)]
@@ -48,7 +49,7 @@ pub enum Error {
 
     /// The current sequence number is different from the expected one.
     #[error(display = "Sequence number {} is wrong.", 0)]
-    WrongSequenceNumber(u64),
+    WrongSequenceNumber(SequenceNumber),
 
     /// This peer is not allowed to take part in the consensus.
     #[error(

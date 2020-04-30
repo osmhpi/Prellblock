@@ -133,6 +133,15 @@ where
     }
 }
 
+impl<T> Eq for Signed<T> {}
+
+impl<T> PartialEq for Signed<T> {
+    fn eq(&self, other: &Self) -> bool {
+        // Comparing the signatures should be enough.
+        self.signature == other.signature
+    }
+}
+
 /// A verified signed message.
 pub struct Verified<T>(Signed<T>);
 

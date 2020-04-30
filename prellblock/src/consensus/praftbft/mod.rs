@@ -8,7 +8,6 @@
 #![allow(clippy::mutex_atomic)]
 
 mod error;
-mod flatten_vec;
 mod follower;
 mod leader;
 pub mod message;
@@ -24,7 +23,6 @@ use crate::{
     world_state::WorldStateService,
     BoxError,
 };
-use flatten_vec::FlattenVec;
 use futures::{stream::FuturesUnordered, StreamExt};
 use im::Vector;
 use leader::Leader;
@@ -32,14 +30,17 @@ use message::ConsensusMessage;
 use pinxit::{Identity, PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
 use state::{FollowerState, LeaderState};
-use std::{net::SocketAddr, ops::Deref, sync::Arc};
-use tokio::sync::{watch, Mutex, Notify};
+use std::{
+    collections::VecDeque, iter::FromIterator, net::SocketAddr, ops::Deref, sync::Arc,
+    time::Instant,
+};
+use tokio::sync::{watch, Mutex, Notify, RwLock};
 
 const MAX_TRANSACTIONS_PER_BLOCK: usize = 4000;
 
 type ViewChangeSignatures = Vec<(PeerId, Signature)>;
 
-/// Prellblock Raft BFT consensus algorithm.
+type Queue = VecDeque<(Instant, Signed<Transaction>)>;
 ///
 /// See the [paper](https://www.scs.stanford.edu/17au-cs244b/labs/projects/clow_jiang.pdf).
 pub struct PRaftBFT {
@@ -50,7 +51,7 @@ pub struct PRaftBFT {
     // - Nachrichten über Peer Sender senden
     // - Nachrichten von PeerInbox empfangen
     // - fertige Blöcke übergeben an prellblock
-    queue: Arc<Mutex<FlattenVec<Signed<Transaction>>>>,
+    queue: Arc<RwLock<Queue>>,
     leader_notifier: Arc<Notify>,
     follower_state: Mutex<FollowerState>,
     world_state: WorldStateService,
@@ -58,9 +59,9 @@ pub struct PRaftBFT {
     sequence_changed_notifier: watch::Sender<()>,
     sequence_changed_receiver: watch::Receiver<()>,
     broadcast_meta: BroadcastMeta,
-    view_change_sender: watch::Sender<usize>,
-    view_change_receiver: watch::Receiver<usize>,
-    leader_term_sender: watch::Sender<(usize, ViewChangeSignatures)>,
+    new_view_sender: watch::Sender<usize>,
+    new_view_receiver: watch::Receiver<usize>,
+    enough_view_changes_sender: watch::Sender<(usize, ViewChangeSignatures)>,
     block_storage: BlockStorage,
 }
 
@@ -103,8 +104,8 @@ impl PRaftBFT {
         let follower_state = Mutex::new(follower_state);
         let leader_notifier = Arc::new(Notify::new());
         let (sequence_changed_notifier, sequence_changed_receiver) = watch::channel(());
-        let (view_change_sender, view_change_receiver) = watch::channel(leader_term);
-        let (leader_term_sender, leader_term_receiver) =
+        let (new_view_sender, new_view_receiver) = watch::channel(leader_term);
+        let (enough_view_changes_sender, enough_view_changes_receiver) =
             watch::channel((leader_term, ViewChangeSignatures::new()));
         let praftbft = Self {
             queue: Arc::default(),
@@ -114,9 +115,9 @@ impl PRaftBFT {
             sequence_changed_notifier,
             sequence_changed_receiver,
             broadcast_meta,
-            view_change_sender,
-            view_change_receiver,
-            leader_term_sender,
+            new_view_sender,
+            new_view_receiver,
+            enough_view_changes_sender,
             block_storage,
         };
 
@@ -127,15 +128,26 @@ impl PRaftBFT {
             leader_state,
         };
 
-        tokio::spawn(leader.process_transactions(leader_notifier, leader_term_receiver));
-
+        tokio::spawn(leader.process_transactions(leader_notifier, enough_view_changes_receiver));
+        {
+            let praftbft_clone = praftbft.clone();
+            tokio::spawn(async move {
+                praftbft_clone
+                    .censorship_checker(praftbft_clone.new_view_receiver.clone())
+                    .await;
+            });
+        }
         praftbft
     }
 
     /// Stores incoming `Transaction`s in the Consensus' `queue`.
     pub async fn take_transactions(&self, transactions: Vec<Signed<Transaction>>) {
-        let mut queue = self.queue.lock().await;
-        queue.push(transactions);
+        // Add timestamp and sequence number at time of arrival for censorship protection.
+        let new_entries = transactions
+            .into_iter()
+            .map(|transaction| (Instant::now(), transaction));
+        let mut new_entries = VecDeque::from_iter(new_entries);
+        self.queue.write().await.append(&mut new_entries);
         self.leader_notifier.notify();
     }
 

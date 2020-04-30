@@ -24,7 +24,7 @@ define_api! {
 }
 
 /// A blockchain transaction for prellblock.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Transaction {
     /// Set a `key` to a `value`.
     KeyValue {

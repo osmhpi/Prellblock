@@ -1,7 +1,7 @@
 //! Contains the states used in the consensus.
 
 use super::{
-    super::{BlockHash, Body},
+    super::{BlockHash, Body, SequenceNumber},
     message::ConsensusMessage,
     ring_buffer::RingBuffer,
     Error,
@@ -80,7 +80,7 @@ pub(super) struct ViewPhaseMeta {
 
 pub(super) struct FollowerState {
     pub(super) leader_term: usize,
-    pub(super) sequence: u64,
+    pub(super) sequence: SequenceNumber,
     pub(super) round_states: RingBuffer<RoundState>,
     pub(super) view_state: RingBuffer<ViewPhase>,
 }
@@ -107,7 +107,7 @@ impl FollowerState {
     pub(super) fn verify_message_meta(
         &self,
         leader_term: usize,
-        sequence_number: u64,
+        sequence_number: SequenceNumber,
     ) -> Result<(), Error> {
         // We only handle the current leader term.
         if leader_term != self.leader_term {
@@ -127,14 +127,14 @@ impl FollowerState {
 
     /// Get the `RoundState` for the given `sequence` if it exists.
     /// This function is necessary because `ConsensusMessage`s can arrive out of order.
-    pub fn round_state(&self, sequence: u64) -> Result<&RoundState, Error> {
+    pub fn round_state(&self, sequence: SequenceNumber) -> Result<&RoundState, Error> {
         self.round_states
             .get(sequence)
             .ok_or(Error::SequenceNumberTooBig(sequence))
     }
 
     /// Set the `RoundState` for a given `sequence`.
-    pub fn round_state_mut(&mut self, sequence: u64) -> Result<&mut RoundState, Error> {
+    pub fn round_state_mut(&mut self, sequence: SequenceNumber) -> Result<&mut RoundState, Error> {
         self.round_states
             .get_mut(sequence)
             .ok_or(Error::SequenceNumberTooBig(sequence))
@@ -157,7 +157,7 @@ impl FollowerState {
         Ok(())
     }
 
-    fn block_hash(&self, index: u64) -> BlockHash {
+    fn block_hash(&self, index: SequenceNumber) -> BlockHash {
         if let Some(round_state) = self.round_states.get(index) {
             match &round_state.phase {
                 Phase::Committed(last_block_hash) => *last_block_hash,
@@ -176,7 +176,7 @@ impl FollowerState {
 
 #[derive(Default)]
 pub(super) struct LeaderState {
-    pub(super) sequence: u64,
+    pub(super) sequence: SequenceNumber,
     pub(super) last_block_hash: BlockHash,
     pub(super) leader_term: usize,
 }

@@ -8,7 +8,7 @@ pub(crate) use account::Account;
 
 use crate::{
     block_storage::BlockStorage,
-    consensus::{Block, BlockHash},
+    consensus::{Block, BlockHash, SequenceNumber},
     BoxError,
 };
 use im::{HashMap, Vector};
@@ -135,7 +135,7 @@ pub struct WorldState {
     /// Field storing the Transactiondata.
     pub data: HashMap<PeerId, HashMap<String, Vec<u8>>>,
     /// Sequence number of the last `Block` applied to the `WorldState`.
-    pub sequence_number: u64,
+    pub sequence_number: SequenceNumber,
     /// Hash of the last `Block` in the `BlockStorage`.
     pub last_block_hash: BlockHash,
 }

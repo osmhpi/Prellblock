@@ -33,7 +33,7 @@ impl PRaftBFT {
             peer_id.verify(&view_change_message, &signature)?
         }
 
-        self.view_change_sender.broadcast(leader_term).unwrap();
+        self.new_view_sender.broadcast(leader_term).unwrap();
         self.leader_notifier.notify();
 
         Ok(ConsensusMessage::AckNewView)
@@ -133,7 +133,7 @@ impl PRaftBFT {
                     // If this is the leader broadcast wake up leader task.
                     if self.is_current_leader(new_leader_term, self.peer_id()) {
                         // Notify leader task to begin to work.
-                        self.leader_term_sender
+                        self.enough_view_changes_sender
                             .broadcast((
                                 new_leader_term,
                                 messages
@@ -143,16 +143,16 @@ impl PRaftBFT {
                             ))
                             .expect("running leader task");
                     } else {
-                        self.leader_term_sender
+                        self.enough_view_changes_sender
                             .broadcast((new_leader_term, Vec::new()))
                             .expect("running leader task");
                     }
 
-                    let mut view_changed = *self.view_change_receiver.borrow();
-                    let mut view_change_receiver = self.view_change_receiver.clone();
+                    let mut view_changed = *self.new_view_receiver.borrow();
+                    let mut new_view_receiver = self.new_view_receiver.clone();
                     let timeout_result = tokio::time::timeout(Duration::from_millis(5000), async {
                         while view_changed < new_leader_term {
-                            view_changed = view_change_receiver.recv().await.unwrap();
+                            view_changed = new_view_receiver.recv().await.unwrap();
                         }
                     })
                     .await;

@@ -176,8 +176,6 @@ where
     }
 
     async fn handle_request(&self, addr: &SocketAddr, req: &[u8]) -> Result<Vec<u8>, BoxError> {
-        // TODO: Remove this.
-        let _ = self;
         // Deserialize request.
         let req: T = postcard::from_bytes(req)?;
         log::trace!("Received request from {}: {:?}", addr, req);

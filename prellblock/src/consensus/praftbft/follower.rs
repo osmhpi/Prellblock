@@ -1,5 +1,5 @@
 use super::{
-    super::{Block, BlockHash, Body},
+    super::{Block, BlockHash, Body, SequenceNumber},
     error::PhaseName,
     message::ConsensusMessage,
     state::{FollowerState, Phase, PhaseMeta, RoundState},
@@ -7,14 +7,21 @@ use super::{
 };
 use pinxit::{PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
-use tokio::sync::MutexGuard;
+use std::time::Duration;
+use tokio::{
+    sync::{watch, MutexGuard},
+    time,
+};
+
+// After this amount of time a transaction should be committed.
+const CENSORSHIP_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[allow(clippy::single_match_else)]
 impl PRaftBFT {
     /// Wait until we reached the sequence number the message is at.
     async fn follower_state_in_sequence(
         &self,
-        sequence_number: u64,
+        sequence_number: SequenceNumber,
     ) -> MutexGuard<'_, FollowerState> {
         let mut receiver = self.sequence_changed_receiver.clone();
         loop {
@@ -32,7 +39,7 @@ impl PRaftBFT {
         &self,
         peer_id: &PeerId,
         leader_term: usize,
-        sequence_number: u64,
+        sequence_number: SequenceNumber,
         block_hash: BlockHash,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state_in_sequence(sequence_number).await;
@@ -76,7 +83,7 @@ impl PRaftBFT {
         &self,
         peer_id: &PeerId,
         leader_term: usize,
-        sequence_number: u64,
+        sequence_number: SequenceNumber,
         block_hash: BlockHash,
         ackprepare_signatures: Vec<(PeerId, Signature)>,
         data: Vec<Signed<Transaction>>,
@@ -192,7 +199,7 @@ impl PRaftBFT {
         &self,
         peer_id: &PeerId,
         leader_term: usize,
-        sequence_number: u64,
+        sequence_number: SequenceNumber,
         block_hash: BlockHash,
         ackappend_signatures: Vec<(PeerId, Signature)>,
     ) -> Result<ConsensusMessage, Error> {
@@ -219,6 +226,7 @@ impl PRaftBFT {
         // drop(follower_state);
         // self.broadcast_view_change(new_leader_term).await.unwrap();
     }
+
     /// This function is used for out-of-order message reception and
     /// applying these commits.
     async fn handle_commit_message_inner(
@@ -226,7 +234,7 @@ impl PRaftBFT {
         follower_state: &mut FollowerState,
         peer_id: &PeerId,
         leader_term: usize,
-        sequence_number: u64,
+        sequence_number: SequenceNumber,
         block_hash: BlockHash,
         ackappend_signatures: Vec<(PeerId, Signature)>,
     ) -> Result<ConsensusMessage, Error> {
@@ -300,13 +308,19 @@ impl PRaftBFT {
 
         follower_state.sequence = sequence_number;
         let _ = self.sequence_changed_notifier.broadcast(());
-        // Write Block to BlockStorage
+
         let block = Block {
             body,
             signatures: ackappend_signatures,
         };
-
+        // Write Block to BlockStorage
         self.block_storage.write_block(&block).unwrap();
+
+        // Remove committed transactions from our queue.
+        self.queue
+            .write()
+            .await
+            .retain(|(_, transaction)| !block.body.transactions.contains(transaction));
 
         // Write Block to WorldState
         let mut world_state = self.world_state.get_writable().await;
@@ -392,5 +406,33 @@ impl PRaftBFT {
 
         let signed_response = response.sign(&self.broadcast_meta.identity).unwrap();
         Ok(signed_response)
+    }
+
+    /// This is woken up after a timeout or a specific
+    /// number of blocks commited.
+    pub(super) async fn censorship_checker(&self, mut new_view_receiver: watch::Receiver<usize>) {
+        loop {
+            let timeout_result = time::timeout(CENSORSHIP_TIMEOUT, new_view_receiver.recv()).await;
+            // If there was no timeout, a leader change happened.
+            // Give the leader enough time by sleeping again.
+            if timeout_result.is_ok() {
+                continue;
+            }
+
+            let queue = self.queue.read().await;
+            // Iterating over the queue should be pretty fast.
+            // If there are no old transactions, we should only have
+            // a few transactions to iterate over.
+            let has_old_transactions = queue
+                .iter()
+                .any(|(timestamp, _)| timestamp.elapsed() > CENSORSHIP_TIMEOUT);
+            drop(queue);
+
+            // do stomething if there where old transactions
+            if has_old_transactions {
+                let leader = self.leader(self.follower_state.lock().await.leader_term);
+                log::warn!("Found censored transactions from leader {}.", leader);
+            }
+        }
     }
 }

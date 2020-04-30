@@ -2,6 +2,8 @@ use super::{
     super::Body, message::ConsensusMessage, state::LeaderState, PRaftBFT, ViewChangeSignatures,
     MAX_TRANSACTIONS_PER_BLOCK,
 };
+use pinxit::Signed;
+use prellblock_client_api::Transaction;
 use std::{ops::Deref, sync::Arc, time::Duration};
 use tokio::{
     sync::{watch, Notify},
@@ -29,7 +31,7 @@ impl Leader {
     pub(super) async fn process_transactions(
         mut self,
         notifier: Arc<Notify>,
-        mut leader_term_receiver: watch::Receiver<(usize, ViewChangeSignatures)>,
+        mut enough_view_changes_receiver: watch::Receiver<(usize, ViewChangeSignatures)>,
     ) {
         loop {
             // Wait when we are not the leader.
@@ -37,10 +39,10 @@ impl Leader {
             let mut leader_term = self
                 .leader_state
                 .leader_term
-                .max(leader_term_receiver.borrow().0);
+                .max(enough_view_changes_receiver.borrow().0);
             while !self.is_current_leader(leader_term, self.peer_id()) {
                 log::trace!("I am not the current leader.");
-                let new_data = leader_term_receiver.recv().await.unwrap();
+                let new_data = enough_view_changes_receiver.recv().await.unwrap();
                 leader_term = new_data.0;
                 view_change_signatures = Some(new_data.1);
             }
@@ -71,7 +73,7 @@ impl Leader {
                     leader_term,
                     sequence
                 );
-                self.queue.lock().await.clear();
+
                 self.leader_state.leader_term = leader_term;
                 self.leader_state.sequence = sequence;
                 self.leader_state.last_block_hash = last_block_hash;
@@ -86,11 +88,11 @@ impl Leader {
                 Err(_) => 1,
             };
 
-            while self.queue.lock().await.len() >= minimum_queue_len {
-                let mut transactions = Vec::with_capacity(MAX_TRANSACTIONS_PER_BLOCK);
+            while self.queue.read().await.len() >= minimum_queue_len {
+                let mut transactions: Vec<Signed<Transaction>> = Vec::new();
 
                 // TODO: Check size of transactions cumulated.
-                while let Some(transaction) = self.queue.lock().await.next() {
+                while let Some((_, transaction)) = self.queue.write().await.pop_front() {
                     // pack block
                     // TODO: Validate transaction.
 
@@ -100,6 +102,7 @@ impl Leader {
                         break;
                     }
                 }
+
                 let sequence_number = self.leader_state.sequence + 1;
                 let body = Body {
                     height: sequence_number,

@@ -1,4 +1,4 @@
-use crate::consensus::BlockHash;
+use crate::consensus::{BlockHash, SequenceNumber};
 use pinxit::{PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ pub enum ConsensusMessage {
         /// The current number of the view (selected leader).
         leader_term: usize,
         /// The current sequence number (block height) of this round.
-        sequence_number: u64,
+        sequence_number: SequenceNumber,
         /// The hash of this rounds block.
         block_hash: BlockHash,
     },
@@ -22,7 +22,7 @@ pub enum ConsensusMessage {
         /// The current number of the view (selected leader).
         leader_term: usize,
         /// The current sequence number (block height) of this round.
-        sequence_number: u64,
+        sequence_number: SequenceNumber,
         /// The hash of this rounds block.
         block_hash: BlockHash,
     },
@@ -31,7 +31,7 @@ pub enum ConsensusMessage {
         /// The current number of the view (selected leader).
         leader_term: usize,
         /// The current sequence number (block height) of this round.
-        sequence_number: u64,
+        sequence_number: SequenceNumber,
         /// The hash of this rounds block.
         block_hash: BlockHash,
         /// The signatures of all (2f+1) `AckPrepare` signatures.
@@ -46,7 +46,7 @@ pub enum ConsensusMessage {
         /// The current number of the view (selected leader).
         leader_term: usize,
         /// The current sequence number (block height) of this round.
-        sequence_number: u64,
+        sequence_number: SequenceNumber,
         /// The hash of this rounds block.
         block_hash: BlockHash,
     },
@@ -55,7 +55,7 @@ pub enum ConsensusMessage {
         /// The current number of the view (selected leader).
         leader_term: usize,
         /// The current sequence number (block height) of this round.
-        sequence_number: u64,
+        sequence_number: SequenceNumber,
         /// The hash of this rounds block.
         block_hash: BlockHash,
         /// The signatures of all (2f+1) `AckAppend` signatures.

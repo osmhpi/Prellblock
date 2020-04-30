@@ -1,7 +1,7 @@
 //! The `BlockStorage` is a permantent storage for validated Blocks persisted on disk.
 
 use crate::{
-    consensus::{Block, BlockHash},
+    consensus::{Block, BlockHash, SequenceNumber},
     BoxError,
 };
 
@@ -67,12 +67,15 @@ impl BlockStorage {
     /// Read a range of blocks from the store.
     pub fn read<R>(&self, range: R) -> impl DoubleEndedIterator<Item = Result<Block, BoxError>>
     where
-        R: RangeBounds<u64>,
+        R: RangeBounds<SequenceNumber>,
     {
         let start = range.start_bound();
         let end = range.end_bound();
         self.blocks
-            .range((map_bound_from_u64(start), map_bound_from_u64(end)))
+            .range((
+                map_bound_from_sequence_number(start),
+                map_bound_from_sequence_number(end),
+            ))
             .values()
             .map(|result| {
                 let value = result?;
@@ -82,7 +85,7 @@ impl BlockStorage {
     }
 }
 
-fn map_bound_from_u64(bound: Bound<&u64>) -> Bound<[u8; 8]> {
+fn map_bound_from_sequence_number(bound: Bound<&SequenceNumber>) -> Bound<[u8; 8]> {
     map_bound(bound, |v| v.to_be_bytes())
 }
 

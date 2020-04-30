@@ -8,6 +8,9 @@ use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+/// The number of the block in the chain (=sequence).
+pub type SequenceNumber = u64;
+
 /// A `Block` stores transactions verified by the blockchain.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Block {
@@ -23,7 +26,7 @@ impl Block {
     }
 
     /// Return the `Block`s sequence number.
-    pub(crate) const fn sequence_number(&self) -> u64 {
+    pub(crate) const fn sequence_number(&self) -> SequenceNumber {
         self.body.height
     }
 }
@@ -32,7 +35,7 @@ impl Block {
 /// and an Array of the actual `Transaction`s with their corresponding Signature in the `Block`.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Body {
-    pub(crate) height: u64,
+    pub(crate) height: SequenceNumber,
     pub(crate) prev_block_hash: BlockHash,
     pub(crate) transactions: Vec<Signed<Transaction>>,
 }
