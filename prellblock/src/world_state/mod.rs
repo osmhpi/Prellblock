@@ -51,6 +51,7 @@ impl WorldStateService {
             writer: Arc::new(Semaphore::new(1)),
         }
     }
+
     /// Create a new `WorldStateService` initalized with the blocks from a `block_storage`.
     pub fn from_block_storage(block_storage: &BlockStorage) -> Result<Self, BoxError> {
         let mut world_state = WorldState::default();
@@ -59,7 +60,7 @@ impl WorldStateService {
             world_state.apply_block(block?)?;
         }
 
-        log::info!("Current WorldState: {:#}", world_state);
+        log::debug!("Current WorldState: {:#}", world_state);
 
         Ok(Self::with_world_state(world_state))
     }
@@ -100,6 +101,7 @@ pub struct WritableWorldState {
 impl WritableWorldState {
     /// Save the cahnged `WorldState`.
     pub fn save(self) {
+        log::trace!("Changed WorldState: {:#}", self.world_state);
         *self.shared_world_state.lock().unwrap() = self.world_state;
     }
 }
