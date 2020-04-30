@@ -1,5 +1,6 @@
 use balise::server::TlsIdentity;
 use futures::{select, FutureExt};
+use im::Vector;
 use pinxit::Identity;
 use prellblock::{
     batcher::Batcher,
@@ -24,18 +25,22 @@ async fn test_prellblock() {
     let turi_address: SocketAddr = "127.0.0.1:2480".parse().unwrap();
     let peer_address: SocketAddr = "127.0.0.1:3131".parse().unwrap();
 
-    let mut peers = Vec::new();
-    let peer_addresses = Vec::new();
+    let mut peers = Vector::new();
 
     let identity = Identity::generate();
-    peers.push((identity.id().clone(), turi_address));
+    peers.push_back((identity.id().clone(), peer_address));
 
     let block_storage = BlockStorage::new("../blocks/test-prellblock").unwrap();
     let world_state = WorldStateService::default();
+    {
+        let mut world_state = world_state.get_writable().await;
+        world_state.peers = peers;
+        world_state.save();
+    }
 
-    let consensus = Consensus::new(identity, peers, block_storage, world_state.clone()).await;
+    let consensus = Consensus::new(identity, block_storage, world_state.clone()).await;
 
-    let broadcaster = Broadcaster::new(peer_addresses);
+    let broadcaster = Broadcaster::new(world_state.clone());
     let broadcaster = Arc::new(broadcaster);
 
     let batcher = Batcher::new(broadcaster);

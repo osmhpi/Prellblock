@@ -26,6 +26,7 @@ use crate::{
 };
 use flatten_vec::FlattenVec;
 use futures::{stream::FuturesUnordered, StreamExt};
+use im::Vector;
 use leader::Leader;
 use message::ConsensusMessage;
 use pinxit::{Identity, PeerId, Signable, Signature, Signed};
@@ -77,20 +78,24 @@ impl PRaftBFT {
     /// **Warning:** This starts a new thread for processing transactions in the background.
     pub async fn new(
         identity: Identity,
-        peers: Vec<(PeerId, SocketAddr)>,
         block_storage: BlockStorage,
         world_state: WorldStateService,
     ) -> Arc<Self> {
-        log::debug!("Started consensus with peers: {:?}", peers);
-        let mut exists = false;
-        for (peer_id, _) in peers.clone() {
-            if identity.id() == &peer_id {
-                exists = true;
-            }
-        }
-        assert!(exists, "The identity is not part of the peers list.");
+        log::debug!("Started consensus.");
 
-        let broadcast_meta = BroadcastMeta { peers, identity };
+        assert!(
+            world_state
+                .get()
+                .peers
+                .iter()
+                .any(|(peer_id, _)| identity.id() == peer_id),
+            "The identity is not part of the peers list."
+        );
+
+        let broadcast_meta = BroadcastMeta {
+            identity,
+            world_state: world_state.clone(),
+        };
 
         let follower_state = FollowerState::from_world_state(&world_state.get());
         let leader_state = LeaderState::new(&follower_state);
@@ -143,8 +148,8 @@ impl PRaftBFT {
 
 #[derive(Clone)]
 pub struct BroadcastMeta {
-    peers: Vec<(PeerId, SocketAddr)>,
     identity: Identity,
+    world_state: WorldStateService,
 }
 
 impl BroadcastMeta {
@@ -153,21 +158,25 @@ impl BroadcastMeta {
         self.identity.id()
     }
 
-    /// The number of peers in the consensus.
-    fn peers_len(&self) -> usize {
-        self.peers.len()
+    fn peers(&self) -> Vector<(PeerId, SocketAddr)> {
+        self.world_state.get().peers
     }
 
-    fn peer_ids(&self) -> impl Iterator<Item = &PeerId> {
-        self.peers.iter().map(|(peer_id, _)| peer_id)
+    /// The number of peers in the consensus.
+    fn peers_len(&self) -> usize {
+        self.peers().len()
+    }
+
+    fn peer_ids(&self) -> impl Iterator<Item = PeerId> {
+        self.peers().into_iter().map(|(peer_id, _)| peer_id)
     }
 
     fn is_current_leader(&self, leader_term: usize, peer_id: &PeerId) -> bool {
-        peer_id.clone() == self.leader(leader_term).clone()
+        peer_id.clone() == self.leader(leader_term)
     }
 
-    fn leader(&self, leader_term: usize) -> &PeerId {
-        &self.peers[leader_term % self.peers_len()].0
+    fn leader(&self, leader_term: usize) -> PeerId {
+        self.peers()[leader_term % self.peers_len()].0.clone()
     }
 
     async fn broadcast_until_majority<F>(
@@ -183,7 +192,7 @@ impl BroadcastMeta {
 
         let mut futures = FuturesUnordered::new();
 
-        for &(_, peer_address) in &self.peers {
+        for (_, peer_address) in self.peers() {
             let signed_message = signed_message.clone();
             let verify_response = verify_response.clone();
 
@@ -227,7 +236,7 @@ impl BroadcastMeta {
     /// Check whether a number represents a supermajority (>2/3) compared
     /// to the total number of peers (`peer_count`) in the consenus.
     fn supermajority_reached(&self, response_len: usize) -> bool {
-        let peer_count = self.peers.len();
+        let peer_count = self.peers().len();
         if peer_count < 4 {
             panic!("Cannot find consensus for less than four peers.");
         }

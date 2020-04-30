@@ -53,7 +53,7 @@ impl PRaftBFT {
         }
 
         // All checks passed, update our state.
-        let leader = self.leader(follower_state.leader_term).clone();
+        let leader = self.leader(follower_state.leader_term);
         follower_state
             .round_state_mut(sequence_number)
             .unwrap()
@@ -95,7 +95,7 @@ impl PRaftBFT {
         let meta = match &round_state.phase {
             Phase::Prepare(meta) => meta.clone(),
             Phase::Waiting => {
-                let leader = self.leader(follower_state.leader_term).clone();
+                let leader = self.leader(follower_state.leader_term);
                 PhaseMeta { leader, block_hash }
             }
             _ => {
@@ -327,7 +327,7 @@ impl PRaftBFT {
         message: Signed<ConsensusMessage>,
     ) -> Result<Signed<ConsensusMessage>, Error> {
         // Only RPUs are allowed.
-        if !self.peer_ids().any(|peer_id| message.signer() == peer_id) {
+        if !self.peer_ids().any(|peer_id| *message.signer() == peer_id) {
             return Err(Error::InvalidPeer(message.signer().clone()));
         }
 

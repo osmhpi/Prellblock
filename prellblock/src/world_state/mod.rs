@@ -11,12 +11,13 @@ use crate::{
     consensus::{Block, BlockHash},
     BoxError,
 };
-use im::HashMap;
+use im::{HashMap, Vector};
 use pinxit::{PeerId, Signed};
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt, fs,
+    net::SocketAddr,
     ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
 };
@@ -127,6 +128,8 @@ impl DerefMut for WritableWorldState {
 pub struct WorldState {
     /// Field storing the `Account` `Permissions`.
     pub accounts: HashMap<PeerId, Account>,
+    /// Field storing the `Peer`s.
+    pub peers: Vector<(PeerId, SocketAddr)>,
     /// Field storing the Transactiondata.
     pub data: HashMap<PeerId, HashMap<String, Vec<u8>>>,
     /// Sequence number of the last `Block` applied to the `WorldState`.
@@ -148,6 +151,7 @@ impl WorldState {
             .collect();
         Self {
             accounts,
+            peers: Vector::default(),
             data: HashMap::new(),
             sequence_number: 0,
             last_block_hash: BlockHash::default(),

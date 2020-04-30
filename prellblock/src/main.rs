@@ -84,11 +84,6 @@ async fn main() {
             (peer_id, rpu_config.peer_address)
         })
         .collect();
-    let peer_addresses = config
-        .rpu
-        .iter()
-        .map(|rpu_config| rpu_config.peer_address)
-        .collect();
 
     let hex_identity =
         fs::read_to_string(&private_config.identity).expect("Could not load identity file.");
@@ -99,12 +94,13 @@ async fn main() {
     {
         let mut world_state = world_state.get_writable().await;
         world_state.accounts = WorldState::with_fake_data().accounts;
+        world_state.peers = peers;
         world_state.save();
     }
 
-    let consensus = Consensus::new(identity, peers, block_storage, world_state.clone()).await;
+    let consensus = Consensus::new(identity, block_storage, world_state.clone()).await;
 
-    let broadcaster = Broadcaster::new(peer_addresses);
+    let broadcaster = Broadcaster::new(world_state.clone());
     let broadcaster = Arc::new(broadcaster);
 
     let batcher = Batcher::new(broadcaster);
