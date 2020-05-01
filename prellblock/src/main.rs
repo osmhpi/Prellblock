@@ -11,7 +11,6 @@
 
 use balise::server::TlsIdentity;
 use futures::future;
-use pinxit::Identity;
 use prellblock::{
     batcher::Batcher,
     block_storage::BlockStorage,
@@ -87,7 +86,7 @@ async fn main() {
 
     let hex_identity =
         fs::read_to_string(&private_config.identity).expect("Could not load identity file.");
-    let identity = Identity::from_hex(&hex_identity).expect("Identity could not be loaded.");
+    let identity = hex_identity.parse().expect("Identity could not be loaded.");
 
     let block_storage = BlockStorage::new(&format!("./blocks/{}", opt.name)).unwrap();
     let world_state = WorldStateService::from_block_storage(&block_storage).unwrap();

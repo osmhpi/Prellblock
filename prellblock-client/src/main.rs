@@ -3,7 +3,7 @@
 
 //! An example client used to simulate clients.
 
-use pinxit::{Identity, Signable};
+use pinxit::Signable;
 use prellblock_client::Client;
 use prellblock_client_api::{message, Transaction};
 use rand::{
@@ -79,10 +79,9 @@ async fn main() {
             // execute the test client
             let mut client = Client::new(turi_address);
 
-            let identity = Identity::from_hex(
-                "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc",
-            )
-            .unwrap();
+            let identity = "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc"
+                .parse()
+                .unwrap();
             let value = postcard::to_stdvec(&value).unwrap();
 
             let transaction = Transaction::KeyValue { key, value }
@@ -114,10 +113,10 @@ async fn main() {
                 worker_handles.push(tokio::spawn(async move {
                     let mut rng = StdRng::from_rng(OsRng {}).unwrap();
                     let mut client = Client::new(turi_address);
-                    let identity = Identity::from_hex(
-                        "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc",
-                    )
-                    .unwrap();
+                    let identity =
+                        "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc"
+                            .parse()
+                            .unwrap();
 
                     let start = Instant::now();
                     let half_size = (size + 1) / 2;

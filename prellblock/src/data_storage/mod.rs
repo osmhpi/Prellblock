@@ -1,6 +1,7 @@
 //! The `DataStorage` is a temporary storage for incoming transactions persisted on disk.
 
 use chrono::{DateTime, Utc};
+use hexutil::ToHex;
 use pinxit::PeerId;
 use sled::{Config, Db, IVec, Tree};
 
@@ -41,7 +42,7 @@ impl DataStorage {
         K: AsRef<[u8]>,
     {
         // find id for peer tree
-        let peer_tree = self.tree_for_name(&self.root, peer.hex())?;
+        let peer_tree = self.tree_for_name(&self.root, peer.to_hex())?;
 
         // find id for key tree
         let key_tree = self.tree_for_name(&peer_tree, key)?;

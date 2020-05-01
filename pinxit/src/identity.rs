@@ -1,6 +1,5 @@
 use crate::{Error, PeerId, Signable, Signature};
 use ed25519_dalek::{ExpandedSecretKey, SecretKey};
-use hex::FromHex;
 use std::{fmt, str};
 
 const SECRET_LEN: usize = ed25519_dalek::SECRET_KEY_LENGTH;
@@ -26,17 +25,21 @@ impl Clone for Identity {
     }
 }
 
+hexutil::impl_hex!(
+    Identity,
+    SECRET_LEN,
+    |&self| self.secret.as_bytes(),
+    |data| {
+        SecretKey::from_bytes(&data)
+            .map(Self::from_secret_key)
+            .map_err(|_| hexutil::FromHexError::InvalidValue)
+    }
+);
+
 impl Identity {
     pub(crate) fn from_secret_key(secret: SecretKey) -> Self {
         let id = PeerId((&secret).into());
         Self { id, secret }
-    }
-
-    /// Create an identity from it's hexadecimal representation.
-    pub fn from_hex(hex: &str) -> Result<Self, Error> {
-        let bytes: [u8; SECRET_LEN] = FromHex::from_hex(hex)?;
-        let secret = SecretKey::from_bytes(&bytes).unwrap();
-        Ok(Self::from_secret_key(secret))
     }
 
     /// Generate a new random identity.
@@ -50,12 +53,6 @@ impl Identity {
     #[must_use]
     pub const fn id(&self) -> &PeerId {
         &self.id
-    }
-
-    /// Create a hexadecimal representation.
-    #[must_use]
-    pub fn hex(&self) -> String {
-        hex::encode(self.secret.as_bytes())
     }
 
     /// Create a signature of a `message` that implements `Signable`.

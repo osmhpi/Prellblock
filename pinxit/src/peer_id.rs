@@ -1,12 +1,10 @@
 use crate::{Error, Signable, Signature};
 use ed25519_dalek::PublicKey;
-use hex::FromHex;
 use lazy_static::lazy_static;
 use std::{
     collections::HashMap,
     fmt,
     hash::{Hash, Hasher},
-    str::FromStr,
     sync::RwLock,
 };
 
@@ -40,37 +38,17 @@ impl fmt::Debug for PeerId {
     }
 }
 
-impl fmt::Display for PeerId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        blocksberg::write_hex!(f, self.0.as_bytes(), PUBLIC_LEN)
-    }
-}
-
-impl FromStr for PeerId {
-    type Err = Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::from_hex(s)
-    }
-}
+hexutil::impl_hex!(PeerId, PUBLIC_LEN, |&self| self.0.as_bytes(), |data| {
+    PublicKey::from_bytes(&data)
+        .map(Self)
+        .map_err(|_| hexutil::FromHexError::InvalidValue)
+});
 
 lazy_static! {
     static ref PEER_NAMES: RwLock<HashMap<PeerId, String>> = RwLock::new(HashMap::new());
 }
 
 impl PeerId {
-    /// Create a peer id from it's hexadecimal representation.
-    pub fn from_hex(hex: &str) -> Result<Self, Error> {
-        let public: [u8; PUBLIC_LEN] = FromHex::from_hex(hex)?;
-        let public = PublicKey::from_bytes(&public)?;
-        Ok(Self(public))
-    }
-
-    /// Create a hexadecimal representation.
-    #[must_use]
-    pub fn hex(&self) -> String {
-        hex::encode(&self.0.as_bytes())
-    }
-
     /// Set an alias `name` for this `PeerId`.
     ///
     /// This `name` will be used when this peer id is printed with `std::fmt::Debug`.
@@ -87,32 +65,3 @@ impl PeerId {
         Ok(self.0.verify(data.as_ref(), &signature.0)?)
     }
 }
-
-const _: () = {
-    use serde::{
-        de::{Error, Unexpected},
-        Deserialize, Deserializer, Serialize, Serializer,
-    };
-
-    impl Serialize for super::PeerId {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            self.0.as_bytes().serialize(serializer)
-        }
-    }
-
-    impl<'de> Deserialize<'de> for PeerId {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
-        {
-            let peer_id: [u8; PUBLIC_LEN] = Deserialize::deserialize(deserializer)?;
-            let peer_id = PublicKey::from_bytes(&peer_id).map_err(|_| {
-                Error::invalid_value(Unexpected::Bytes(&peer_id), &"valid ed25519 public key")
-            })?;
-            Ok(Self(peer_id))
-        }
-    }
-};

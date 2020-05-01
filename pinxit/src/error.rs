@@ -9,10 +9,6 @@ type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
-    /// An invalid hexadecimal value vas used.
-    #[error(display = "Invalid hex: {}", 0)]
-    HexError(#[error(from)] hex::FromHexError),
-
     /// An invalid signature was used.
     #[error(display = "Invalid signature: {}", 0)]
     SignatureError(#[error(from)] ed25519_dalek::SignatureError),

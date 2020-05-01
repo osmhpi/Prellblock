@@ -53,15 +53,13 @@ impl Body {
 const HASH_SIZE: usize = <Blake2b as FixedOutput>::OutputSize::USIZE;
 
 /// The datatype of hashes of blocks is `BlockHash`.
-// #[derive(Serialize, Deserialize)]
-// pub struct BlockHash(<Blake2b as FixedOutput>::OutputSize::ArrayType);
 #[derive(Copy, Clone)]
 #[allow(clippy::module_name_repetitions)]
 pub struct BlockHash([u8; HASH_SIZE]);
 
 impl fmt::Debug for BlockHash {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        blocksberg::write_hex!(f, &self.0, HASH_SIZE)
+        fmt::Display::fmt(self, f)
     }
 }
 
@@ -79,30 +77,6 @@ impl PartialEq for BlockHash {
 
 impl Eq for BlockHash {}
 
-// custom serde implementation
-const _: () = {
-    use blocksberg::ByteArrayHelper;
-    use serde::{Deserializer, Serializer};
-
-    const SIGNATURE_HELPER: ByteArrayHelper = ByteArrayHelper("BlockHash", HASH_SIZE);
-
-    impl Serialize for BlockHash {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            SIGNATURE_HELPER.serialize(serializer, &self.0)
-        }
-    }
-
-    impl<'de> Deserialize<'de> for BlockHash {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
-        {
-            let mut block_hash = Self([0; HASH_SIZE]);
-            SIGNATURE_HELPER.deserialize(deserializer, &mut block_hash.0)?;
-            Ok(block_hash)
-        }
-    }
-};
+hexutil::impl_hex!(BlockHash, HASH_SIZE, |&self| &self.0, |data| {
+    Ok(Self(data))
+});
