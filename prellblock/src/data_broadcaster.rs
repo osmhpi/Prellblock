@@ -23,6 +23,7 @@ impl Broadcaster {
     }
 
     /// Broadcast a batch to all known peers (stored in `peer_addresses`).
+    #[allow(clippy::future_not_send)]
     pub async fn broadcast<T>(&self, message: &T) -> Result<(), BoxError>
     where
         T: Request<PeerMessage>,

@@ -1,6 +1,6 @@
 #![warn(missing_docs, clippy::all, clippy::pedantic, clippy::nursery)]
 #![allow(clippy::missing_errors_doc, clippy::similar_names)]
-#![allow(clippy::needless_doctest_main)]
+#![allow(clippy::future_not_send)]
 
 //! An Eurobalise is a specific variant of a balise being a transponder placed between the rails of a railway.
 //! These balises constitute an integral part of the European Train Control System,
