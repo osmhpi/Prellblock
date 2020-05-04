@@ -144,6 +144,13 @@ impl PRaftBFT {
             };
         }
 
+        if data.is_empty() {
+            // Empty blocks are not allowed.
+            // Trigger leader change as a consequence.
+            self.request_view_change(follower_state).await;
+            return Err(Error::EmptyBlock);
+        }
+
         // Check for transaction validity.
         for tx in &data {
             let signer = tx.signer().clone();

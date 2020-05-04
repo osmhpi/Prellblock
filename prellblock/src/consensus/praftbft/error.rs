@@ -11,6 +11,11 @@ use pinxit::PeerId;
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
+    /// The Leader tries to propose an empty block.
+    #[error(display = "The proposed Block is empty.")]
+    EmptyBlock,
+
+    /// The Client does not have the correct permissions.
     #[error(display = "{}", 0)]
     PermissionError(#[error(from)] PermissionError),
 
