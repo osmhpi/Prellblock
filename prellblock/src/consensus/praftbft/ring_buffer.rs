@@ -40,6 +40,16 @@ impl<T> RingBuffer<T> {
         old_item
     }
 
+    pub fn increment_to(&mut self, index: impl Into<u64>, new_item: T)
+    where
+        T: Clone,
+    {
+        for _i in self.start..index.into() {
+            *self.get_mut(self.start).unwrap() = new_item.clone();
+            self.start += 1;
+        }
+    }
+
     fn index2index(&self, index: u64) -> Option<usize> {
         let len = self.data.len() as u64;
         if index >= self.start && index < self.start + len {

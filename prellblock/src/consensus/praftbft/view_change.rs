@@ -174,6 +174,9 @@ impl PRaftBFT {
                             leader_term
                         );
                         follower_state.leader_term = leader_term;
+                        follower_state
+                            .view_state
+                            .increment_to(leader_term, ViewPhase::Waiting);
                     } else {
                         assert_ne!(timeout_result, Ok(()));
                         log::trace!("NewView has not arrived in time.");

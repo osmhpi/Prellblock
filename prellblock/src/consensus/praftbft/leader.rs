@@ -74,7 +74,7 @@ impl Leader {
                     )
                 };
                 log::info!(
-                    "I am the new leader in view {}. (last block: #{})",
+                    "I am the new leader in view {} (last block: #{}).",
                     leader_term,
                     block
                 );

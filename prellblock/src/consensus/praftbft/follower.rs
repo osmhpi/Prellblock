@@ -2,12 +2,12 @@ use super::{
     super::{Block, BlockHash, BlockNumber, Body, LeaderTerm},
     error::PhaseName,
     message::ConsensusMessage,
-    state::{FollowerState, Phase, PhaseMeta, RoundState},
+    state::{FollowerState, Phase, PhaseMeta, RoundState, ViewPhase, ViewPhaseMeta},
     Error, PRaftBFT,
 };
 use pinxit::{PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 use tokio::{
     sync::{watch, MutexGuard},
     time,
@@ -77,6 +77,7 @@ impl PRaftBFT {
         Ok(ackprepare_message)
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn handle_append_message(
         &self,
         peer_id: &PeerId,
@@ -121,6 +122,7 @@ impl PRaftBFT {
 
         // Check validity of ACKPREPARE Signatures.
         if !self.supermajority_reached(ackprepare_signatures.len()) {
+            self.request_view_change(follower_state).await;
             return Err(Error::NotEnoughSignatures);
         }
 
@@ -130,16 +132,39 @@ impl PRaftBFT {
             block_hash,
         };
         for (peer_id, signature) in ackprepare_signatures {
-            // Frage: Was tun bei faulty signature? Abbrechen oder weiter bei Supermajority?
-            peer_id.verify(&ackprepare_message, &signature)?;
+            // All signatures in here must be valid. The leader would filter out any
+            // wrong signatures.
+            match peer_id.verify(&ackprepare_message, &signature) {
+                Ok(()) => {}
+                Err(err) => {
+                    log::error!("Error while verifying ACKPREPARE signatures: {}", err);
+                    self.request_view_change(follower_state).await;
+                    return Err(err.into());
+                }
+            };
         }
 
         // Check for transaction validity.
-        for tx in data.clone() {
-            tx.verify()?;
+        for tx in &data {
+            let signer = tx.signer().clone();
+            let transaction = match tx.verify_ref() {
+                Ok(transaction) => transaction,
+                Err(err) => {
+                    log::error!("Error while verifying transaction signature: {}", err);
+                    self.request_view_change(follower_state).await;
+                    return Err(err.into());
+                }
+            };
+            match self.permission_checker.verify(&signer, &transaction) {
+                Ok(_) => {}
+                Err(err) => {
+                    log::error!("Error while verifying client account permissions: {}", err);
+                    self.request_view_change(follower_state).await;
+                    return Err(err.into());
+                }
+            };
         }
 
-        // TODO: Stateful validate transactions HERE.
         let validated_transactions = data;
 
         // Validate the Block Hash.
@@ -151,7 +176,7 @@ impl PRaftBFT {
         if block_hash != body.hash() {
             return Err(Error::WrongBlockHash);
         }
-
+        let leader_term = follower_state.leader_term;
         // All checks passed, update our state.
         let round_state_mut = follower_state.round_state_mut(block_number).unwrap();
         round_state_mut.phase = Phase::Append(meta, body);
@@ -168,7 +193,7 @@ impl PRaftBFT {
                 } => {
                     let commit_result = self
                         .handle_commit_message_inner(
-                            &mut follower_state,
+                            follower_state,
                             peer_id,
                             buffered_leader_term,
                             buffered_block_number,
@@ -186,7 +211,7 @@ impl PRaftBFT {
         }
 
         let ackappend_message = ConsensusMessage::AckAppend {
-            leader_term: follower_state.leader_term,
+            leader_term,
             block_number,
             block_hash,
         };
@@ -201,9 +226,9 @@ impl PRaftBFT {
         block_hash: BlockHash,
         ackappend_signatures: Vec<(PeerId, Signature)>,
     ) -> Result<ConsensusMessage, Error> {
-        let mut follower_state = self.follower_state_in_block(block_number).await;
+        let follower_state = self.follower_state_in_block(block_number).await;
         self.handle_commit_message_inner(
-            &mut follower_state,
+            follower_state,
             peer_id,
             leader_term,
             block_number,
@@ -211,25 +236,13 @@ impl PRaftBFT {
             ackappend_signatures,
         )
         .await
-
-        // +--------------------------------------------+
-        // | TODO: Use this when view change is needed. |
-        // +--------------------------------------------+
-        // let new_leader_term = follower_state.leader_term + 1;
-        // let messages = HashMap::new();
-        // follower_state.set_view_phase(
-        //     new_leader_term,
-        //     ViewPhase::ViewChanging(ViewPhaseMeta { messages }),
-        // )?;
-        // drop(follower_state);
-        // self.broadcast_view_change(new_leader_term).await.unwrap();
     }
 
     /// This function is used for out-of-order message reception and
     /// applying these commits.
     async fn handle_commit_message_inner(
         &self,
-        follower_state: &mut FollowerState,
+        mut follower_state: MutexGuard<'_, FollowerState>,
         peer_id: &PeerId,
         leader_term: LeaderTerm,
         block_number: BlockNumber,
@@ -283,16 +296,25 @@ impl PRaftBFT {
 
         // Check validity of ACKAPPEND Signatures.
         if !self.supermajority_reached(ackappend_signatures.len()) {
+            self.request_view_change(follower_state).await;
             return Err(Error::NotEnoughSignatures);
         }
-        let ackprepare_message = ConsensusMessage::AckAppend {
+        let ackappend_message = ConsensusMessage::AckAppend {
             leader_term,
             block_number,
             block_hash,
         };
         for (peer_id, signature) in &ackappend_signatures {
-            // Frage: Was tun bei faulty signature? Abbrechen oder weiter bei Supermajority?
-            peer_id.verify(&ackprepare_message, signature)?;
+            // All signatures in here must be valid. The leader would filter out any
+            // wrong signatures.
+            match peer_id.verify(&ackappend_message, signature) {
+                Ok(()) => {}
+                Err(err) => {
+                    log::error!("Error while verifying ACKAPPEND signatures: {}", err);
+                    self.request_view_change(follower_state).await;
+                    return Err(err.into());
+                }
+            };
         }
 
         follower_state.round_state_mut(block_number).unwrap().phase = Phase::Committed(block_hash);
@@ -403,6 +425,28 @@ impl PRaftBFT {
         Ok(signed_response)
     }
 
+    /// Send a `ConsensusMessage::ViewChange` message because the leader
+    /// seems to be faulty.
+    async fn request_view_change(&self, mut follower_state: MutexGuard<'_, FollowerState>) {
+        let requested_new_leader_term = follower_state.leader_term + 1;
+        let messages = HashMap::new();
+        match follower_state.set_view_phase(
+            requested_new_leader_term,
+            ViewPhase::ViewChanging(ViewPhaseMeta { messages }),
+        ) {
+            Ok(()) => {}
+            Err(err) => log::error!("Error setting view change phase: {}", err),
+        };
+        // This drop is needed because receiving messages while
+        // broadcasting also requires the lock.
+        drop(follower_state);
+
+        match self.broadcast_view_change(requested_new_leader_term).await {
+            Ok(()) => {}
+            Err(err) => log::error!("Error broadcasting ViewChange: {}", err),
+        }
+    }
+
     /// This is woken up after a timeout or a specific
     /// number of blocks commited.
     pub(super) async fn censorship_checker(
@@ -426,10 +470,17 @@ impl PRaftBFT {
                 .any(|(timestamp, _)| timestamp.elapsed() > CENSORSHIP_TIMEOUT);
             drop(queue);
 
-            // do stomething if there where old transactions
             if has_old_transactions {
-                let leader = self.leader(self.follower_state.lock().await.leader_term);
-                log::warn!("Found censored transactions from leader {}.", leader);
+                // leader seems to be faulty / dead or censoring
+                let follower_state = self.follower_state.lock().await;
+                let leader = self.leader(follower_state.leader_term);
+                log::warn!(
+                    "Found censored transactions from leader {}. Requesting View Change.",
+                    leader
+                );
+                self.request_view_change(follower_state).await;
+            } else {
+                log::trace!("No old transactions found while checking for censorship.");
             }
         }
     }

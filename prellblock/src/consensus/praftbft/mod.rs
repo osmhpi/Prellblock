@@ -21,6 +21,7 @@ use crate::{
     block_storage::BlockStorage,
     consensus::LeaderTerm,
     peer::{message as peer_message, Sender},
+    permission_checker::PermissionChecker,
     world_state::WorldStateService,
     BoxError,
 };
@@ -64,6 +65,7 @@ pub struct PRaftBFT {
     new_view_receiver: watch::Receiver<LeaderTerm>,
     enough_view_changes_sender: watch::Sender<(LeaderTerm, ViewChangeSignatures)>,
     block_storage: BlockStorage,
+    permission_checker: PermissionChecker,
 }
 
 impl Deref for PRaftBFT {
@@ -112,7 +114,7 @@ impl PRaftBFT {
             queue: Arc::default(),
             leader_notifier: leader_notifier.clone(),
             follower_state,
-            world_state,
+            world_state: world_state.clone(),
             block_changed_notifier,
             block_changed_receiver,
             broadcast_meta,
@@ -120,6 +122,7 @@ impl PRaftBFT {
             new_view_receiver,
             enough_view_changes_sender,
             block_storage,
+            permission_checker: PermissionChecker::new(world_state),
         };
 
         let praftbft = Arc::new(praftbft);

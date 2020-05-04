@@ -95,7 +95,7 @@ impl FollowerState {
             leader_term: LeaderTerm::default(),
             block_number: start,
             round_states: RingBuffer::new(RoundState::default(), RING_BUFFER_SIZE, start.into()),
-            view_state: RingBuffer::new(ViewPhase::Waiting, RING_BUFFER_SIZE, start.into()),
+            view_state: RingBuffer::new(ViewPhase::Waiting, RING_BUFFER_SIZE, 0),
         };
 
         state.round_state_mut(start).unwrap().phase = Phase::Committed(world_state.last_block_hash);

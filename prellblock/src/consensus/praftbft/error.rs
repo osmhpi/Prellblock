@@ -1,12 +1,19 @@
 use super::state::Phase;
-use crate::consensus::{BlockNumber, LeaderTerm};
+use crate::{
+    consensus::{BlockNumber, LeaderTerm},
+    permission_checker::PermissionError,
+};
 use err_derive::Error;
 use pinxit::PeerId;
 
 /// An error of the `praftbft` consensus.
+#[allow(clippy::pub_enum_variant_names)]
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
+    #[error(display = "{}", 0)]
+    PermissionError(#[error(from)] PermissionError),
+
     /// The signature could not be verified.
     #[error(display = "{}", 0)]
     InvalidSignature(#[error(from)] pinxit::Error),
