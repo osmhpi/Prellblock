@@ -155,8 +155,11 @@ impl PRaftBFT {
             .into_iter()
             .map(|transaction| (Instant::now(), transaction));
         let mut new_entries = VecDeque::from_iter(new_entries);
-        self.queue.write().await.append(&mut new_entries);
-        self.leader_notifier.notify();
+        let mut queue = self.queue.write().await;
+        queue.append(&mut new_entries);
+        if queue.len() >= MAX_TRANSACTIONS_PER_BLOCK {
+            self.leader_notifier.notify();
+        }
     }
 
     /// Checks whether a number represents f + 1 nodes

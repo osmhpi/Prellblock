@@ -117,6 +117,7 @@ impl Leader {
                 let hash = body.hash();
 
                 let transactions = body.transactions;
+                log::trace!("Sending block with {} transactions.", transactions.len());
 
                 // ----------------------------------------- //
                 //    _____                                  //
