@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt};
 
 /// A `Block` stores transactions verified by the blockchain.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
     pub(crate) body: Body,
     pub(crate) signatures: HashMap<PeerId, Signature>,

@@ -1,4 +1,4 @@
-use crate::consensus::{BlockHash, BlockNumber, LeaderTerm};
+use crate::consensus::{Block, BlockHash, BlockNumber, LeaderTerm};
 use pinxit::{PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
@@ -80,6 +80,20 @@ pub enum ConsensusMessage {
     },
     /// A `ConsensusMessage` signalizing the sender RPU that another RPU received the `NewView` message.
     AckNewView,
+    /// A Request issued during synchronization.
+    SynchronizationRequest {
+        /// The current leader term of the sender.
+        leader_term: LeaderTerm,
+        /// The current block number of the sender.
+        block_number: BlockNumber,
+    },
+    /// A Response to a `SynchronizationRequest`.
+    SynchronizationResponse {
+        /// The `NewView` message the sender is missing.
+        new_view: Option<(LeaderTerm, HashMap<PeerId, Signature>)>,
+        /// The `Block`s the sender has skipped.
+        blocks: Vec<Block>,
+    },
 }
 
 impl Signable for ConsensusMessage {

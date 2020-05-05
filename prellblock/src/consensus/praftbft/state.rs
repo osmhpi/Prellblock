@@ -4,7 +4,7 @@ use super::{
     super::{BlockHash, BlockNumber, Body, LeaderTerm},
     message::ConsensusMessage,
     ring_buffer::RingBuffer,
-    Error,
+    Error, NewViewSignatures,
 };
 use crate::world_state::WorldState;
 use pinxit::{PeerId, Signature};
@@ -80,6 +80,7 @@ pub(super) struct ViewPhaseMeta {
 
 pub(super) struct FollowerState {
     pub(super) leader_term: LeaderTerm,
+    pub(super) new_view_signatures: NewViewSignatures,
     pub(super) block_number: BlockNumber,
     pub(super) round_states: RingBuffer<RoundState>,
     pub(super) view_state: RingBuffer<ViewPhase>,
@@ -93,6 +94,7 @@ impl FollowerState {
         let start = world_state.block_number;
         let mut state = Self {
             leader_term: LeaderTerm::default(),
+            new_view_signatures: HashMap::new(),
             block_number: start,
             round_states: RingBuffer::new(RoundState::default(), RING_BUFFER_SIZE, start.into()),
             view_state: RingBuffer::new(ViewPhase::Waiting, RING_BUFFER_SIZE, 0),

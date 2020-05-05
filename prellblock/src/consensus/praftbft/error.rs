@@ -1,5 +1,6 @@
 use super::state::Phase;
 use crate::{
+    block_storage,
     consensus::{BlockNumber, LeaderTerm},
     permission_checker::PermissionError,
 };
@@ -14,6 +15,10 @@ pub enum Error {
     /// The Leader tries to propose an empty block.
     #[error(display = "The proposed Block is empty.")]
     EmptyBlock,
+
+    /// The Block could not be written to the BlockStorage.
+    #[error(display = "{}", 0)]
+    BlockStorageError(#[error(from)] block_storage::Error),
 
     /// The Client does not have the correct permissions.
     #[error(display = "{}", 0)]

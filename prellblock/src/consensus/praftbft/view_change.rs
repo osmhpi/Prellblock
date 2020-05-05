@@ -29,11 +29,13 @@ impl PRaftBFT {
         let view_change_message = ConsensusMessage::ViewChange {
             new_leader_term: leader_term,
         };
-        for (peer_id, signature) in view_change_signatures {
-            peer_id.verify(&view_change_message, &signature)?
+        for (peer_id, signature) in &view_change_signatures {
+            peer_id.verify(&view_change_message, signature)?
         }
 
-        self.new_view_sender.broadcast(leader_term).unwrap();
+        self.new_view_sender
+            .broadcast((leader_term, view_change_signatures))
+            .unwrap();
         self.leader_notifier.notify();
 
         Ok(ConsensusMessage::AckNewView)
@@ -137,13 +139,7 @@ impl PRaftBFT {
                     if self.is_current_leader(new_leader_term, self.peer_id()) {
                         // Notify leader task to begin to work.
                         self.enough_view_changes_sender
-                            .broadcast((
-                                new_leader_term,
-                                messages
-                                    .iter()
-                                    .map(|(k, v)| (k.clone(), v.clone()))
-                                    .collect(),
-                            ))
+                            .broadcast((new_leader_term, messages))
                             .expect("running leader task");
                     } else {
                         self.enough_view_changes_sender
@@ -151,17 +147,17 @@ impl PRaftBFT {
                             .expect("running leader task");
                     }
 
-                    let mut view_changed = *self.new_view_receiver.borrow();
+                    let mut new_view_data = self.new_view_receiver.borrow().clone();
                     let mut new_view_receiver = self.new_view_receiver.clone();
                     let timeout_result = tokio::time::timeout(Duration::from_millis(5000), async {
-                        while view_changed < new_leader_term {
-                            view_changed = new_view_receiver.recv().await.unwrap();
+                        while new_view_data.0 < new_leader_term {
+                            new_view_data = new_view_receiver.recv().await.unwrap();
                         }
                     })
                     .await;
 
-                    if view_changed >= new_leader_term {
-                        let leader_term = view_changed;
+                    if new_view_data.0 >= new_leader_term {
+                        let (leader_term, new_view_signatures) = new_view_data;
                         log::trace!("NewView arrived in time.");
 
                         let mut follower_state = self.follower_state.lock().await;
@@ -173,6 +169,7 @@ impl PRaftBFT {
                             leader_term
                         );
                         follower_state.leader_term = leader_term;
+                        follower_state.new_view_signatures = new_view_signatures;
                         follower_state
                             .view_state
                             .increment_to(leader_term, ViewPhase::Waiting);

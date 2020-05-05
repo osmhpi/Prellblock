@@ -3,7 +3,7 @@ use super::{
     error::PhaseName,
     message::ConsensusMessage,
     state::{FollowerState, Phase, PhaseMeta, RoundState, ViewPhase, ViewPhaseMeta},
-    Error, PRaftBFT,
+    Error, NewViewSignatures, PRaftBFT,
 };
 use pinxit::{PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
@@ -34,6 +34,61 @@ impl PRaftBFT {
             // Wait until block number changed.
             let _ = receiver.recv().await;
         }
+    }
+
+    fn do_we_need_to_synchronize(
+        &self,
+        follower_state: &FollowerState,
+        leader_term: LeaderTerm,
+        block_number: BlockNumber,
+    ) -> bool {
+        let _ = self;
+        leader_term > follower_state.leader_term || block_number > follower_state.block_number + 1
+    }
+
+    async fn synchronize(
+        &self,
+        follower_state: MutexGuard<'_, FollowerState>,
+    ) -> MutexGuard<'_, FollowerState> {
+        drop(follower_state);
+
+        // TODO: implement stuff
+        // choose peer to ask for synchronization
+        // verify received blocks, if not timeouted
+        // append correct blocks to own blockstorage
+        // discard faulty blocks, if any and restart synchronizer (in that case)
+
+        self.follower_state.lock().await
+    }
+
+    async fn handle_synchronization_request(
+        &self,
+        peer_id: &PeerId,
+        leader_term: LeaderTerm,
+        block_number: BlockNumber,
+    ) -> Result<ConsensusMessage, Error> {
+        self.permission_checker.verify_is_rpu(peer_id)?;
+        let (new_view, current_block_number) = {
+            let follower_state = self.follower_state.lock().await;
+
+            let new_view = if leader_term == follower_state.leader_term {
+                None
+            } else {
+                Some((
+                    follower_state.leader_term,
+                    follower_state.new_view_signatures.clone(),
+                ))
+            };
+
+            (new_view, follower_state.block_number)
+        };
+
+        let blocks: Result<_, _> = self
+            .block_storage
+            .read(block_number..=current_block_number)
+            .collect();
+        let blocks = blocks?;
+        Ok(ConsensusMessage::SynchronizationResponse { new_view, blocks })
     }
 
     async fn handle_prepare_message(
@@ -89,6 +144,10 @@ impl PRaftBFT {
         data: Vec<Signed<Transaction>>,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state_in_block(block_number).await;
+        if self.do_we_need_to_synchronize(&follower_state, leader_term, block_number) {
+            follower_state = self.synchronize(follower_state).await;
+        }
+
         log::trace!("Handle Append message #{}.", block_number);
         if !self.is_current_leader(leader_term, peer_id) {
             log::warn!("Received message from invalid leader (ID: {}).", peer_id);
@@ -267,6 +326,11 @@ impl PRaftBFT {
         block_hash: BlockHash,
         ackappend_signatures: HashMap<PeerId, Signature>,
     ) -> Result<ConsensusMessage, Error> {
+        // Check whether there is a need to synchronize
+        if self.do_we_need_to_synchronize(&follower_state, leader_term, block_number) {
+            follower_state = self.synchronize(follower_state).await;
+        }
+
         log::trace!("Handle Commit message #{}.", block_number);
         if !self.is_current_leader(leader_term, peer_id) {
             log::warn!("Received message from invalid leader (ID: {}).", peer_id);
@@ -440,7 +504,19 @@ impl PRaftBFT {
                 self.handle_new_view(&peer_id, leader_term, view_change_signatures)
                     .await?
             }
-            _ => unimplemented!(),
+            ConsensusMessage::SynchronizationRequest {
+                leader_term,
+                block_number,
+            } => {
+                self.handle_synchronization_request(&peer_id, leader_term, block_number)
+                    .await?
+            }
+            ConsensusMessage::AckPrepare { .. }
+            | ConsensusMessage::AckAppend { .. }
+            | ConsensusMessage::AckCommit { .. }
+            | ConsensusMessage::AckViewChange { .. }
+            | ConsensusMessage::AckNewView { .. }
+            | ConsensusMessage::SynchronizationResponse { .. } => unimplemented!(),
         };
 
         let signed_response = response.sign(&self.broadcast_meta.identity).unwrap();
@@ -473,7 +549,7 @@ impl PRaftBFT {
     /// number of blocks commited.
     pub(super) async fn censorship_checker(
         &self,
-        mut new_view_receiver: watch::Receiver<LeaderTerm>,
+        mut new_view_receiver: watch::Receiver<(LeaderTerm, NewViewSignatures)>,
     ) {
         loop {
             let timeout_result = time::timeout(CENSORSHIP_TIMEOUT, new_view_receiver.recv()).await;

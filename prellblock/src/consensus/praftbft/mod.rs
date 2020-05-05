@@ -45,6 +45,7 @@ use tokio::sync::{watch, Mutex, Notify, RwLock};
 const MAX_TRANSACTIONS_PER_BLOCK: usize = 500;
 
 type ViewChangeSignatures = HashMap<PeerId, Signature>;
+type NewViewSignatures = HashMap<PeerId, Signature>;
 
 type Queue = VecDeque<(Instant, Signed<Transaction>)>;
 ///
@@ -65,8 +66,8 @@ pub struct PRaftBFT {
     block_changed_notifier: watch::Sender<()>,
     block_changed_receiver: watch::Receiver<()>,
     broadcast_meta: BroadcastMeta,
-    new_view_sender: watch::Sender<LeaderTerm>,
-    new_view_receiver: watch::Receiver<LeaderTerm>,
+    new_view_sender: watch::Sender<(LeaderTerm, NewViewSignatures)>,
+    new_view_receiver: watch::Receiver<(LeaderTerm, NewViewSignatures)>,
     enough_view_changes_sender: watch::Sender<(LeaderTerm, ViewChangeSignatures)>,
     block_storage: BlockStorage,
     permission_checker: PermissionChecker,
@@ -108,10 +109,11 @@ impl PRaftBFT {
         let follower_state = FollowerState::from_world_state(&world_state.get());
         let leader_state = LeaderState::new(&follower_state);
         let leader_term = follower_state.leader_term;
+        let new_view_data = (leader_term, follower_state.new_view_signatures.clone());
         let follower_state = Mutex::new(follower_state);
         let leader_notifier = Arc::new(Notify::new());
         let (block_changed_notifier, block_changed_receiver) = watch::channel(());
-        let (new_view_sender, new_view_receiver) = watch::channel(leader_term);
+        let (new_view_sender, new_view_receiver) = watch::channel(new_view_data);
         let (enough_view_changes_sender, enough_view_changes_receiver) =
             watch::channel((leader_term, ViewChangeSignatures::new()));
         let praftbft = Self {

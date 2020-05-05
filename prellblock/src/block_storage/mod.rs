@@ -1,9 +1,10 @@
 //! The `BlockStorage` is a permantent storage for validated Blocks persisted on disk.
 
-use crate::{
-    consensus::{Block, BlockHash, BlockNumber},
-    BoxError,
-};
+mod error;
+
+pub use error::Error;
+
+use crate::consensus::{Block, BlockHash, BlockNumber};
 
 use sled::{Config, Tree};
 use std::ops::{Bound, RangeBounds};
@@ -20,7 +21,7 @@ pub struct BlockStorage {
 
 impl BlockStorage {
     /// Create a new `Store` at path.
-    pub fn new(path: &str) -> Result<Self, BoxError> {
+    pub fn new(path: &str) -> Result<Self, Error> {
         let config = Config::default()
             .path(path)
             .cache_capacity(8_000_000)
@@ -41,7 +42,7 @@ impl BlockStorage {
     /// Write a value to the store.
     ///
     /// The data will be accessible by the block number?.
-    pub fn write_block(&self, block: &Block) -> Result<(), BoxError> {
+    pub fn write_block(&self, block: &Block) -> Result<(), Error> {
         let (last_block_hash, last_block_height) =
             if let Some(last_block) = self.read(..).next_back() {
                 let last_block = last_block?;
@@ -51,11 +52,11 @@ impl BlockStorage {
             };
 
         if last_block_hash != block.body.prev_block_hash {
-            return Err("Block hash does not match the previous block hash.".into());
+            return Err(Error::BlockHashDoesNotMatch);
         }
 
         if last_block_height + 1 != block.body.height {
-            return Err("Block height does not fit the previous block height.".into());
+            return Err(Error::BlockHeightDoesNotFit);
         }
 
         let value = postcard::to_stdvec(&block)?;
@@ -65,7 +66,7 @@ impl BlockStorage {
     }
 
     /// Read a range of blocks from the store.
-    pub fn read<R>(&self, range: R) -> impl DoubleEndedIterator<Item = Result<Block, BoxError>>
+    pub fn read<R>(&self, range: R) -> impl DoubleEndedIterator<Item = Result<Block, Error>>
     where
         R: RangeBounds<BlockNumber>,
     {
