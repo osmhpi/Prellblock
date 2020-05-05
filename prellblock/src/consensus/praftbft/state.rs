@@ -133,11 +133,22 @@ impl FollowerState {
             .ok_or(Error::BlockNumberTooBig(block_number))
     }
 
-    /// Set the `RoundState` for a given `block`.
+    /// Get the mutable `RoundState` for a given `block`.
     pub fn round_state_mut(&mut self, block_number: BlockNumber) -> Result<&mut RoundState, Error> {
         self.round_states
             .get_mut(block_number.into())
             .ok_or(Error::BlockNumberTooBig(block_number))
+    }
+
+    /// Reset the state of the currently ongoing and all future rounds.
+    ///
+    /// This allows dropping already received messages / state.
+    pub(super) fn reset_future_round_states(&mut self) {
+        let mut round_to_reset: u64 = (self.block_number + 1).into();
+        while let Some(round_state) = self.round_states.get_mut(round_to_reset) {
+            *round_state = RoundState::default();
+            round_to_reset += 1;
+        }
     }
 
     /// Get the `ViewPhase` for the given `leader_term` if it exists.

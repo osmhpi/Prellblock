@@ -162,7 +162,6 @@ impl PRaftBFT {
 
                     if view_changed >= new_leader_term {
                         let leader_term = view_changed;
-                        // NewView arrived in Time
                         log::trace!("NewView arrived in time.");
 
                         let mut follower_state = self.follower_state.lock().await;
@@ -177,6 +176,10 @@ impl PRaftBFT {
                         follower_state
                             .view_state
                             .increment_to(leader_term, ViewPhase::Waiting);
+
+                        // On view change, we need to drop all messages from the
+                        // old leader to allow the new one to send new messages.
+                        follower_state.reset_future_round_states();
                     } else {
                         assert_ne!(timeout_result, Ok(()));
                         log::trace!("NewView has not arrived in time.");
