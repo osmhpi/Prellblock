@@ -4,7 +4,7 @@
 
 mod account;
 
-pub(crate) use account::Account;
+pub use account::Account;
 
 use crate::{
     block_storage::BlockStorage,

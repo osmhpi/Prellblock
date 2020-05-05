@@ -33,14 +33,18 @@ use pinxit::{Identity, PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
 use state::{FollowerState, LeaderState};
 use std::{
-    collections::VecDeque, iter::FromIterator, net::SocketAddr, ops::Deref, sync::Arc,
+    collections::{HashMap, VecDeque},
+    iter::FromIterator,
+    net::SocketAddr,
+    ops::Deref,
+    sync::Arc,
     time::Instant,
 };
 use tokio::sync::{watch, Mutex, Notify, RwLock};
 
 const MAX_TRANSACTIONS_PER_BLOCK: usize = 4000;
 
-type ViewChangeSignatures = Vec<(PeerId, Signature)>;
+type ViewChangeSignatures = HashMap<PeerId, Signature>;
 
 type Queue = VecDeque<(Instant, Signed<Transaction>)>;
 ///
@@ -201,7 +205,7 @@ impl BroadcastMeta {
         &self,
         message: ConsensusMessage,
         verify_response: F,
-    ) -> Result<Vec<(PeerId, Signature)>, BoxError>
+    ) -> Result<HashMap<PeerId, Signature>, BoxError>
     where
         F: Fn(&ConsensusMessage) -> Result<(), BoxError> + Clone + Send + Sync + 'static,
     {
@@ -225,7 +229,7 @@ impl BroadcastMeta {
                 };
                 // TODO: Are seperate threads (tokio::spawn) faster?
                 match send_message_and_verify_response.await {
-                    Ok((peer_id, signature)) => Some((peer_id, signature)),
+                    Ok(response) => Some(response),
                     Err(err) => {
                         log::warn!("Consensus error from {}: {}", peer_address, err);
                         None
@@ -234,11 +238,13 @@ impl BroadcastMeta {
             }));
         }
 
-        let mut responses = Vec::new();
+        let mut responses = HashMap::new();
 
         while let Some(result) = futures.next().await {
             match result {
-                Ok(Some(response)) => responses.push(response),
+                Ok(Some((peer_id, signature))) => {
+                    responses.insert(peer_id, signature);
+                }
                 Ok(None) => {}
                 Err(err) => log::warn!("Failed to join task: {}", err),
             }

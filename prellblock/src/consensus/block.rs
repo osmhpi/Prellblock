@@ -6,13 +6,13 @@ use blake2::{
 use pinxit::{PeerId, Signature, Signed};
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 /// A `Block` stores transactions verified by the blockchain.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Block {
     pub(crate) body: Body,
-    pub(crate) signatures: Vec<(PeerId, Signature)>,
+    pub(crate) signatures: HashMap<PeerId, Signature>,
 }
 
 impl Block {

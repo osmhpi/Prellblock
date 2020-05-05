@@ -84,7 +84,7 @@ impl PRaftBFT {
         leader_term: LeaderTerm,
         block_number: BlockNumber,
         block_hash: BlockHash,
-        ackprepare_signatures: Vec<(PeerId, Signature)>,
+        ackprepare_signatures: HashMap<PeerId, Signature>,
         data: Vec<Signed<Transaction>>,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state_in_block(block_number).await;
@@ -142,6 +142,8 @@ impl PRaftBFT {
                     return Err(err.into());
                 }
             };
+            // Also check whether the signer is a known RPU
+            self.permission_checker.verify_is_rpu(&peer_id)?;
         }
 
         if data.is_empty() {
@@ -231,7 +233,7 @@ impl PRaftBFT {
         leader_term: LeaderTerm,
         block_number: BlockNumber,
         block_hash: BlockHash,
-        ackappend_signatures: Vec<(PeerId, Signature)>,
+        ackappend_signatures: HashMap<PeerId, Signature>,
     ) -> Result<ConsensusMessage, Error> {
         let follower_state = self.follower_state_in_block(block_number).await;
         self.handle_commit_message_inner(
@@ -254,7 +256,7 @@ impl PRaftBFT {
         leader_term: LeaderTerm,
         block_number: BlockNumber,
         block_hash: BlockHash,
-        ackappend_signatures: Vec<(PeerId, Signature)>,
+        ackappend_signatures: HashMap<PeerId, Signature>,
     ) -> Result<ConsensusMessage, Error> {
         log::trace!("Handle Commit message #{}.", block_number);
         if !self.is_current_leader(leader_term, peer_id) {
@@ -322,6 +324,8 @@ impl PRaftBFT {
                     return Err(err.into());
                 }
             };
+            // Also check whether the signer is a known RPU
+            self.permission_checker.verify_is_rpu(peer_id)?;
         }
 
         follower_state.round_state_mut(block_number).unwrap().phase = Phase::Committed(block_hash);

@@ -12,7 +12,7 @@ impl PRaftBFT {
         &self,
         peer_id: &PeerId,
         leader_term: LeaderTerm,
-        view_change_signatures: Vec<(PeerId, Signature)>,
+        view_change_signatures: HashMap<PeerId, Signature>,
     ) -> Result<ConsensusMessage, Error> {
         log::trace!("Received NewView Message.");
         // Leader must be the next peer from the peers list.
@@ -147,7 +147,7 @@ impl PRaftBFT {
                             .expect("running leader task");
                     } else {
                         self.enough_view_changes_sender
-                            .broadcast((new_leader_term, Vec::new()))
+                            .broadcast((new_leader_term, HashMap::new()))
                             .expect("running leader task");
                     }
 

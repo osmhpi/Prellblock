@@ -20,7 +20,7 @@ use prellblock::{
     peer::{Calculator, PeerInbox, Receiver},
     permission_checker::PermissionChecker,
     turi::Turi,
-    world_state::{WorldState, WorldStateService},
+    world_state::{Account, WorldState, WorldStateService},
 };
 use serde::Deserialize;
 use std::{env, fs, io, net::SocketAddr, sync::Arc};
@@ -83,6 +83,20 @@ async fn main() {
             (peer_id, rpu_config.peer_address)
         })
         .collect();
+    let peer_accounts = config.rpu.iter().map(|rpu_config| {
+        let peer_id = fs::read_to_string(&rpu_config.peer_id).unwrap();
+        let peer_id = peer_id.parse().unwrap();
+        (
+            peer_id,
+            Account {
+                name: rpu_config.name.clone(),
+                is_rpu: true,
+                expire_at: None,
+                writing_rights: false,
+                reading_rights: Vec::new(),
+            },
+        )
+    });
 
     let hex_identity =
         fs::read_to_string(&private_config.identity).expect("Could not load identity file.");
@@ -93,6 +107,7 @@ async fn main() {
     {
         let mut world_state = world_state.get_writable().await;
         world_state.accounts = WorldState::with_fake_data().accounts;
+        world_state.accounts.extend(peer_accounts);
         world_state.peers = peers;
         world_state.save();
     }

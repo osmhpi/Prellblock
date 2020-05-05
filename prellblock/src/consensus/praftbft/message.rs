@@ -2,6 +2,7 @@ use crate::consensus::{BlockHash, BlockNumber, LeaderTerm};
 use pinxit::{PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(clippy::module_name_repetitions)]
@@ -35,7 +36,7 @@ pub enum ConsensusMessage {
         /// The hash of this rounds block.
         block_hash: BlockHash,
         /// The signatures of all (2f+1) `AckPrepare` signatures.
-        ackprepare_signatures: Vec<(PeerId, Signature)>,
+        ackprepare_signatures: HashMap<PeerId, Signature>,
         /// The transactions of the current `Block`.
         ///
         /// This should match the current `block_hash`.
@@ -59,7 +60,7 @@ pub enum ConsensusMessage {
         /// The hash of this rounds block.
         block_hash: BlockHash,
         /// The signatures of all (2f+1) `AckAppend` signatures.
-        ackappend_signatures: Vec<(PeerId, Signature)>,
+        ackappend_signatures: HashMap<PeerId, Signature>,
     },
     /// A `ConsensusMessage` signalizing the Leader that a Follower has applied the transactions.
     AckCommit,
@@ -75,7 +76,7 @@ pub enum ConsensusMessage {
         /// The Leader term we swapped to.
         leader_term: LeaderTerm,
         /// The ViewChange signatures of 2f + 1 Replicas
-        view_change_signatures: Vec<(PeerId, Signature)>,
+        view_change_signatures: HashMap<PeerId, Signature>,
     },
     /// A `ConsensusMessage` signalizing the sender RPU that another RPU received the `NewView` message.
     AckNewView,
