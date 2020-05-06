@@ -1,6 +1,6 @@
 //! A server for communicating between RPUs.
 
-use crate::{BoxError, Request};
+use crate::{Error, Request};
 use serde::de::DeserializeOwned;
 use std::{
     convert::TryInto,
@@ -17,7 +17,7 @@ use tokio::{
     net::TcpListener,
 };
 
-type ServerResult = Result<Response, BoxError>;
+type ServerResult = Result<Response, Error>;
 
 /// A transparent response to a `Request`.
 ///
@@ -68,7 +68,7 @@ impl<T, H, F> Server<T, H>
 where
     T: DeserializeOwned + Debug,
     H: FnOnce(T) -> F + Clone + Sync,
-    F: Future<Output = Result<Response, BoxError>> + Send,
+    F: Future<Output = Result<Response, Error>> + Send,
 {
     /// Create a new server instance.
     ///
@@ -88,7 +88,7 @@ where
     /// The `handler` needs to provide a `handle` callback script to handle requests on the server.
     /// The `identity` determines the server's identity.
     #[cfg(feature = "tls")]
-    pub fn new(handler: H, identity: Identity) -> Result<Self, BoxError> {
+    pub fn new(handler: H, identity: Identity) -> Result<Self, Error> {
         let acceptor = TlsAcceptor::builder(identity)
             .min_protocol_version(Some(Protocol::Tlsv12))
             .build()?;
@@ -102,7 +102,7 @@ where
     }
 
     /// The main server loop.
-    pub async fn serve(self, listener: &mut TcpListener) -> Result<(), BoxError>
+    pub async fn serve(self, listener: &mut TcpListener) -> Result<(), Error>
     where
         T: Send + 'static,
         H: Send + 'static,
@@ -134,7 +134,7 @@ where
         }
     }
 
-    async fn handle_client<S>(self, addr: SocketAddr, mut stream: S) -> Result<(), BoxError>
+    async fn handle_client<S>(self, addr: SocketAddr, mut stream: S) -> Result<(), Error>
     where
         S: AsyncRead + AsyncWrite + Unpin,
     {
@@ -144,7 +144,7 @@ where
             match stream.read_exact(&mut len_buf).await {
                 Ok(_) => {}
                 Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => break,
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(Error::IO(err)),
             };
 
             let len = u32::from_le_bytes(len_buf) as usize;
@@ -164,7 +164,9 @@ where
             let mut vec = postcard::serialize_with_flavor(&res, postcard::flavors::StdVec(vec))?;
 
             // send response
-            let size: u32 = (vec.len() - 4).try_into()?;
+            let size: u32 = (vec.len() - 4)
+                .try_into()
+                .map_err(|_| Error::MessageTooLong)?;
             vec[..4].copy_from_slice(&size.to_le_bytes());
             stream.write_all(&vec).await?;
 
@@ -175,7 +177,7 @@ where
         Ok(())
     }
 
-    async fn handle_request(&self, addr: &SocketAddr, req: &[u8]) -> Result<Vec<u8>, BoxError> {
+    async fn handle_request(&self, addr: &SocketAddr, req: &[u8]) -> Result<Vec<u8>, Error> {
         // Deserialize request.
         let req: T = postcard::from_bytes(req)?;
         log::trace!("Received request from {}: {:?}", addr, req);
@@ -209,7 +211,7 @@ pub async fn handle_params<T, R, H, F>(params: R, handler: H) -> ServerResult
 where
     R: Request<T>,
     H: FnOnce(R) -> F,
-    F: Future<Output = Result<R::Response, BoxError>>,
+    F: Future<Output = Result<R::Response, crate::BoxError>>,
 {
     let res = handler(params).await?;
     let data = postcard::to_stdvec(&res)?;

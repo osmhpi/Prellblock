@@ -34,19 +34,18 @@
 //!     handler,
 //!     server,
 //!     server::{Response, Server},
+//!     Error,
 //!     Request,
 //! };
 //! use std::net::SocketAddr;
 //! use tokio::net::TcpListener;
-//!
-//! type BoxError = Box<dyn std::error::Error + Send + Sync>;
 //!
 //! #[derive(Clone)]
 //! struct PingAPIServer;
 //!
 //! impl PingAPIServer {
 //!     /// The main server loop.
-//!     pub async fn serve(self, listener: &mut TcpListener) -> Result<(), BoxError> {
+//!     pub async fn serve(self, listener: &mut TcpListener) -> Result<(), Error> {
 //!         let handler = handler!(PingAPIMessage, {
 //!             Ping(_) => Ok(Pong),
 //!             Add(params) => Ok(params.0 + params.1),
@@ -97,9 +96,11 @@ pub mod client;
 #[cfg(feature = "server")]
 pub mod server;
 
+mod error;
 mod macros;
 mod stream;
 
+pub use error::Error;
 pub use stream::Stream;
 
 use serde::{de::DeserializeOwned, Serialize};

@@ -2,7 +2,7 @@
 
 use crate::world_state::WorldStateService;
 use err_derive::Error;
-use pinxit::PeerId;
+use pinxit::{PeerId, Signed};
 use prellblock_client_api::Transaction;
 
 /// An error of the `permission_checker` module.
@@ -20,22 +20,26 @@ pub enum PermissionError {
     /// The account is not an RPU.
     #[error(display = "The account {} is not an RPU.", 0)]
     NotAnRPU(PeerId),
+
+    /// The signature could not be verified.
+    #[error(display = "{}", 0)]
+    InvalidSignature(#[error(from)] pinxit::Error),
 }
 
-/// A `PermissionChecker` is used to check whether accounts are allowed to carry out transactions.
-pub struct PermissionChecker {
+/// A `TransactionChecker` is used to check whether accounts are allowed to carry out transactions.
+pub struct TransactionChecker {
     world_state: WorldStateService,
 }
 
-impl PermissionChecker {
-    /// Create a new instance of `PermissionChecker`.
+impl TransactionChecker {
+    /// Create a new instance of `TransactionChecker`.
     #[must_use]
     pub const fn new(world_state: WorldStateService) -> Self {
         Self { world_state }
     }
 
     /// Verify whether a given `transaction` issued by a `peer_id` is valid.
-    pub fn verify(
+    pub fn verify_permissions(
         &self,
         peer_id: &PeerId,
         transaction: &Transaction,
@@ -53,6 +57,16 @@ impl PermissionChecker {
                 }
             }
         }
+    }
+
+    /// Verify signatures of `Transaction`s
+    pub fn verify_signatures(&self, data: &[Signed<Transaction>]) -> Result<(), PermissionError> {
+        for tx in data {
+            let signer = tx.signer().clone();
+            let transaction = tx.verify_ref()?;
+            self.verify_permissions(&signer, &transaction)?;
+        }
+        Ok(())
     }
 
     /// Verify whether the given `PeerId` is a known RPU.

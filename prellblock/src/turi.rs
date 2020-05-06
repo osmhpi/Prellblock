@@ -1,6 +1,6 @@
 //! A server for communicating between RPUs.
 
-use crate::{batcher::Batcher, permission_checker::PermissionChecker, BoxError};
+use crate::{batcher::Batcher, transaction_checker::TransactionChecker, BoxError};
 use balise::{
     handler,
     server::{Server, TlsIdentity},
@@ -17,7 +17,7 @@ use tokio::net::TcpListener;
 pub struct Turi {
     tls_identity: TlsIdentity,
     batcher: Arc<Batcher>,
-    permission_checker: Arc<PermissionChecker>,
+    transaction_checker: Arc<TransactionChecker>,
 }
 
 impl Turi {
@@ -28,17 +28,17 @@ impl Turi {
     pub const fn new(
         tls_identity: TlsIdentity,
         batcher: Arc<Batcher>,
-        permission_checker: Arc<PermissionChecker>,
+        transaction_checker: Arc<TransactionChecker>,
     ) -> Self {
         Self {
             tls_identity,
             batcher,
-            permission_checker,
+            transaction_checker,
         }
     }
 
     /// The main server loop.
-    pub async fn serve(self, listener: &mut TcpListener) -> Result<(), BoxError> {
+    pub async fn serve(self, listener: &mut TcpListener) -> Result<(), balise::Error> {
         let tls_identity = self.tls_identity.clone();
         let server = Server::new(
             handler!(ClientMessage, {
@@ -47,7 +47,8 @@ impl Turi {
             }),
             tls_identity,
         )?;
-        server.serve(listener).await
+        server.serve(listener).await?;
+        Ok(())
     }
 
     async fn handle_execute(&self, params: message::Execute) -> Result<(), BoxError> {
@@ -57,7 +58,8 @@ impl Turi {
         let peer_id = transaction.signer();
 
         // Verify permissions
-        self.permission_checker.verify(peer_id, &transaction)?;
+        self.transaction_checker
+            .verify_permissions(peer_id, &transaction)?;
 
         match &transaction as &Transaction {
             Transaction::KeyValue { key, value } => {

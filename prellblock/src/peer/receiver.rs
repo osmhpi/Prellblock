@@ -1,7 +1,6 @@
 //! A server for communicating between RPUs.
 
 use super::{PeerInbox, PeerMessage};
-use crate::BoxError;
 use balise::{
     handler,
     server::{Server, TlsIdentity},
@@ -30,7 +29,7 @@ impl Receiver {
     }
 
     /// The main server loop.
-    pub async fn serve(self, listener: &mut TcpListener) -> Result<(), BoxError> {
+    pub async fn serve(self, listener: &mut TcpListener) -> Result<(), balise::Error> {
         let tls_identity = self.tls_identity.clone();
         let server = Server::new(
             handler!(PeerMessage, {
@@ -42,6 +41,7 @@ impl Receiver {
             }),
             tls_identity,
         )?;
-        server.serve(listener).await
+        server.serve(listener).await?;
+        Ok(())
     }
 }

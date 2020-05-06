@@ -1,4 +1,4 @@
-use super::BoxError;
+use crate::Error;
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
@@ -10,7 +10,7 @@ impl<'a> super::StreamGuard<'a> {
     }
 }
 
-pub async fn connect(addr: &SocketAddr) -> Result<StreamImpl, BoxError> {
+pub async fn connect(addr: &SocketAddr) -> Result<StreamImpl, Error> {
     let stream = TcpStream::connect(addr).await?;
     Ok(stream)
 }

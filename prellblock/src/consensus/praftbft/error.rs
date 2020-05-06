@@ -1,8 +1,8 @@
 use super::state::Phase;
 use crate::{
     block_storage,
-    consensus::{BlockNumber, LeaderTerm},
-    permission_checker::PermissionError,
+    consensus::{BlockHash, BlockNumber, LeaderTerm},
+    transaction_checker::PermissionError,
 };
 use err_derive::Error;
 use pinxit::PeerId;
@@ -16,6 +16,10 @@ pub enum Error {
     #[error(display = "The proposed Block is empty.")]
     EmptyBlock,
 
+    /// An Error occured while sending data over the network.
+    #[error(display = "{}", 0)]
+    BaliseError(#[error(from)] balise::Error),
+
     /// The Block could not be written to the BlockStorage.
     #[error(display = "{}", 0)]
     BlockStorageError(#[error(from)] block_storage::Error),
@@ -27,6 +31,18 @@ pub enum Error {
     /// The signature could not be verified.
     #[error(display = "{}", 0)]
     InvalidSignature(#[error(from)] pinxit::Error),
+
+    /// There where duplicates of the same signature found.
+    #[error(display = "A Signature is duplicated.")]
+    DuplicateSignatures,
+
+    /// A Message was received that was not expected.
+    #[error(display = "An unexpected message was received.")]
+    UnexpectedMessage,
+
+    /// A Response was received that was not expected.
+    #[error(display = "An unexpected response was received.")]
+    UnexpectedResponse,
 
     /// The `Follower`'s leader_term is not equal to the received leader_term.
     #[error(display = "Follower is not in the correct Leader term.")]
@@ -43,6 +59,22 @@ pub enum Error {
     /// The Block Hash is wrong.
     #[error(display = "The Block Hash is wrong.")]
     WrongBlockHash,
+
+    /// The `BlockHash` does not match the expected `BlockHash`.
+    #[error(
+        display = "The BlockHash {} does not match the expected previous BlockHash {}.",
+        0,
+        1
+    )]
+    BlockHashDoesNotMatch(BlockHash, BlockHash),
+
+    /// The `BlockNumber` does not match the expected `BlockNumber`.
+    #[error(
+        display = "The BlockNUmber {} does not match the expected Blocknumber {}.",
+        0,
+        1
+    )]
+    BlockNumberDoesNotMatch(BlockNumber, BlockNumber),
 
     /// The leader proposing the block is not the one the `Follower` saved (maybe there is no leader).
     #[error(display = "The RPU {} is not the current leader.", 0)]

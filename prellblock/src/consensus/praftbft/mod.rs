@@ -13,15 +13,16 @@ mod leader;
 pub mod message;
 mod ring_buffer;
 mod state;
+mod synchronizer;
 mod view_change;
 
 pub use error::Error;
 
 use crate::{
     block_storage::BlockStorage,
-    consensus::LeaderTerm,
+    consensus::{LeaderTerm, SignatureList},
     peer::{message as peer_message, Sender},
-    permission_checker::PermissionChecker,
+    transaction_checker::TransactionChecker,
     world_state::WorldStateService,
     BoxError,
 };
@@ -29,25 +30,22 @@ use futures::{stream::FuturesUnordered, StreamExt};
 use im::Vector;
 use leader::Leader;
 use message::ConsensusMessage;
-use pinxit::{Identity, PeerId, Signable, Signature, Signed};
+use pinxit::{Identity, PeerId, Signable, Signed};
 use prellblock_client_api::Transaction;
 use state::{FollowerState, LeaderState};
 use std::{
-    collections::{HashMap, VecDeque},
-    iter::FromIterator,
-    net::SocketAddr,
-    ops::Deref,
-    sync::Arc,
+    collections::VecDeque, iter::FromIterator, net::SocketAddr, ops::Deref, sync::Arc,
     time::Instant,
 };
 use tokio::sync::{watch, Mutex, Notify, RwLock};
 
 const MAX_TRANSACTIONS_PER_BLOCK: usize = 500;
 
-type ViewChangeSignatures = HashMap<PeerId, Signature>;
-type NewViewSignatures = HashMap<PeerId, Signature>;
+type ViewChangeSignatures = SignatureList;
+type NewViewSignatures = SignatureList;
 
 type Queue = VecDeque<(Instant, Signed<Transaction>)>;
+
 ///
 /// See the [paper](https://www.scs.stanford.edu/17au-cs244b/labs/projects/clow_jiang.pdf).
 pub struct PRaftBFT {
@@ -70,7 +68,7 @@ pub struct PRaftBFT {
     new_view_receiver: watch::Receiver<(LeaderTerm, NewViewSignatures)>,
     enough_view_changes_sender: watch::Sender<(LeaderTerm, ViewChangeSignatures)>,
     block_storage: BlockStorage,
-    permission_checker: PermissionChecker,
+    transaction_checker: TransactionChecker,
 }
 
 impl Deref for PRaftBFT {
@@ -115,7 +113,7 @@ impl PRaftBFT {
         let (block_changed_notifier, block_changed_receiver) = watch::channel(());
         let (new_view_sender, new_view_receiver) = watch::channel(new_view_data);
         let (enough_view_changes_sender, enough_view_changes_receiver) =
-            watch::channel((leader_term, ViewChangeSignatures::new()));
+            watch::channel((leader_term, ViewChangeSignatures::default()));
         let praftbft = Self {
             queue: Arc::default(),
             leader_notifier: leader_notifier.clone(),
@@ -128,7 +126,7 @@ impl PRaftBFT {
             new_view_receiver,
             enough_view_changes_sender,
             block_storage,
-            permission_checker: PermissionChecker::new(world_state),
+            transaction_checker: TransactionChecker::new(world_state),
         };
 
         let praftbft = Arc::new(praftbft);
@@ -211,7 +209,7 @@ impl BroadcastMeta {
         &self,
         message: ConsensusMessage,
         verify_response: F,
-    ) -> Result<HashMap<PeerId, Signature>, BoxError>
+    ) -> Result<SignatureList, BoxError>
     where
         F: Fn(&ConsensusMessage) -> Result<(), BoxError> + Clone + Send + Sync + 'static,
     {
@@ -244,12 +242,12 @@ impl BroadcastMeta {
             }));
         }
 
-        let mut responses = HashMap::new();
+        let mut responses = SignatureList::default();
 
         while let Some(result) = futures.next().await {
             match result {
-                Ok(Some((peer_id, signature))) => {
-                    responses.insert(peer_id, signature);
+                Ok(Some(response)) => {
+                    responses.push(response);
                 }
                 Ok(None) => {}
                 Err(err) => log::warn!("Failed to join task: {}", err),

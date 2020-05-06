@@ -2,7 +2,7 @@ use super::{message, Calculator, Pong};
 use crate::{
     consensus::{Consensus, ConsensusMessage},
     data_storage::DataStorage,
-    permission_checker::PermissionChecker,
+    transaction_checker::TransactionChecker,
     BoxError,
 };
 use pinxit::Signed;
@@ -17,7 +17,7 @@ pub struct PeerInbox {
     calculator: ArcMut<Calculator>,
     data_storage: Arc<DataStorage>,
     consensus: Arc<Consensus>,
-    permission_checker: Arc<PermissionChecker>,
+    transaction_checker: Arc<TransactionChecker>,
 }
 
 impl PeerInbox {
@@ -27,13 +27,13 @@ impl PeerInbox {
         calculator: ArcMut<Calculator>,
         data_storage: Arc<DataStorage>,
         consensus: Arc<Consensus>,
-        permission_checker: Arc<PermissionChecker>,
+        transaction_checker: Arc<TransactionChecker>,
     ) -> Self {
         Self {
             calculator,
             data_storage,
             consensus,
-            permission_checker,
+            transaction_checker,
         }
     }
 
@@ -43,8 +43,8 @@ impl PeerInbox {
         let transaction = transaction.verify_ref()?;
 
         // Verify permissions
-        self.permission_checker
-            .verify(transaction.signer(), &transaction)?;
+        self.transaction_checker
+            .verify_permissions(transaction.signer(), &transaction)?;
 
         match &*transaction {
             Transaction::KeyValue { key, value } => {

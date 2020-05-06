@@ -110,6 +110,7 @@ impl Leader {
 
                 let block_number = self.leader_state.block + 1;
                 let body = Body {
+                    leader_term,
                     height: block_number,
                     prev_block_hash: self.leader_state.last_block_hash,
                     transactions,

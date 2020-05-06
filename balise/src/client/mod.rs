@@ -2,7 +2,7 @@
 
 mod connection_pool;
 
-use super::{BoxError, Request};
+use crate::{Error, Request};
 use serde::Serialize;
 use std::{
     convert::TryInto,
@@ -41,7 +41,7 @@ impl<T> Client<T> {
     }
 
     /// Send a request to the server specified.
-    pub async fn send_request<Req>(&mut self, req: Req) -> Result<Req::Response, BoxError>
+    pub async fn send_request<Req>(&mut self, req: Req) -> Result<Req::Response, Error>
     where
         Req: Request<T>,
         T: Serialize,
@@ -61,13 +61,13 @@ impl<T> Client<T> {
     /// A stream could be closed by the receiver while being
     /// in the pool. This is catched and a new stream will be
     /// returned in this case.
-    async fn stream(&self) -> Result<(connection_pool::StreamGuard<'_>, SocketAddr), BoxError> {
-        let deadline = Instant::now() + Duration::from_secs(15);
+    async fn stream(&self) -> Result<(connection_pool::StreamGuard<'_>, SocketAddr), Error> {
+        let deadline = Instant::now() + Duration::from_secs(3);
         let delay = Duration::from_secs(1);
 
         let res = loop {
             if Instant::now() > deadline {
-                return Err("Timeout: Could not send request.".into());
+                return Err(Error::Timeout);
             }
 
             let stream = match connection_pool::POOL.stream(self.addr).await {
@@ -119,7 +119,7 @@ impl<T> Client<T> {
 async fn send_request<S, Req, T>(
     stream: &mut S,
     req: Req,
-) -> Result<Result<Req::Response, String>, BoxError>
+) -> Result<Result<Req::Response, String>, Error>
 where
     S: AsyncRead + AsyncWrite + Unpin,
     Req: Request<T>,
@@ -130,7 +130,9 @@ where
     let vec = vec![0; 4];
     let mut vec = postcard::serialize_with_flavor(&req, postcard::flavors::StdVec(vec))?;
     // send request
-    let size: u32 = (vec.len() - 4).try_into()?;
+    let size: u32 = (vec.len() - 4)
+        .try_into()
+        .map_err(|_| Error::MessageTooLong)?;
     vec[..4].copy_from_slice(&size.to_le_bytes());
     stream.write_all(&vec).await?;
     // read response length

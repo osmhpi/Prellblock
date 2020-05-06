@@ -1,18 +1,18 @@
-use crate::consensus::block_number::BlockNumber;
+use super::{BlockNumber, LeaderTerm, SignatureList};
 use blake2::{
     digest::{generic_array::typenum::Unsigned, FixedOutput},
     Blake2b, Digest,
 };
-use pinxit::{PeerId, Signature, Signed};
+use pinxit::Signed;
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt};
+use std::fmt;
 
 /// A `Block` stores transactions verified by the blockchain.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
     pub(crate) body: Body,
-    pub(crate) signatures: HashMap<PeerId, Signature>,
+    pub(crate) signatures: SignatureList,
 }
 
 impl Block {
@@ -32,6 +32,7 @@ impl Block {
 /// and an Array of the actual `Transaction`s with their corresponding Signature in the `Block`.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Body {
+    pub(crate) leader_term: LeaderTerm,
     pub(crate) height: BlockNumber,
     pub(crate) prev_block_hash: BlockHash,
     pub(crate) transactions: Vec<Signed<Transaction>>,

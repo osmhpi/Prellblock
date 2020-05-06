@@ -1,14 +1,13 @@
 use super::{
-    super::{Block, BlockHash, BlockNumber, Body, LeaderTerm},
+    super::{Block, BlockHash, BlockNumber, Body, LeaderTerm, SignatureList},
     error::PhaseName,
     message::ConsensusMessage,
-    state::{FollowerState, Phase, PhaseMeta, RoundState, ViewPhase, ViewPhaseMeta},
+    state::{FollowerState, Phase, PhaseMeta, RoundState},
     Error, NewViewSignatures, PRaftBFT,
 };
-use pinxit::{PeerId, Signable, Signature, Signed};
+use pinxit::{PeerId, Signable, Signed};
 use prellblock_client_api::Transaction;
-use rayon::prelude::*;
-use std::{collections::HashMap, time::Duration};
+use std::time::{Duration, Instant};
 use tokio::{
     sync::{watch, MutexGuard},
     time,
@@ -25,70 +24,26 @@ impl PRaftBFT {
         block_number: BlockNumber,
     ) -> MutexGuard<'_, FollowerState> {
         let mut receiver = self.block_changed_receiver.clone();
+        let start = Instant::now();
+        let timeout = Duration::from_secs(3);
+        // SYNC SHOULD HAPPEN HERE :D
         loop {
             let follower_state = self.follower_state.lock().await;
             if follower_state.block_number + 1 >= block_number {
                 return follower_state;
             }
-            drop(follower_state);
-            // Wait until block number changed.
-            let _ = receiver.recv().await;
-        }
-    }
 
-    fn do_we_need_to_synchronize(
-        &self,
-        follower_state: &FollowerState,
-        leader_term: LeaderTerm,
-        block_number: BlockNumber,
-    ) -> bool {
-        let _ = self;
-        leader_term > follower_state.leader_term || block_number > follower_state.block_number + 1
-    }
-
-    async fn synchronize(
-        &self,
-        follower_state: MutexGuard<'_, FollowerState>,
-    ) -> MutexGuard<'_, FollowerState> {
-        drop(follower_state);
-
-        // TODO: implement stuff
-        // choose peer to ask for synchronization
-        // verify received blocks, if not timeouted
-        // append correct blocks to own blockstorage
-        // discard faulty blocks, if any and restart synchronizer (in that case)
-
-        self.follower_state.lock().await
-    }
-
-    async fn handle_synchronization_request(
-        &self,
-        peer_id: &PeerId,
-        leader_term: LeaderTerm,
-        block_number: BlockNumber,
-    ) -> Result<ConsensusMessage, Error> {
-        self.permission_checker.verify_is_rpu(peer_id)?;
-        let (new_view, current_block_number) = {
-            let follower_state = self.follower_state.lock().await;
-
-            let new_view = if leader_term == follower_state.leader_term {
-                None
+            let remaining = if let Some(remaining) = timeout.checked_sub(start.elapsed()) {
+                remaining
             } else {
-                Some((
-                    follower_state.leader_term,
-                    follower_state.new_view_signatures.clone(),
-                ))
+                return follower_state;
             };
 
-            (new_view, follower_state.block_number)
-        };
+            drop(follower_state);
 
-        let blocks: Result<_, _> = self
-            .block_storage
-            .read(block_number..=current_block_number)
-            .collect();
-        let blocks = blocks?;
-        Ok(ConsensusMessage::SynchronizationResponse { new_view, blocks })
+            // Wait until block number changed.
+            let _ = time::timeout(remaining, receiver.recv()).await;
+        }
     }
 
     async fn handle_prepare_message(
@@ -140,12 +95,12 @@ impl PRaftBFT {
         leader_term: LeaderTerm,
         block_number: BlockNumber,
         block_hash: BlockHash,
-        ackprepare_signatures: HashMap<PeerId, Signature>,
+        ackprepare_signatures: SignatureList,
         data: Vec<Signed<Transaction>>,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state_in_block(block_number).await;
         if self.do_we_need_to_synchronize(&follower_state, leader_term, block_number) {
-            follower_state = self.synchronize(follower_state).await;
+            follower_state = self.synchronize(follower_state).await?;
         }
 
         log::trace!("Handle Append message #{}.", block_number);
@@ -181,64 +136,34 @@ impl PRaftBFT {
         }
 
         // Check validity of ACKPREPARE Signatures.
-        if !self.supermajority_reached(ackprepare_signatures.len()) {
-            self.request_view_change(follower_state).await;
-            return Err(Error::NotEnoughSignatures);
-        }
-
         let ackprepare_message = ConsensusMessage::AckPrepare {
             leader_term,
             block_number,
             block_hash,
         };
-        for (peer_id, signature) in ackprepare_signatures {
-            // All signatures in here must be valid. The leader would filter out any
-            // wrong signatures.
-            match peer_id.verify(&ackprepare_message, &signature) {
-                Ok(()) => {}
-                Err(err) => {
-                    log::error!("Error while verifying ACKPREPARE signatures: {}", err);
-                    self.request_view_change(follower_state).await;
-                    return Err(err.into());
-                }
-            };
-            // Also check whether the signer is a known RPU
-            self.permission_checker.verify_is_rpu(&peer_id)?;
+        match self.verify_rpu_majority_signatures(&ackprepare_message, &ackprepare_signatures) {
+            Ok(()) => {}
+            Err(err) => {
+                self.request_view_change(follower_state).await;
+                return Err(err);
+            }
         }
 
         if data.is_empty() {
             // Empty blocks are not allowed.
             // Trigger leader change as a consequence.
+            log::error!("Received empty block.");
             self.request_view_change(follower_state).await;
             return Err(Error::EmptyBlock);
         }
 
         // Check for transaction validity.
-        let verification_result = data
-            .par_iter()
-            .map(|tx| {
-                let signer = tx.signer().clone();
-                let transaction = tx.verify_ref().map_err(Into::<Error>::into)?;
-                self.permission_checker
-                    .verify(&signer, &transaction)
-                    .map_err(Into::<Error>::into)
-            })
-            .collect::<Result<(), Error>>();
-
-        match verification_result {
-            Ok(_) => {}
-            Err(Error::InvalidSignature(err)) => {
+        match self.transaction_checker.verify_signatures(&data) {
+            Ok(()) => {}
+            Err(err) => {
                 log::error!("Error while verifying transaction signature: {}", err);
                 self.request_view_change(follower_state).await;
                 return Err(err.into());
-            }
-            Err(Error::PermissionError(err)) => {
-                log::error!("Error while verifying client account permissions: {}", err);
-                self.request_view_change(follower_state).await;
-                return Err(err.into());
-            }
-            _ => {
-                unreachable!();
             }
         }
 
@@ -246,6 +171,7 @@ impl PRaftBFT {
 
         // Validate the Block Hash.
         let body = Body {
+            leader_term,
             height: block_number,
             prev_block_hash: follower_state.last_block_hash(),
             transactions: validated_transactions,
@@ -254,6 +180,7 @@ impl PRaftBFT {
             return Err(Error::WrongBlockHash);
         }
         let leader_term = follower_state.leader_term;
+
         // All checks passed, update our state.
         let round_state_mut = follower_state.round_state_mut(block_number).unwrap();
         round_state_mut.phase = Phase::Append(meta, body);
@@ -301,7 +228,7 @@ impl PRaftBFT {
         leader_term: LeaderTerm,
         block_number: BlockNumber,
         block_hash: BlockHash,
-        ackappend_signatures: HashMap<PeerId, Signature>,
+        ackappend_signatures: SignatureList,
     ) -> Result<ConsensusMessage, Error> {
         let follower_state = self.follower_state_in_block(block_number).await;
         self.handle_commit_message_inner(
@@ -324,11 +251,11 @@ impl PRaftBFT {
         leader_term: LeaderTerm,
         block_number: BlockNumber,
         block_hash: BlockHash,
-        ackappend_signatures: HashMap<PeerId, Signature>,
+        ackappend_signatures: SignatureList,
     ) -> Result<ConsensusMessage, Error> {
         // Check whether there is a need to synchronize
         if self.do_we_need_to_synchronize(&follower_state, leader_term, block_number) {
-            follower_state = self.synchronize(follower_state).await;
+            follower_state = self.synchronize(follower_state).await?;
         }
 
         log::trace!("Handle Commit message #{}.", block_number);
@@ -377,28 +304,17 @@ impl PRaftBFT {
         }
 
         // Check validity of ACKAPPEND Signatures.
-        if !self.supermajority_reached(ackappend_signatures.len()) {
-            self.request_view_change(follower_state).await;
-            return Err(Error::NotEnoughSignatures);
-        }
         let ackappend_message = ConsensusMessage::AckAppend {
             leader_term,
             block_number,
             block_hash,
         };
-        for (peer_id, signature) in &ackappend_signatures {
-            // All signatures in here must be valid. The leader would filter out any
-            // wrong signatures.
-            match peer_id.verify(&ackappend_message, signature) {
-                Ok(()) => {}
-                Err(err) => {
-                    log::error!("Error while verifying ACKAPPEND signatures: {}", err);
-                    self.request_view_change(follower_state).await;
-                    return Err(err.into());
-                }
-            };
-            // Also check whether the signer is a known RPU
-            self.permission_checker.verify_is_rpu(peer_id)?;
+        match self.verify_rpu_majority_signatures(&ackappend_message, &ackappend_signatures) {
+            Ok(()) => {}
+            Err(err) => {
+                self.request_view_change(follower_state).await;
+                return Err(err);
+            }
         }
 
         follower_state.round_state_mut(block_number).unwrap().phase = Phase::Committed(block_hash);
@@ -516,33 +432,13 @@ impl PRaftBFT {
             | ConsensusMessage::AckCommit { .. }
             | ConsensusMessage::AckViewChange { .. }
             | ConsensusMessage::AckNewView { .. }
-            | ConsensusMessage::SynchronizationResponse { .. } => unimplemented!(),
+            | ConsensusMessage::SynchronizationResponse { .. } => {
+                return Err(Error::UnexpectedMessage);
+            }
         };
 
-        let signed_response = response.sign(&self.broadcast_meta.identity).unwrap();
+        let signed_response = response.sign(&self.identity).unwrap();
         Ok(signed_response)
-    }
-
-    /// Send a `ConsensusMessage::ViewChange` message because the leader
-    /// seems to be faulty.
-    async fn request_view_change(&self, mut follower_state: MutexGuard<'_, FollowerState>) {
-        let requested_new_leader_term = follower_state.leader_term + 1;
-        let messages = HashMap::new();
-        match follower_state.set_view_phase(
-            requested_new_leader_term,
-            ViewPhase::ViewChanging(ViewPhaseMeta { messages }),
-        ) {
-            Ok(()) => {}
-            Err(err) => log::error!("Error setting view change phase: {}", err),
-        };
-        // This drop is needed because receiving messages while
-        // broadcasting also requires the lock.
-        drop(follower_state);
-
-        match self.broadcast_view_change(requested_new_leader_term).await {
-            Ok(()) => {}
-            Err(err) => log::error!("Error broadcasting ViewChange: {}", err),
-        }
     }
 
     /// This is woken up after a timeout or a specific

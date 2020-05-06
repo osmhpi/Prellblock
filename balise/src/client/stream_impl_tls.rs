@@ -1,4 +1,4 @@
-use super::BoxError;
+use crate::Error;
 use lazy_static::lazy_static;
 use native_tls::{Certificate, TlsConnector};
 use std::{fs, net::SocketAddr};
@@ -26,7 +26,7 @@ lazy_static! {
     };
 }
 
-pub async fn connect(addr: &SocketAddr) -> Result<StreamImpl, BoxError> {
+pub async fn connect(addr: &SocketAddr) -> Result<StreamImpl, Error> {
     // connect with tcp stream
     let stream = TcpStream::connect(addr).await?;
     let stream = CONNECTOR.connect(&addr.ip().to_string(), stream).await?;

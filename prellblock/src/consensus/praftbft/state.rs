@@ -1,7 +1,7 @@
 //! Contains the states used in the consensus.
 
 use super::{
-    super::{BlockHash, BlockNumber, Body, LeaderTerm},
+    super::{BlockHash, BlockNumber, Body, LeaderTerm, SignatureList},
     message::ConsensusMessage,
     ring_buffer::RingBuffer,
     Error, NewViewSignatures,
@@ -94,7 +94,7 @@ impl FollowerState {
         let start = world_state.block_number;
         let mut state = Self {
             leader_term: LeaderTerm::default(),
-            new_view_signatures: HashMap::new(),
+            new_view_signatures: SignatureList::default(),
             block_number: start,
             round_states: RingBuffer::new(RoundState::default(), RING_BUFFER_SIZE, start.into()),
             view_state: RingBuffer::new(ViewPhase::Waiting, RING_BUFFER_SIZE, 0),

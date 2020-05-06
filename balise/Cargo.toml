@@ -15,6 +15,7 @@ server = []
 tls = ["native-tls"]
 
 [dependencies]
+err-derive = "0.2.4"
 lazy_static = "1.4.0"
 log = "0.4.8"
 native-tls = { version = "0.2", optional = true, features = ["vendored"] }

@@ -1,18 +1,22 @@
 use super::{
     message::ConsensusMessage,
-    state::{ViewPhase, ViewPhaseMeta},
+    state::{FollowerState, ViewPhase, ViewPhaseMeta},
     Error, PRaftBFT, ViewChangeSignatures,
 };
-use crate::{consensus::LeaderTerm, BoxError};
+use crate::{
+    consensus::{LeaderTerm, SignatureList},
+    BoxError,
+};
 use pinxit::{PeerId, Signature};
 use std::{collections::HashMap, time::Duration};
+use tokio::sync::MutexGuard;
 
 impl PRaftBFT {
     pub(super) async fn handle_new_view(
         &self,
         peer_id: &PeerId,
         leader_term: LeaderTerm,
-        view_change_signatures: HashMap<PeerId, Signature>,
+        view_change_signatures: SignatureList,
     ) -> Result<ConsensusMessage, Error> {
         log::trace!("Received NewView Message.");
         // Leader must be the next peer from the peers list.
@@ -29,9 +33,7 @@ impl PRaftBFT {
         let view_change_message = ConsensusMessage::ViewChange {
             new_leader_term: leader_term,
         };
-        for (peer_id, signature) in &view_change_signatures {
-            peer_id.verify(&view_change_message, signature)?
-        }
+        self.verify_rpu_majority_signatures(&view_change_message, &view_change_signatures)?;
 
         self.new_view_sender
             .broadcast((leader_term, view_change_signatures))
@@ -80,6 +82,15 @@ impl PRaftBFT {
         if new_leader_term <= follower_state.leader_term {
             return Err(Error::LeaderTermTooSmall(new_leader_term));
         }
+
+        let view_change_message = ConsensusMessage::ViewChange { new_leader_term };
+        match peer_id.verify(&view_change_message, &signature) {
+            Ok(()) => {}
+            Err(err) => {
+                log::error!("Received invalid view change signature: {}", err);
+                return Err(err.into());
+            }
+        };
 
         log::trace!(
             "Received leader term {} on current leader term {}.",
@@ -139,11 +150,11 @@ impl PRaftBFT {
                     if self.is_current_leader(new_leader_term, self.peer_id()) {
                         // Notify leader task to begin to work.
                         self.enough_view_changes_sender
-                            .broadcast((new_leader_term, messages))
+                            .broadcast((new_leader_term, messages.into_iter().collect()))
                             .expect("running leader task");
                     } else {
                         self.enough_view_changes_sender
-                            .broadcast((new_leader_term, HashMap::new()))
+                            .broadcast((new_leader_term, SignatureList::default()))
                             .expect("running leader task");
                     }
 
@@ -220,5 +231,30 @@ impl PRaftBFT {
         self.broadcast_until_majority(new_view_message, validate_new_view)
             .await?;
         Ok(())
+    }
+
+    /// Send a `ConsensusMessage::ViewChange` message because the leader
+    /// seems to be faulty.
+    pub(super) async fn request_view_change(
+        &self,
+        mut follower_state: MutexGuard<'_, FollowerState>,
+    ) {
+        let requested_new_leader_term = follower_state.leader_term + 1;
+        let messages = HashMap::new();
+        match follower_state.set_view_phase(
+            requested_new_leader_term,
+            ViewPhase::ViewChanging(ViewPhaseMeta { messages }),
+        ) {
+            Ok(()) => {}
+            Err(err) => log::error!("Error setting view change phase: {}", err),
+        };
+        // This drop is needed because receiving messages while
+        // broadcasting also requires the lock.
+        drop(follower_state);
+
+        match self.broadcast_view_change(requested_new_leader_term).await {
+            Ok(()) => {}
+            Err(err) => log::error!("Error broadcasting ViewChange: {}", err),
+        }
     }
 }

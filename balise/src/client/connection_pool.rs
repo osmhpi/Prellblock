@@ -6,7 +6,7 @@ mod stream_impl;
 #[path = "stream_impl_tcp.rs"]
 mod stream_impl;
 
-use super::BoxError;
+use crate::Error;
 use lazy_static::lazy_static;
 use std::{
     collections::HashMap,
@@ -35,7 +35,7 @@ impl ConnectionPool {
         }
     }
 
-    pub async fn stream(&self, addr: SocketAddr) -> Result<StreamGuard<'_>, BoxError> {
+    pub async fn stream(&self, addr: SocketAddr) -> Result<StreamGuard<'_>, Error> {
         let mut states = self.states.lock().await;
         let (current_streams, stream) = if let Some(state) = states.get_mut(&addr) {
             (state.current_streams.clone(), state.streams.pop())

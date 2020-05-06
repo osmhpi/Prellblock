@@ -3,7 +3,6 @@
 use crate::{
     peer::{PeerMessage, Sender},
     world_state::WorldStateService,
-    BoxError,
 };
 use balise::Request;
 use futures::future::join_all;
@@ -24,7 +23,7 @@ impl Broadcaster {
 
     /// Broadcast a batch to all known peers (stored in `peer_addresses`).
     #[allow(clippy::future_not_send)]
-    pub async fn broadcast<T>(&self, message: &T) -> Result<(), BoxError>
+    pub async fn broadcast<T>(&self, message: &T) -> Result<(), balise::Error>
     where
         T: Request<PeerMessage>,
     {
@@ -49,8 +48,15 @@ impl Broadcaster {
         .await;
 
         for result in results {
-            // Ignore result
-            let _ = result??;
+            match result {
+                Err(err) => {
+                    log::error!("Error while broadcasting data: {}", err);
+                }
+                Ok(result) => {
+                    // Ignore result
+                    result?;
+                }
+            }
         }
         Ok(())
     }
