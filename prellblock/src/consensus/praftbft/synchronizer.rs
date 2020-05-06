@@ -105,14 +105,9 @@ impl PRaftBFT {
             // Validate Transactions
             self.transaction_checker.verify_signatures(data)?;
 
-            follower_state.block_number = block.body.height;
-            // Write Block to BlockStorage
-            self.block_storage.write_block(&block).unwrap();
-            // Remove committed transactions from our queue.
-            self.queue
-                .write()
-                .await
-                .retain(|(_, transaction)| !block.body.transactions.contains(transaction));
+            self.increment_state_and_write_block(&mut follower_state, &block)
+                .await;
+
             // Write Block to WorldState
             world_state.apply_block(block).unwrap();
             world_state.save();

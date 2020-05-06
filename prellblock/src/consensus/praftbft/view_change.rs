@@ -61,7 +61,6 @@ impl PRaftBFT {
             .await
         {
             Ok(_) => log::info!("ViewChange Message Broadcast did reach supermajority."),
-            // Malte TM
             Err(err) => log::warn!(
                 "ViewChange Message Broadcast did not reach supermajority: {}",
                 err
@@ -118,7 +117,6 @@ impl PRaftBFT {
                 messages.insert(peer_id, signature);
                 // if enough collected, broadcast message and update state accordingly
                 if self.nonfaulty_reached(messages.len()) {
-                    // TODO: Macro??
                     follower_state.set_view_phase(
                         new_leader_term,
                         ViewPhase::ViewChanging(ViewPhaseMeta { messages }),

@@ -99,16 +99,10 @@ impl PRaftBFT {
         data: Vec<Signed<Transaction>>,
     ) -> Result<ConsensusMessage, Error> {
         let mut follower_state = self.follower_state_in_block(block_number).await;
-        if self.do_we_need_to_synchronize(&follower_state, leader_term, block_number) {
-            follower_state = self.synchronize(follower_state).await?;
-        }
 
-        log::trace!("Handle Append message #{}.", block_number);
-        if !self.is_current_leader(leader_term, peer_id) {
-            log::warn!("Received message from invalid leader (ID: {}).", peer_id);
-            return Err(Error::WrongLeader(peer_id.clone()));
-        }
-        follower_state.verify_message_meta(leader_term, block_number)?;
+        follower_state = self
+            .synchronize_and_verify_message_meta(follower_state, peer_id, leader_term, block_number)
+            .await?;
 
         // Check whether the state for the block is Prepare.
         // We only allow to receive messages once.
@@ -127,27 +121,22 @@ impl PRaftBFT {
             }
         };
 
-        if block_hash != meta.block_hash {
-            return Err(Error::ChangedBlockHash);
-        }
-
-        if block_number != follower_state.block_number + 1 {
-            return Err(Error::WrongBlockNumber(block_number));
-        }
-
         // Check validity of ACKPREPARE Signatures.
         let ackprepare_message = ConsensusMessage::AckPrepare {
             leader_term,
             block_number,
             block_hash,
         };
-        match self.verify_rpu_majority_signatures(&ackprepare_message, &ackprepare_signatures) {
-            Ok(()) => {}
-            Err(err) => {
-                self.request_view_change(follower_state).await;
-                return Err(err);
-            }
-        }
+        follower_state = self
+            .check_block_and_verify_signatures(
+                follower_state,
+                &meta,
+                block_hash,
+                block_number,
+                &ackprepare_message,
+                &ackprepare_signatures,
+            )
+            .await?;
 
         if data.is_empty() {
             // Empty blocks are not allowed.
@@ -253,17 +242,9 @@ impl PRaftBFT {
         block_hash: BlockHash,
         ackappend_signatures: SignatureList,
     ) -> Result<ConsensusMessage, Error> {
-        // Check whether there is a need to synchronize
-        if self.do_we_need_to_synchronize(&follower_state, leader_term, block_number) {
-            follower_state = self.synchronize(follower_state).await?;
-        }
-
-        log::trace!("Handle Commit message #{}.", block_number);
-        if !self.is_current_leader(leader_term, peer_id) {
-            log::warn!("Received message from invalid leader (ID: {}).", peer_id);
-            return Err(Error::WrongLeader(peer_id.clone()));
-        }
-        follower_state.verify_message_meta(leader_term, block_number)?;
+        follower_state = self
+            .synchronize_and_verify_message_meta(follower_state, peer_id, leader_term, block_number)
+            .await?;
 
         // Check whether the state for the block is Append.
         // We only allow to receive messages once.
@@ -286,7 +267,7 @@ impl PRaftBFT {
                     expected: PhaseName::Append,
                 });
             }
-            Phase::Append(meta, body) => (meta, body.clone()),
+            Phase::Append(meta, body) => (meta.clone(), body.clone()),
             _ => {
                 return Err(Error::WrongPhase {
                     current: round_state.phase.to_phase_name(),
@@ -295,50 +276,33 @@ impl PRaftBFT {
             }
         };
 
-        if block_hash != meta.block_hash {
-            return Err(Error::ChangedBlockHash);
-        }
-
-        if block_number != follower_state.block_number + 1 {
-            return Err(Error::WrongBlockNumber(block_number));
-        }
-
         // Check validity of ACKAPPEND Signatures.
         let ackappend_message = ConsensusMessage::AckAppend {
             leader_term,
             block_number,
             block_hash,
         };
-        match self.verify_rpu_majority_signatures(&ackappend_message, &ackappend_signatures) {
-            Ok(()) => {}
-            Err(err) => {
-                self.request_view_change(follower_state).await;
-                return Err(err);
-            }
-        }
+        let mut follower_state = self
+            .check_block_and_verify_signatures(
+                follower_state,
+                &meta,
+                block_hash,
+                block_number,
+                &ackappend_message,
+                &ackappend_signatures,
+            )
+            .await?;
 
         follower_state.round_state_mut(block_number).unwrap().phase = Phase::Committed(block_hash);
-
-        let old_round_state = follower_state.round_states.increment(RoundState::default());
-        assert!(matches!(old_round_state.phase, Phase::Committed(..)));
-        assert!(old_round_state.buffered_commit_message.is_none());
-
-        follower_state.block_number = block_number;
-        let _ = self.block_changed_notifier.broadcast(());
 
         let block = Block {
             body,
             signatures: ackappend_signatures,
         };
         let number_of_transactions = block.body.transactions.len();
-        // Write Block to BlockStorage
-        self.block_storage.write_block(&block).unwrap();
 
-        // Remove committed transactions from our queue.
-        self.queue
-            .write()
-            .await
-            .retain(|(_, transaction)| !block.body.transactions.contains(transaction));
+        self.increment_state_and_write_block(&mut follower_state, &block)
+            .await;
 
         // Write Block to WorldState
         let mut world_state = self.world_state.get_writable().await;
@@ -477,5 +441,77 @@ impl PRaftBFT {
                 log::trace!("No old transactions found while checking for censorship.");
             }
         }
+    }
+
+    async fn synchronize_and_verify_message_meta<'a>(
+        &'a self,
+        mut follower_state: MutexGuard<'a, FollowerState>,
+        peer_id: &PeerId,
+        leader_term: LeaderTerm,
+        block_number: BlockNumber,
+    ) -> Result<MutexGuard<'a, FollowerState>, Error> {
+        // Check whether there is a need to synchronize
+        if self.do_we_need_to_synchronize(&follower_state, leader_term, block_number) {
+            follower_state = self.synchronize(follower_state).await?;
+        }
+
+        log::trace!("Handle Commit message #{}.", block_number);
+        if !self.is_current_leader(leader_term, peer_id) {
+            log::warn!("Received message from invalid leader (ID: {}).", peer_id);
+            return Err(Error::WrongLeader(peer_id.clone()));
+        }
+        follower_state.verify_message_meta(leader_term, block_number)?;
+        Ok(follower_state)
+    }
+
+    async fn check_block_and_verify_signatures<'a>(
+        &'a self,
+        follower_state: MutexGuard<'a, FollowerState>,
+        meta: &PhaseMeta,
+        block_hash: BlockHash,
+        block_number: BlockNumber,
+        message: &ConsensusMessage,
+        signatures: &SignatureList,
+    ) -> Result<MutexGuard<'a, FollowerState>, Error> {
+        if block_hash != meta.block_hash {
+            return Err(Error::ChangedBlockHash);
+        }
+
+        if block_number != follower_state.block_number + 1 {
+            return Err(Error::WrongBlockNumber(block_number));
+        }
+
+        // Check validity of signatures.
+        match self.verify_rpu_majority_signatures(message, signatures) {
+            Ok(()) => {}
+            Err(err) => {
+                self.request_view_change(follower_state).await;
+                return Err(err);
+            }
+        }
+
+        Ok(follower_state)
+    }
+
+    pub(super) async fn increment_state_and_write_block(
+        &self,
+        follower_state: &mut FollowerState,
+        block: &Block,
+    ) {
+        let old_round_state = follower_state.round_states.increment(RoundState::default());
+        assert!(matches!(old_round_state.phase, Phase::Committed(..)));
+        assert!(old_round_state.buffered_commit_message.is_none());
+
+        follower_state.block_number = block.block_number();
+        let _ = self.block_changed_notifier.broadcast(());
+
+        // Write Block to BlockStorage
+        self.block_storage.write_block(block).unwrap();
+
+        // Remove committed transactions from our queue.
+        self.queue
+            .write()
+            .await
+            .retain(|(_, transaction)| !block.body.transactions.contains(transaction));
     }
 }
