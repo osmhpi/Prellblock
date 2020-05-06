@@ -158,6 +158,7 @@ impl PRaftBFT {
         let mut queue = self.queue.write().await;
         queue.append(&mut new_entries);
         if queue.len() >= MAX_TRANSACTIONS_PER_BLOCK {
+            drop(queue);
             self.leader_notifier.notify();
         }
     }
