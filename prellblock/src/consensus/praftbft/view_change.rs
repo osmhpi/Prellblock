@@ -96,7 +96,7 @@ impl PRaftBFT {
             new_leader_term,
             follower_state.leader_term
         );
-        let phase = follower_state.view_phase(new_leader_term)?;
+        let phase = follower_state.view_phase_mut(new_leader_term)?;
         match phase {
             // insert ID + Signature in hashmap for incoming v
             ViewPhase::Waiting => {
@@ -113,10 +113,11 @@ impl PRaftBFT {
             }
             // if f + 1 Signatures collected, broadcast own ViewChange if not already sent
             ViewPhase::ViewReceiving(meta) => {
-                let mut messages = meta.messages.clone();
+                let messages = &mut meta.messages;
                 messages.insert(peer_id, signature);
                 // if enough collected, broadcast message and update state accordingly
                 if self.nonfaulty_reached(messages.len()) {
+                    let messages = messages.clone();
                     follower_state.set_view_phase(
                         new_leader_term,
                         ViewPhase::ViewChanging(ViewPhaseMeta { messages }),
@@ -127,20 +128,16 @@ impl PRaftBFT {
                     );
                     drop(follower_state);
                     self.broadcast_view_change(new_leader_term).await?;
-                } else {
-                    follower_state.set_view_phase(
-                        new_leader_term,
-                        ViewPhase::ViewReceiving(ViewPhaseMeta { messages }),
-                    )?;
                 }
             }
 
             // if 2f + 1 Signatures collected, start ViewChange timer
             ViewPhase::ViewChanging(meta) => {
-                let mut messages = meta.messages.clone();
+                let messages = &mut meta.messages;
                 messages.insert(peer_id, signature);
                 if self.supermajority_reached(messages.len()) {
                     log::trace!("Supermajority reached.");
+                    let messages = messages.iter().collect();
                     follower_state.set_view_phase(new_leader_term, ViewPhase::Changed)?;
                     drop(follower_state);
 
@@ -148,7 +145,7 @@ impl PRaftBFT {
                     if self.is_current_leader(new_leader_term, self.peer_id()) {
                         // Notify leader task to begin to work.
                         self.enough_view_changes_sender
-                            .broadcast((new_leader_term, messages.into_iter().collect()))
+                            .broadcast((new_leader_term, messages))
                             .expect("running leader task");
                     } else {
                         self.enough_view_changes_sender
@@ -193,12 +190,6 @@ impl PRaftBFT {
                         // resend ViewChange for v + 1
                         self.broadcast_view_change(new_leader_term + 1).await?
                     }
-                } else {
-                    // no supermajority
-                    follower_state.set_view_phase(
-                        new_leader_term,
-                        ViewPhase::ViewChanging(ViewPhaseMeta { messages }),
-                    )?;
                 }
             }
             ViewPhase::Changed => {}

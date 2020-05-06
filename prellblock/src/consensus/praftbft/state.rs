@@ -153,11 +153,11 @@ impl FollowerState {
         }
     }
 
-    /// Get the `ViewPhase` for the given `leader_term` if it exists.
+    /// Get a mutable reference to the `ViewPhase` for the given `leader_term` if it exists.
     /// This function is necessary because `ConsensusMessage`s can arrive out of order.
-    pub fn view_phase(&self, leader_term: LeaderTerm) -> Result<&ViewPhase, Error> {
+    pub fn view_phase_mut(&mut self, leader_term: LeaderTerm) -> Result<&mut ViewPhase, Error> {
         self.view_state
-            .get(leader_term.into())
+            .get_mut(leader_term.into())
             .ok_or(Error::LeaderTermTooBig(leader_term))
     }
 
@@ -167,10 +167,7 @@ impl FollowerState {
         leader_term: LeaderTerm,
         phase: ViewPhase,
     ) -> Result<(), Error> {
-        *self
-            .view_state
-            .get_mut(leader_term.into())
-            .ok_or(Error::LeaderTermTooBig(leader_term))? = phase;
+        *self.view_phase_mut(leader_term)? = phase;
         Ok(())
     }
 

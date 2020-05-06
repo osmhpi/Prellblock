@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, iter::FromIterator};
 
 type SignatureListItem = (PeerId, Signature);
+type SignatureListItemRef<'a> = (&'a PeerId, &'a Signature);
 type SignatureListVec = Vec<SignatureListItem>;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -38,5 +39,16 @@ impl FromIterator<SignatureListItem> for SignatureList {
         T: IntoIterator<Item = SignatureListItem>,
     {
         Self(Vec::from_iter(iter))
+    }
+}
+
+impl<'a> FromIterator<SignatureListItemRef<'a>> for SignatureList {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = SignatureListItemRef<'a>>,
+    {
+        iter.into_iter()
+            .map(|(peer_id, signature)| (peer_id.clone(), signature.clone()))
+            .collect()
     }
 }
