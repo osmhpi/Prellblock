@@ -7,6 +7,7 @@ use super::{
 };
 use pinxit::{PeerId, Signable, Signature, Signed};
 use prellblock_client_api::Transaction;
+use rayon::prelude::*;
 use std::{collections::HashMap, time::Duration};
 use tokio::{
     sync::{watch, MutexGuard},
@@ -14,7 +15,7 @@ use tokio::{
 };
 
 // After this amount of time a transaction should be committed.
-const CENSORSHIP_TIMEOUT: Duration = Duration::from_secs(10);
+const CENSORSHIP_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[allow(clippy::single_match_else)]
 impl PRaftBFT {
@@ -154,24 +155,32 @@ impl PRaftBFT {
         }
 
         // Check for transaction validity.
-        for tx in &data {
-            let signer = tx.signer().clone();
-            let transaction = match tx.verify_ref() {
-                Ok(transaction) => transaction,
-                Err(err) => {
-                    log::error!("Error while verifying transaction signature: {}", err);
-                    self.request_view_change(follower_state).await;
-                    return Err(err.into());
-                }
-            };
-            match self.permission_checker.verify(&signer, &transaction) {
-                Ok(_) => {}
-                Err(err) => {
-                    log::error!("Error while verifying client account permissions: {}", err);
-                    self.request_view_change(follower_state).await;
-                    return Err(err.into());
-                }
-            };
+        let verification_result = data
+            .par_iter()
+            .map(|tx| {
+                let signer = tx.signer().clone();
+                let transaction = tx.verify_ref().map_err(Into::<Error>::into)?;
+                self.permission_checker
+                    .verify(&signer, &transaction)
+                    .map_err(Into::<Error>::into)
+            })
+            .collect::<Result<(), Error>>();
+
+        match verification_result {
+            Ok(_) => {}
+            Err(Error::InvalidSignature(err)) => {
+                log::error!("Error while verifying transaction signature: {}", err);
+                self.request_view_change(follower_state).await;
+                return Err(err.into());
+            }
+            Err(Error::PermissionError(err)) => {
+                log::error!("Error while verifying client account permissions: {}", err);
+                self.request_view_change(follower_state).await;
+                return Err(err.into());
+            }
+            _ => {
+                unreachable!();
+            }
         }
 
         let validated_transactions = data;
@@ -341,6 +350,7 @@ impl PRaftBFT {
             body,
             signatures: ackappend_signatures,
         };
+        let number_of_transactions = block.body.transactions.len();
         // Write Block to BlockStorage
         self.block_storage.write_block(&block).unwrap();
 
@@ -356,9 +366,10 @@ impl PRaftBFT {
         world_state.save();
 
         log::debug!(
-            "Committed block #{} with hash {:?}.",
+            "Committed block #{} with hash {:?} and {} transactions.",
             block_number,
-            block_hash
+            block_hash,
+            number_of_transactions,
         );
         Ok(ConsensusMessage::AckCommit)
     }

@@ -7,6 +7,7 @@ use crate::{
 };
 use pinxit::Signed;
 use prellblock_client_api::Transaction;
+use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
 
 type ArcMut<T> = Arc<Mutex<T>>;
@@ -48,7 +49,7 @@ impl PeerInbox {
         match &*transaction {
             Transaction::KeyValue { key, value } => {
                 // TODO: Deserialize value.
-                log::info!(
+                log::debug!(
                     "Client {} set {} to {:?} (via another RPU)",
                     &transaction.signer(),
                     key,
@@ -68,12 +69,20 @@ impl PeerInbox {
         params: message::ExecuteBatch,
     ) -> Result<(), BoxError> {
         let message::ExecuteBatch(batch) = params;
-        for message in &batch {
-            if let Err(err) = self.handle_execute(message) {
-                log::error!("Error while handling message: {}", err);
-            }
+
+        // Parallel verification makes it somewhat faster.
+        let result = batch
+            .par_iter()
+            .map(|message| self.handle_execute(message))
+            .collect::<Result<(), BoxError>>();
+        if let Err(err) = result {
+            log::error!("Error while handling message: {}", err);
         }
-        self.consensus.take_transactions(batch).await;
+
+        let consensus = self.consensus.clone();
+        // This would otherwise block the batcher on the sending side
+        // because taking the transactions could take a while...
+        tokio::spawn(async move { consensus.take_transactions(batch).await });
         Ok(())
     }
 

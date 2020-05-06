@@ -172,8 +172,9 @@ impl FollowerState {
         Ok(())
     }
 
-    fn block_hash(&self, index: BlockNumber) -> BlockHash {
-        if let Some(round_state) = self.round_states.get(index.into()) {
+    /// Get the block hash of the previously committed block.
+    pub fn last_block_hash(&self) -> BlockHash {
+        if let Some(round_state) = self.round_states.get(self.block_number.into()) {
             match &round_state.phase {
                 Phase::Committed(last_block_hash) => *last_block_hash,
                 _ => unreachable!(),
@@ -181,11 +182,6 @@ impl FollowerState {
         } else {
             unreachable!();
         }
-    }
-
-    /// Get the block hash of the previously committed block.
-    pub fn last_block_hash(&self) -> BlockHash {
-        self.block_hash(self.block_number)
     }
 }
 

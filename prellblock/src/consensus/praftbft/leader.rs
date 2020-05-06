@@ -12,7 +12,7 @@ use tokio::{
     time::timeout,
 };
 
-const BLOCK_GENERATION_TIMEOUT: Duration = Duration::from_secs(5);
+const BLOCK_GENERATION_TIMEOUT: Duration = Duration::from_millis(400);
 
 pub(super) struct Leader {
     pub(super) praftbft: Arc<PRaftBFT>,
@@ -117,6 +117,8 @@ impl Leader {
                 let hash = body.hash();
 
                 let transactions = body.transactions;
+                log::trace!("Sending block with {} transactions.", transactions.len());
+
                 log::trace!("Sending block with {} transactions.", transactions.len());
 
                 // ----------------------------------------- //

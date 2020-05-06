@@ -11,8 +11,8 @@ use tokio::{
     time::timeout,
 };
 
-const MAX_TRANSACTIONS_PER_BATCH: usize = 4000;
-const MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_millis(2000);
+const MAX_TRANSACTIONS_PER_BATCH: usize = 500;
+const MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_millis(300);
 
 /// A Batcher for messages.
 pub struct Batcher {
@@ -44,6 +44,7 @@ impl Batcher {
         let mut bucket = self.bucket.lock().await;
         bucket.push(transaction);
         if bucket.len() >= MAX_TRANSACTIONS_PER_BATCH {
+            log::trace!("Filled bucket.");
             let result = self.notifier.clone().try_send(());
             if let Err(mpsc::error::TrySendError::Closed(_)) = result {
                 panic!("The broadcaster task is not running.");
@@ -54,15 +55,23 @@ impl Batcher {
     async fn periodically_send_to_broadcaster(self: Arc<Self>, mut receiver: mpsc::Receiver<()>) {
         loop {
             let timeout_result = timeout(MAX_TIME_BETWEEN_BATCHES, receiver.recv()).await;
+            let mut was_timeout = false;
             if let Ok(None) = timeout_result {
                 // It was nice to know you. Goodbye.
                 break;
+            } else if timeout_result.is_err() {
+                was_timeout = true;
             }
 
             let transactions = mem::take(&mut *self.bucket.lock().await);
             if transactions.is_empty() {
                 continue;
             }
+            log::trace!(
+                "Start sending batch with {} transactions (Timeout: {}).",
+                transactions.len(),
+                was_timeout
+            );
 
             let message = message::ExecuteBatch(transactions);
             match self.broadcaster.broadcast(&message).await {

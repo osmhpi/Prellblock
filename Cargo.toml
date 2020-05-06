@@ -6,3 +6,6 @@ members = [
     "prellblock-client",
     "prellblock-client-api",
 ]
+
+[profile.release]
+debug = true

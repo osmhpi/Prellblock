@@ -42,7 +42,7 @@ use std::{
 };
 use tokio::sync::{watch, Mutex, Notify, RwLock};
 
-const MAX_TRANSACTIONS_PER_BLOCK: usize = 4000;
+const MAX_TRANSACTIONS_PER_BLOCK: usize = 500;
 
 type ViewChangeSignatures = HashMap<PeerId, Signature>;
 

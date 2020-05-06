@@ -66,7 +66,10 @@ impl Turi {
             }
         }
 
-        self.batcher.clone().add_to_batch(transaction.into()).await;
+        let batcher = self.batcher.clone();
+        tokio::spawn(async move {
+            batcher.add_to_batch(transaction.into()).await;
+        });
 
         Ok(())
     }
