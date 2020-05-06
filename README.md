@@ -19,7 +19,7 @@ This can be achieved by creating a custom CA. A [script](./certificates/generate
 For **every RPU** you need to run:
 
 ```sh
-$ certificates/generate_certificate.sh <desired_output_name> <rpu_dns_name> <rpu_ip>
+certificates/generate_certificate.sh <desired_output_name> <rpu_dns_name> <rpu_ip>
 ```
 
 Running the script creates a CA-key and -certificate in `./certificates/ca` and some files in `./certificates/<desired_output_name>`.
@@ -27,7 +27,7 @@ Running the script creates a CA-key and -certificate in `./certificates/ca` and 
 The most important file is `./certificates/<desired_output_name>/<desired_output_name>.pfx`. It is used by prellblock to load the TLS certificate.
 Since it is protected by a password, *prellblock* needs to know the password for reading the file.
 
-**Warning: Do not use the default password in production!** 
+**Warning: Do not use the default password in production!**
 
 You can pass another password to *prellblock* via the `TLS_PASSWORD` environment variable.
 
@@ -36,10 +36,11 @@ You can pass another password to *prellblock* via the `TLS_PASSWORD` environment
 Each RPU has to have a identity. They can be generated with the following command:
 
 ```sh
-$ cargo run --bin gen-key <rpu_name>
+cargo run --bin gen-key <rpu_name>
 ```
 
 The files are placed (and searched in prellblock) in `config/<rpu_name>/`:
+
 - `<rpu_name>.key` is the **private key** of the identity.
 - `<rpu_name>.pub` is the **public key** of the identity.
 
@@ -93,6 +94,7 @@ The `tls_id` is the `pfx`-file containing the private key and certificate signed
 To help setting the correct log-levels, you can use the [`run.sh`](./run.sh) script.
 You **need to create** a `run.local.sh` script to configure logging.
 Available levels are:
+
 - `trace`
 - `debug`
 - `info`
@@ -102,7 +104,7 @@ Available levels are:
 
 An example would be:
 
-```
+```sh
 level info
 
 trace prellblock
@@ -121,14 +123,24 @@ You can install it via `cargo install flamegraph`. On Linux (Debian) you need to
 To generate an interactive graph on **Linux**, run:
 
 ```sh
-$ sudo sysctl -w kernel.perf_event_paranoid=1
-$ ./run.sh f prellblock <options>
+sudo sysctl -w kernel.perf_event_paranoid=1
+./run.sh f prellblock <options>
 ```
 
 On **macOS** run:
 
 ```sh
-$ ./run.sh f prellblock <options>
+./run.sh f prellblock <options>
 ```
 
 After stopping the program, a graph (`flamegraph.svg`) will be created.
+
+## Cross-Compiling for ARM based machines
+
+For running *prellblock* on a RaspberryPi or similar ARM-based machines, you need to cross compile the blockchain.
+Building fully static binaries can be done via [`cross`](https://github.com/rust-embedded/cross) (this needs Docker to be running):
+
+```sh
+cargo install cross
+cross build --target armv7-unknown-linux-musleabihf --release
+```
