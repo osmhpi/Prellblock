@@ -74,8 +74,10 @@ pub enum ConsensusMessage {
     NewView {
         /// The Leader term we swapped to.
         leader_term: LeaderTerm,
-        /// The ViewChange signatures of 2f + 1 Replicas
+        /// The ViewChange signatures of 2f + 1 Replicas.
         view_change_signatures: SignatureList,
+        /// The current block number of the leader.
+        current_block_number: BlockNumber,
     },
     /// A `ConsensusMessage` signalizing the sender RPU that another RPU received the `NewView` message.
     AckNewView,

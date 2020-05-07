@@ -51,9 +51,22 @@ impl Leader {
 
             // Update leader state with data from the follower state when we are the new leader.
             if let Some(view_change_signatures) = view_change_signatures {
+                let (block_number, last_block_hash) = {
+                    let follower_state = self.follower_state.lock().await;
+                    (
+                        follower_state.block_number,
+                        follower_state.last_block_hash(),
+                    )
+                };
+                log::info!(
+                    "I am the new leader in view {} (last block: #{}).",
+                    leader_term,
+                    block_number
+                );
+
                 // Send new view message.
                 match self
-                    .send_new_view(leader_term, view_change_signatures)
+                    .send_new_view(leader_term, view_change_signatures, block_number)
                     .await
                 {
                     Ok(_) => log::trace!("Succesfully broadcasted NewView Message."),
@@ -66,21 +79,8 @@ impl Leader {
                     }
                 }
 
-                let (block, last_block_hash) = {
-                    let follower_state = self.follower_state.lock().await;
-                    (
-                        follower_state.block_number,
-                        follower_state.last_block_hash(),
-                    )
-                };
-                log::info!(
-                    "I am the new leader in view {} (last block: #{}).",
-                    leader_term,
-                    block
-                );
-
                 self.leader_state.leader_term = leader_term;
-                self.leader_state.block = block;
+                self.leader_state.block_number = block_number;
                 self.leader_state.last_block_hash = last_block_hash;
             }
 
@@ -108,7 +108,7 @@ impl Leader {
                     }
                 }
 
-                let block_number = self.leader_state.block + 1;
+                let block_number = self.leader_state.block_number + 1;
                 let body = Body {
                     leader_term,
                     height: block_number,
@@ -241,7 +241,7 @@ impl Leader {
                 );
 
                 // after we collected enough signatures, we can update our state
-                self.leader_state.block = block_number;
+                self.leader_state.block_number = block_number;
                 self.leader_state.last_block_hash = hash;
 
                 // ------------------------------------------- //

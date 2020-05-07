@@ -4,12 +4,14 @@ use super::{
     Error, PRaftBFT, ViewChangeSignatures,
 };
 use crate::{
-    consensus::{LeaderTerm, SignatureList},
+    consensus::{BlockNumber, LeaderTerm, SignatureList},
     BoxError,
 };
 use pinxit::{PeerId, Signature};
 use std::{collections::HashMap, time::Duration};
 use tokio::sync::MutexGuard;
+
+const NEW_VIEW_TIMEOUT: Duration = Duration::from_millis(5000);
 
 impl PRaftBFT {
     pub(super) async fn handle_new_view(
@@ -17,8 +19,16 @@ impl PRaftBFT {
         peer_id: &PeerId,
         leader_term: LeaderTerm,
         view_change_signatures: SignatureList,
+        leader_block_number: BlockNumber,
     ) -> Result<ConsensusMessage, Error> {
         log::trace!("Received NewView Message.");
+
+        // Only higher leader terms than current one accepted
+        let follower_state = self.follower_state.lock().await;
+        if leader_term <= follower_state.leader_term {
+            return Err(Error::LeaderTermTooSmall(leader_term));
+        }
+
         // Leader must be the next peer from the peers list.
         if !self.is_current_leader(leader_term, peer_id) {
             log::warn!(
@@ -27,6 +37,15 @@ impl PRaftBFT {
                 leader_term
             );
             return Err(Error::WrongLeader(peer_id.clone()));
+        }
+
+        let my_block_number = self.world_state.get().block_number;
+        if leader_block_number < my_block_number {
+            // If the leader is out of date, trigger a ViewChange Message.
+            self.request_view_change(follower_state).await;
+        } else if leader_block_number > my_block_number {
+            // If the leader's block_number is higher than our's we need to synchronize.
+            self.synchronize_from(&peer_id, follower_state).await?;
         }
 
         // validate all signatures to ensure the ViewChange ist valid.
@@ -155,7 +174,7 @@ impl PRaftBFT {
 
                     let mut new_view_data = self.new_view_receiver.borrow().clone();
                     let mut new_view_receiver = self.new_view_receiver.clone();
-                    let timeout_result = tokio::time::timeout(Duration::from_millis(5000), async {
+                    let timeout_result = tokio::time::timeout(NEW_VIEW_TIMEOUT, async {
                         while new_view_data.0 < new_leader_term {
                             new_view_data = new_view_receiver.recv().await.unwrap();
                         }
@@ -167,7 +186,14 @@ impl PRaftBFT {
                         log::trace!("NewView arrived in time.");
 
                         let mut follower_state = self.follower_state.lock().await;
-                        // The ViewChange was successfull:
+                        if leader_term <= follower_state.leader_term {
+                            log::warn!(
+                                "Tried to change to leader term {} from leader term {} (ignored).",
+                                follower_state.leader_term,
+                                leader_term
+                            );
+                        }
+
                         // Update the leader_term of the follower_state to the new leaderterm
                         log::debug!(
                             "Changed from leader term {} to leader term {}.",
@@ -194,6 +220,7 @@ impl PRaftBFT {
             }
             ViewPhase::Changed => {}
         }
+
         Ok(ConsensusMessage::AckViewChange)
     }
 
@@ -201,14 +228,12 @@ impl PRaftBFT {
         &self,
         leader_term: LeaderTerm,
         signatures: ViewChangeSignatures,
+        current_block_number: BlockNumber,
     ) -> Result<(), BoxError> {
-        // let mut sigs = vec![];
-        // for (key, val) in &messages {
-        //     sigs.push((key.clone(), val.clone()));
-        // }
         let new_view_message = ConsensusMessage::NewView {
             leader_term,
             view_change_signatures: signatures,
+            current_block_number,
         };
         let validate_new_view = move |response: &ConsensusMessage| {
             // This is done for every ACKCOMMIT.

@@ -379,9 +379,15 @@ impl PRaftBFT {
             ConsensusMessage::NewView {
                 leader_term,
                 view_change_signatures,
+                current_block_number,
             } => {
-                self.handle_new_view(&peer_id, leader_term, view_change_signatures)
-                    .await?
+                self.handle_new_view(
+                    &peer_id,
+                    leader_term,
+                    view_change_signatures,
+                    current_block_number,
+                )
+                .await?
             }
             ConsensusMessage::SynchronizationRequest {
                 leader_term,

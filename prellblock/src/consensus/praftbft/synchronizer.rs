@@ -7,9 +7,12 @@ use super::{
 use crate::peer::{message as peer_message, Sender};
 use pinxit::{PeerId, Signable};
 use rand::Rng;
+use std::net::SocketAddr;
 use tokio::sync::MutexGuard;
 
 const SYNCHRONIZATION_BLOCK_THRESHOLD: u64 = 3;
+
+type SynchronizerGuard<'a> = MutexGuard<'a, ()>;
 
 #[allow(clippy::single_match_else)]
 impl PRaftBFT {
@@ -19,12 +22,11 @@ impl PRaftBFT {
         leader_term: LeaderTerm,
         block_number: BlockNumber,
     ) -> Result<MutexGuard<'_, FollowerState>, Error> {
-        let _synchronizer_guard = self.synchronizer_lock.lock().await;
+        let synchronizer_guard = self.synchronizer_lock.lock().await;
         let mut follower_state = self.follower_state.lock().await;
         if self.is_synchronization_needed(&follower_state, leader_term, block_number) {
-            follower_state = self.synchronize(follower_state).await?;
+            follower_state = self.synchronize(synchronizer_guard, follower_state).await?;
         }
-        drop(_synchronizer_guard);
         Ok(follower_state)
     }
 
@@ -41,24 +43,11 @@ impl PRaftBFT {
             || block_number >= follower_state.block_number + SYNCHRONIZATION_BLOCK_THRESHOLD
     }
 
-    pub(super) async fn synchronize(
+    async fn synchronize(
         &self,
+        synchronizer_guard: SynchronizerGuard<'_>,
         follower_state: MutexGuard<'_, FollowerState>,
     ) -> Result<MutexGuard<'_, FollowerState>, Error> {
-        self.synchronize_inner(follower_state).await.map_err(|err| {
-            log::error!("Synchronization error: {}", err);
-            err
-        })
-    }
-
-    async fn synchronize_inner(
-        &self,
-        follower_state: MutexGuard<'_, FollowerState>,
-    ) -> Result<MutexGuard<'_, FollowerState>, Error> {
-        let leader_term = follower_state.leader_term;
-        let block_number = follower_state.block_number;
-        drop(follower_state);
-
         // choose peer to ask for synchronization randomly
         // but ensure, we're not sending the request to ourselves
         let peers = self.peers();
@@ -70,6 +59,42 @@ impl PRaftBFT {
                 break peer.1;
             }
         };
+
+        self.synchronize_inner(synchronizer_guard, follower_state, peer_address)
+            .await
+            .map_err(|err| {
+                log::error!("Synchronization error: {}", err);
+                err
+            })
+    }
+
+    pub(super) async fn synchronize_from(
+        &self,
+        peer_id: &PeerId,
+        follower_state: MutexGuard<'_, FollowerState>,
+    ) -> Result<MutexGuard<'_, FollowerState>, Error> {
+        let synchronizer_guard = self.synchronizer_lock.lock().await;
+        if let Some((_, peer_address)) = self.peers().iter().find(|(pid, _)| pid == peer_id) {
+            self.synchronize_inner(synchronizer_guard, follower_state, *peer_address)
+                .await
+                .map_err(|err| {
+                    log::error!("Synchronization error: {}", err);
+                    err
+                })
+        } else {
+            Err(Error::InvalidPeer(peer_id.clone()))
+        }
+    }
+
+    async fn synchronize_inner(
+        &self,
+        synchronizer_guard: SynchronizerGuard<'_>,
+        follower_state: MutexGuard<'_, FollowerState>,
+        peer_address: SocketAddr,
+    ) -> Result<MutexGuard<'_, FollowerState>, Error> {
+        let leader_term = follower_state.leader_term;
+        let block_number = follower_state.block_number;
+        drop(follower_state);
 
         // send request to peer
         let mut sender = Sender::new(peer_address);
@@ -140,6 +165,7 @@ impl PRaftBFT {
         }
 
         log::trace!("Done synchronizing.");
+        drop(synchronizer_guard);
         Ok(follower_state)
     }
 

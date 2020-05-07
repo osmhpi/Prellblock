@@ -164,7 +164,7 @@ impl FollowerState {
 
 #[derive(Default)]
 pub(super) struct LeaderState {
-    pub(super) block: BlockNumber,
+    pub(super) block_number: BlockNumber,
     pub(super) last_block_hash: BlockHash,
     pub(super) leader_term: LeaderTerm,
 }
@@ -175,7 +175,7 @@ impl LeaderState {
         // TODO: Error handling with genesis block?
         // if block == 0 { genesis block not found } else { you f***d up }
         Self {
-            block: follower_state.block_number,
+            block_number: follower_state.block_number,
             last_block_hash: follower_state.last_block_hash(),
             leader_term: follower_state.leader_term,
         }
