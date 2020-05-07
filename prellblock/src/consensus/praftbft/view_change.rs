@@ -8,10 +8,10 @@ use crate::{
     BoxError,
 };
 use pinxit::{PeerId, Signature};
-use std::{collections::HashMap, time::Duration};
+use std::{cmp::Ordering, collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::MutexGuard;
 
-const NEW_VIEW_TIMEOUT: Duration = Duration::from_millis(5000);
+const NEW_VIEW_TIMEOUT: Duration = Duration::from_millis(1000);
 
 impl PRaftBFT {
     pub(super) async fn handle_new_view(
@@ -39,13 +39,18 @@ impl PRaftBFT {
             return Err(Error::WrongLeader(peer_id.clone()));
         }
 
-        let my_block_number = self.world_state.get().block_number;
-        if leader_block_number < my_block_number {
-            // If the leader is out of date, trigger a ViewChange Message.
-            self.request_view_change(follower_state).await;
-        } else if leader_block_number > my_block_number {
-            // If the leader's block_number is higher than our's we need to synchronize.
-            self.synchronize_from(&peer_id, follower_state).await?;
+        match leader_block_number.cmp(&self.world_state.get().block_number) {
+            Ordering::Less => {
+                // If the leader is out of date, trigger a ViewChange Message.
+                self.request_view_change(follower_state).await;
+            }
+            Ordering::Equal => {
+                // We are fine
+            }
+            Ordering::Greater => {
+                // If the leader's block_number is higher than our's we need to synchronize.
+                self.synchronize_from(peer_id, follower_state).await?;
+            }
         }
 
         // validate all signatures to ensure the ViewChange ist valid.
@@ -88,13 +93,32 @@ impl PRaftBFT {
         Ok(())
     }
 
-    #[allow(clippy::too_many_lines)]
     pub(super) async fn handle_view_change(
-        &self,
+        self: &Arc<Self>,
         peer_id: PeerId,
         signature: Signature,
         new_leader_term: LeaderTerm,
     ) -> Result<ConsensusMessage, Error> {
+        let cloned_self = self.clone();
+        tokio::spawn(async move {
+            match cloned_self
+                .handle_view_change_task(peer_id, signature, new_leader_term)
+                .await
+            {
+                Err(err) => log::warn!("View change message error: {}", err),
+                Ok(()) => {}
+            }
+        });
+        Ok(ConsensusMessage::AckViewChange)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    pub(super) async fn handle_view_change_task(
+        &self,
+        peer_id: PeerId,
+        signature: Signature,
+        new_leader_term: LeaderTerm,
+    ) -> Result<(), Error> {
         let mut follower_state = self.follower_state.lock().await;
         // Only higher leader terms than current one accepted
         if new_leader_term <= follower_state.leader_term {
@@ -102,13 +126,7 @@ impl PRaftBFT {
         }
 
         let view_change_message = ConsensusMessage::ViewChange { new_leader_term };
-        match peer_id.verify(&view_change_message, &signature) {
-            Ok(()) => {}
-            Err(err) => {
-                log::error!("Received invalid view change signature: {}", err);
-                return Err(err.into());
-            }
-        };
+        peer_id.verify(&view_change_message, &signature)?;
 
         log::trace!(
             "Received leader term {} on current leader term {}.",
@@ -192,6 +210,7 @@ impl PRaftBFT {
                                 follower_state.leader_term,
                                 leader_term
                             );
+                            return Ok(());
                         }
 
                         // Update the leader_term of the follower_state to the new leaderterm
@@ -211,7 +230,7 @@ impl PRaftBFT {
                         follower_state.reset_future_round_states();
                     } else {
                         assert_ne!(timeout_result, Ok(()));
-                        log::trace!("NewView has not arrived in time.");
+                        log::debug!("NewView has not arrived in time.");
 
                         // resend ViewChange for v + 1
                         self.broadcast_view_change(new_leader_term + 1).await?
@@ -220,8 +239,7 @@ impl PRaftBFT {
             }
             ViewPhase::Changed => {}
         }
-
-        Ok(ConsensusMessage::AckViewChange)
+        Ok(())
     }
 
     pub(super) async fn send_new_view(

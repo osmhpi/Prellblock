@@ -7,7 +7,7 @@ use super::{
 };
 use pinxit::{PeerId, Signable, Signed};
 use prellblock_client_api::Transaction;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tokio::{
     sync::{watch, MutexGuard},
     time,
@@ -319,7 +319,7 @@ impl PRaftBFT {
 
     /// Process the incoming `ConsensusMessages` (`PREPARE`, `ACKPREPARE`, `APPEND`, `ACKAPPEND`, `COMMIT`).
     pub async fn handle_message(
-        &self,
+        self: &Arc<Self>,
         message: Signed<ConsensusMessage>,
     ) -> Result<Signed<ConsensusMessage>, Error> {
         // Only RPUs are allowed.
