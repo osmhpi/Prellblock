@@ -9,16 +9,36 @@ use pinxit::{PeerId, Signable};
 use rand::Rng;
 use tokio::sync::MutexGuard;
 
+const SYNCHRONIZATION_BLOCK_THRESHOLD: u64 = 3;
+
 #[allow(clippy::single_match_else)]
 impl PRaftBFT {
-    pub(super) fn do_we_need_to_synchronize(
+    /// Synchronize if there is only one instance of synchronisation running.
+    pub(super) async fn synchronize_if_needed(
+        &self,
+        leader_term: LeaderTerm,
+        block_number: BlockNumber,
+    ) -> Result<MutexGuard<'_, FollowerState>, Error> {
+        let _synchronizer_guard = self.synchronizer_lock.lock().await;
+        let mut follower_state = self.follower_state.lock().await;
+        if self.is_synchronization_needed(&follower_state, leader_term, block_number) {
+            follower_state = self.synchronize(follower_state).await?;
+        }
+        drop(_synchronizer_guard);
+        Ok(follower_state)
+    }
+
+    /// Check whether we need to synchronize to handle
+    /// a request in a given `leader_term` and `block_number`.
+    fn is_synchronization_needed(
         &self,
         follower_state: &FollowerState,
         leader_term: LeaderTerm,
         block_number: BlockNumber,
     ) -> bool {
         let _ = self;
-        leader_term > follower_state.leader_term || block_number > follower_state.block_number + 1
+        leader_term > follower_state.leader_term
+            || block_number >= follower_state.block_number + SYNCHRONIZATION_BLOCK_THRESHOLD
     }
 
     pub(super) async fn synchronize(
@@ -39,14 +59,20 @@ impl PRaftBFT {
         let block_number = follower_state.block_number;
         drop(follower_state);
 
-        // TODO: implement stuff
-        // choose peer to ask for synchronization
+        // choose peer to ask for synchronization randomly
+        // but ensure, we're not sending the request to ourselves
         let peers = self.peers();
-        let peer_index = rand::thread_rng().gen_range(0, peers.len());
-        let peer = &peers[peer_index];
+        assert_ne!(peers.len(), 1);
+        let peer_address = loop {
+            let peer_index = rand::thread_rng().gen_range(0, peers.len());
+            let peer = &peers[peer_index];
+            if &peer.0 != self.peer_id() {
+                break peer.1;
+            }
+        };
 
         // send request to peer
-        let mut sender = Sender::new(peer.1);
+        let mut sender = Sender::new(peer_address);
 
         // verify received blocks, if not timeouted
         // append correct blocks to own blockstorage
@@ -78,24 +104,25 @@ impl PRaftBFT {
             }
 
             if block.body.height != world_state.block_number + 1 {
-                return Err(Error::BlockNumberDoesNotMatch(
+                return Err(Error::PrevBlockNumberDoesNotMatch(
                     block.body.height,
                     world_state.block_number + 1,
                 ));
             }
 
             if block.body.prev_block_hash != world_state.last_block_hash {
-                return Err(Error::BlockHashDoesNotMatch(
+                return Err(Error::PrevBlockHashDoesNotMatch(
                     block.body.prev_block_hash,
                     world_state.last_block_hash,
                 ));
             }
 
             // Verify block signatures
+            let block_hash = block.hash();
             let ackappend_message = ConsensusMessage::AckAppend {
                 leader_term: block.body.leader_term,
                 block_number: block.body.height,
-                block_hash: block.hash(),
+                block_hash,
             };
             self.verify_rpu_majority_signatures(&ackappend_message, &block.signatures)?;
             let data = &block.body.transactions;
@@ -105,15 +132,14 @@ impl PRaftBFT {
             // Validate Transactions
             self.transaction_checker.verify_signatures(data)?;
 
-            self.increment_state_and_write_block(&mut follower_state, &block)
+            // Persist the blocks after all checks have passed.
+            self.increment_state_and_write_block(&mut follower_state, &block, block_hash)
                 .await;
-
-            // Write Block to WorldState
             world_state.apply_block(block).unwrap();
             world_state.save();
         }
 
-        log::trace!("Done Synchronizing");
+        log::trace!("Done synchronizing.");
         Ok(follower_state)
     }
 

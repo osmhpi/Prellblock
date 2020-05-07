@@ -3,6 +3,7 @@ use std::{convert::TryInto, mem};
 /// The `RingBuffer` provides access to a circular buffer with fixed capactiy.
 ///
 /// Do you think "What is a ring buffer?" -> [Wikipedia](https://en.wikipedia.org/wiki/Circular_buffer)
+#[derive(Debug)]
 pub(super) struct RingBuffer<T> {
     data: Vec<T>,
     start: u64,
@@ -21,7 +22,6 @@ impl<T> RingBuffer<T> {
         }
     }
 
-    /// Return the value stored at the given `index` (relative in the ringbuffer).
     pub(super) fn get(&self, index: u64) -> Option<&T> {
         let index = self.index2index(index)?;
         Some(&self.data[index])

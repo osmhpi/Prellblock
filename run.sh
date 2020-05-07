@@ -71,7 +71,8 @@ elif [ "$watch" == "1" ]; then
     for c in "$@"; do
         cmd="$cmd '$c'"
     done
-    exec cargo watch -x "$cmd"
+    mkdir -p logs
+    cargo watch -i logs -x "$cmd" 2>&1 | tee "logs/$1.log"
 else
     exec cargo run $release --bin "$bin" -- "$@"
 fi

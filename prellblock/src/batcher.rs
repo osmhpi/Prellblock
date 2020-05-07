@@ -12,7 +12,7 @@ use tokio::{
 };
 
 const MAX_TRANSACTIONS_PER_BATCH: usize = 500;
-const MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_millis(300);
+const MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_millis(400);
 
 /// A Batcher for messages.
 pub struct Batcher {

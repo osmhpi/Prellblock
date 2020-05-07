@@ -10,7 +10,7 @@ use crate::world_state::WorldState;
 use pinxit::{PeerId, Signature};
 use std::collections::HashMap;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub(super) enum Phase {
     /// This phase was never used, waiting for prepare message.
@@ -36,7 +36,7 @@ pub(super) enum Phase {
 /// 3. `ConsensusMessage::Commit` -> `ConsensusMessage::Append`
 ///
 /// Other `ConsensusMessage::Prepare` messages will be ignored.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(super) struct RoundState {
     pub(super) buffered_commit_message: Option<ConsensusMessage>,
     pub(super) phase: Phase,
@@ -51,7 +51,7 @@ impl Default for RoundState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(super) struct PhaseMeta {
     /// the `Phase`'s `Leader`'s `PeerId`
     pub(super) leader: PeerId,
@@ -103,28 +103,6 @@ impl FollowerState {
         state.round_state_mut(start).unwrap().phase = Phase::Committed(world_state.last_block_hash);
 
         state
-    }
-
-    /// Validate that there is a leader and the received message is from this leader.
-    pub(super) fn verify_message_meta(
-        &self,
-        leader_term: LeaderTerm,
-        block_number: BlockNumber,
-    ) -> Result<(), Error> {
-        // We only handle the current leader term.
-        if leader_term != self.leader_term {
-            let error = Error::WrongLeaderTerm;
-            log::warn!("{}", error);
-            return Err(error);
-        }
-
-        // Only process new messages.
-        if block_number <= self.block_number {
-            let error = Error::BlockNumberTooSmall(block_number);
-            log::warn!("{}", error);
-            return Err(error);
-        }
-        Ok(())
     }
 
     /// Get the `RoundState` for the given `block` if it exists.

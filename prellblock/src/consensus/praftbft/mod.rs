@@ -69,6 +69,7 @@ pub struct PRaftBFT {
     enough_view_changes_sender: watch::Sender<(LeaderTerm, ViewChangeSignatures)>,
     block_storage: BlockStorage,
     transaction_checker: TransactionChecker,
+    synchronizer_lock: Mutex<()>,
 }
 
 impl Deref for PRaftBFT {
@@ -127,6 +128,7 @@ impl PRaftBFT {
             enough_view_changes_sender,
             block_storage,
             transaction_checker: TransactionChecker::new(world_state),
+            synchronizer_lock: Mutex::default(),
         };
 
         let praftbft = Arc::new(praftbft);

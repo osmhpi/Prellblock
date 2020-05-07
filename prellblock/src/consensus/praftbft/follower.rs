@@ -7,7 +7,7 @@ use super::{
 };
 use pinxit::{PeerId, Signable, Signed};
 use prellblock_client_api::Transaction;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::{
     sync::{watch, MutexGuard},
     time,
@@ -21,28 +21,26 @@ impl PRaftBFT {
     /// Wait until we reached the block number the message is at.
     async fn follower_state_in_block(
         &self,
+        leader_term: LeaderTerm,
         block_number: BlockNumber,
-    ) -> MutexGuard<'_, FollowerState> {
+    ) -> Result<MutexGuard<'_, FollowerState>, Error> {
+        let follower_state = self
+            .synchronize_if_needed(leader_term, block_number)
+            .await?;
+
+        if follower_state.block_number + 1 >= block_number {
+            return Ok(follower_state);
+        }
+        drop(follower_state);
+
         let mut receiver = self.block_changed_receiver.clone();
-        let start = Instant::now();
-        let timeout = Duration::from_secs(3);
-        // SYNC SHOULD HAPPEN HERE :D
         loop {
+            // Wait until block number changed.
+            let _ = receiver.recv().await;
             let follower_state = self.follower_state.lock().await;
             if follower_state.block_number + 1 >= block_number {
-                return follower_state;
+                return Ok(follower_state);
             }
-
-            let remaining = if let Some(remaining) = timeout.checked_sub(start.elapsed()) {
-                remaining
-            } else {
-                return follower_state;
-            };
-
-            drop(follower_state);
-
-            // Wait until block number changed.
-            let _ = time::timeout(remaining, receiver.recv()).await;
         }
     }
 
@@ -53,12 +51,12 @@ impl PRaftBFT {
         block_number: BlockNumber,
         block_hash: BlockHash,
     ) -> Result<ConsensusMessage, Error> {
-        let mut follower_state = self.follower_state_in_block(block_number).await;
-        if !self.is_current_leader(leader_term, peer_id) {
-            log::warn!("Received message from invalid leader (ID: {}).", peer_id);
-            return Err(Error::WrongLeader(peer_id.clone()));
-        }
-        follower_state.verify_message_meta(leader_term, block_number)?;
+        let mut follower_state = self
+            .follower_state_in_block(leader_term, block_number)
+            .await?;
+
+        log::trace!("Handle Prepare message #{}.", block_number);
+        self.verify_message_meta(&follower_state, peer_id, leader_term, block_number)?;
 
         // Check whether the state for the block is Waiting.
         // We only allow to receive messages once.
@@ -98,11 +96,12 @@ impl PRaftBFT {
         ackprepare_signatures: SignatureList,
         data: Vec<Signed<Transaction>>,
     ) -> Result<ConsensusMessage, Error> {
-        let mut follower_state = self.follower_state_in_block(block_number).await;
-
-        follower_state = self
-            .synchronize_and_verify_message_meta(follower_state, peer_id, leader_term, block_number)
+        let mut follower_state = self
+            .follower_state_in_block(leader_term, block_number)
             .await?;
+
+        log::trace!("Handle Append message #{}.", block_number);
+        self.verify_message_meta(&follower_state, peer_id, leader_term, block_number)?;
 
         // Check whether the state for the block is Prepare.
         // We only allow to receive messages once.
@@ -156,6 +155,7 @@ impl PRaftBFT {
             }
         }
 
+        // TODO: Remove if we completely deny this block.
         let validated_transactions = data;
 
         // Validate the Block Hash.
@@ -166,7 +166,7 @@ impl PRaftBFT {
             transactions: validated_transactions,
         };
         if block_hash != body.hash() {
-            return Err(Error::WrongBlockHash);
+            return Err(Error::BlockNotMatchingHash);
         }
         let leader_term = follower_state.leader_term;
 
@@ -219,7 +219,9 @@ impl PRaftBFT {
         block_hash: BlockHash,
         ackappend_signatures: SignatureList,
     ) -> Result<ConsensusMessage, Error> {
-        let follower_state = self.follower_state_in_block(block_number).await;
+        let follower_state = self
+            .follower_state_in_block(leader_term, block_number)
+            .await?;
         self.handle_commit_message_inner(
             follower_state,
             peer_id,
@@ -242,9 +244,8 @@ impl PRaftBFT {
         block_hash: BlockHash,
         ackappend_signatures: SignatureList,
     ) -> Result<ConsensusMessage, Error> {
-        follower_state = self
-            .synchronize_and_verify_message_meta(follower_state, peer_id, leader_term, block_number)
-            .await?;
+        log::trace!("Handle Commit message #{}.", block_number);
+        self.verify_message_meta(&follower_state, peer_id, leader_term, block_number)?;
 
         // Check whether the state for the block is Append.
         // We only allow to receive messages once.
@@ -293,15 +294,13 @@ impl PRaftBFT {
             )
             .await?;
 
-        follower_state.round_state_mut(block_number).unwrap().phase = Phase::Committed(block_hash);
-
         let block = Block {
             body,
             signatures: ackappend_signatures,
         };
         let number_of_transactions = block.body.transactions.len();
 
-        self.increment_state_and_write_block(&mut follower_state, &block)
+        self.increment_state_and_write_block(&mut follower_state, &block, block_hash)
             .await;
 
         // Write Block to WorldState
@@ -443,25 +442,35 @@ impl PRaftBFT {
         }
     }
 
-    async fn synchronize_and_verify_message_meta<'a>(
-        &'a self,
-        mut follower_state: MutexGuard<'a, FollowerState>,
+    /// Validate that the *received* message is from
+    /// the current leader (`leader_term`) and has a valid `block_number`.
+    fn verify_message_meta(
+        &self,
+        follower_state: &FollowerState,
         peer_id: &PeerId,
         leader_term: LeaderTerm,
         block_number: BlockNumber,
-    ) -> Result<MutexGuard<'a, FollowerState>, Error> {
-        // Check whether there is a need to synchronize
-        if self.do_we_need_to_synchronize(&follower_state, leader_term, block_number) {
-            follower_state = self.synchronize(follower_state).await?;
-        }
-
-        log::trace!("Handle Commit message #{}.", block_number);
+    ) -> Result<(), Error> {
         if !self.is_current_leader(leader_term, peer_id) {
             log::warn!("Received message from invalid leader (ID: {}).", peer_id);
             return Err(Error::WrongLeader(peer_id.clone()));
         }
-        follower_state.verify_message_meta(leader_term, block_number)?;
-        Ok(follower_state)
+
+        // We only handle the current leader term.
+        if leader_term != follower_state.leader_term {
+            let error = Error::WrongLeaderTerm;
+            log::warn!("{}", error);
+            return Err(error);
+        }
+
+        // Only process new messages.
+        if block_number <= follower_state.block_number {
+            let error = Error::BlockNumberTooSmall(block_number);
+            log::warn!("{}", error);
+            return Err(error);
+        }
+
+        Ok(())
     }
 
     async fn check_block_and_verify_signatures<'a>(
@@ -477,8 +486,12 @@ impl PRaftBFT {
             return Err(Error::ChangedBlockHash);
         }
 
-        if block_number != follower_state.block_number + 1 {
-            return Err(Error::WrongBlockNumber(block_number));
+        let expected_block_number = follower_state.block_number + 1;
+        if block_number != expected_block_number {
+            return Err(Error::PrevBlockNumberDoesNotMatch(
+                block_number,
+                expected_block_number,
+            ));
         }
 
         // Check validity of signatures.
@@ -497,7 +510,16 @@ impl PRaftBFT {
         &self,
         follower_state: &mut FollowerState,
         block: &Block,
+        block_hash: BlockHash,
     ) {
+        {
+            let round_state = follower_state
+                .round_state_mut(block.block_number())
+                .unwrap();
+            round_state.buffered_commit_message = None;
+            round_state.phase = Phase::Committed(block_hash);
+        }
+
         let old_round_state = follower_state.round_states.increment(RoundState::default());
         assert!(matches!(old_round_state.phase, Phase::Committed(..)));
         assert!(old_round_state.buffered_commit_message.is_none());
