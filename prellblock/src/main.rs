@@ -20,7 +20,7 @@ use prellblock::{
     peer::{Calculator, PeerInbox, Receiver},
     transaction_checker::TransactionChecker,
     turi::Turi,
-    world_state::{Account, WorldState, WorldStateService},
+    world_state::{Account, WorldStateService},
 };
 use serde::Deserialize;
 use std::{env, fs, io, net::SocketAddr, sync::Arc};
@@ -103,14 +103,8 @@ async fn main() {
     let identity = hex_identity.parse().expect("Identity could not be loaded.");
 
     let block_storage = BlockStorage::new(&format!("./blocks/{}", opt.name)).unwrap();
-    let world_state = WorldStateService::from_block_storage(&block_storage).unwrap();
-    {
-        let mut world_state = world_state.get_writable().await;
-        world_state.accounts = WorldState::with_fake_data().accounts;
-        world_state.accounts.extend(peer_accounts);
-        world_state.peers = peers;
-        world_state.save();
-    }
+    let world_state =
+        WorldStateService::from_block_storage(&block_storage, peer_accounts, peers).unwrap();
 
     let consensus = Consensus::new(identity, block_storage, world_state.clone()).await;
 

@@ -84,6 +84,16 @@ impl BlockStorage {
                 Ok(block)
             })
     }
+
+    /// Remove the last block (at the end of the chain) and return it.
+    pub fn pop_block(&self) -> Result<Option<Block>, Error> {
+        if let Some((_, value)) = self.blocks.pop_max()? {
+            let block = postcard::from_bytes(&value)?;
+            Ok(Some(block))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 fn map_bound_from_block_number(bound: Bound<&BlockNumber>) -> Bound<impl AsRef<[u8]>> {

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
-    ops::{Add, AddAssign},
+    ops::{Add, AddAssign, Sub, SubAssign},
 };
 
 /// Number of the Block in the Blockchain.
@@ -31,7 +31,20 @@ impl Add<u64> for BlockNumber {
 
 impl AddAssign<u64> for BlockNumber {
     fn add_assign(&mut self, other: u64) {
-        self.0 += other
+        self.0 += other;
+    }
+}
+
+impl Sub<u64> for BlockNumber {
+    type Output = Self;
+    fn sub(self, other: u64) -> Self {
+        Self(self.0 - other)
+    }
+}
+
+impl SubAssign<u64> for BlockNumber {
+    fn sub_assign(&mut self, other: u64) {
+        self.0 -= other;
     }
 }
 

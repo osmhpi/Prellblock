@@ -84,23 +84,27 @@ pub(super) struct FollowerState {
     pub(super) block_number: BlockNumber,
     pub(super) round_states: RingBuffer<RoundState>,
     pub(super) view_state: RingBuffer<ViewPhase>,
+    // The rollback is only possible for one block after a view change.
+    pub(super) rollback_possible: bool,
 }
 
-const RING_BUFFER_SIZE: usize = 1024;
+const RING_BUFFER_SIZE: usize = 64;
 
 impl FollowerState {
     /// Create a new `FollowerState` from a `world_state`.
     pub(super) fn from_world_state(world_state: &WorldState) -> Self {
         let start = world_state.block_number;
+        let last_block_hash = world_state.last_block_hash;
         let mut state = Self {
             leader_term: LeaderTerm::default(),
             new_view_signatures: SignatureList::default(),
             block_number: start,
             round_states: RingBuffer::new(RoundState::default(), RING_BUFFER_SIZE, start.into()),
             view_state: RingBuffer::new(ViewPhase::Waiting, RING_BUFFER_SIZE, 0),
+            rollback_possible: start > BlockNumber::default(),
         };
 
-        state.round_state_mut(start).unwrap().phase = Phase::Committed(world_state.last_block_hash);
+        state.round_state_mut(start).unwrap().phase = Phase::Committed(last_block_hash);
 
         state
     }

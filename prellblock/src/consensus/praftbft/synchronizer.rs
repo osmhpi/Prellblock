@@ -122,7 +122,7 @@ impl PRaftBFT {
         }
 
         for block in blocks {
-            let mut world_state = self.world_state.get_writable().await;
+            let world_state = self.world_state.get_writable().await;
 
             if block.body.height <= world_state.block_number {
                 continue;
@@ -158,10 +158,13 @@ impl PRaftBFT {
             self.transaction_checker.verify_signatures(data)?;
 
             // Persist the blocks after all checks have passed.
-            self.increment_state_and_write_block(&mut follower_state, &block, block_hash)
-                .await;
-            world_state.apply_block(block).unwrap();
-            world_state.save();
+            self.increment_state_and_write_block(
+                &mut follower_state,
+                world_state,
+                block,
+                block_hash,
+            )
+            .await;
         }
 
         log::trace!("Done synchronizing.");

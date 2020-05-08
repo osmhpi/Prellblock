@@ -50,6 +50,12 @@ impl<T> RingBuffer<T> {
         }
     }
 
+    pub fn decrement(&mut self, new_item: T) -> T {
+        self.start -= 1;
+        // unwrap is ok here, because index2index always returns some with `self.start`
+        mem::replace(self.get_mut(self.start).unwrap(), new_item)
+    }
+
     fn index2index(&self, index: u64) -> Option<usize> {
         let len = self.data.len() as u64;
         if index >= self.start && index < self.start + len {

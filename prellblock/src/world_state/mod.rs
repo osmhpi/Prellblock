@@ -23,11 +23,18 @@ use std::{
 };
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
+/// Struct holding a `Worldstate` and it's previous `Worldstate`, if any.
+#[derive(Debug, Default)]
+pub struct WorldStateReferences {
+    current: WorldState,
+    prev: Option<WorldState>,
+}
+
 /// Struct holding a `WorldState` mutex.
 #[derive(Debug, Clone)]
 #[must_use]
 pub struct WorldStateService {
-    world_state: Arc<Mutex<WorldState>>,
+    world_state_references: Arc<Mutex<WorldStateReferences>>,
     writer: Arc<Semaphore>,
 }
 
@@ -45,44 +52,71 @@ impl Default for WorldStateService {
 
 impl WorldStateService {
     /// Create a new `WorldStateService` initalized with a given `world_state`.
-    pub fn with_world_state(world_state: WorldState) -> Self {
+    fn with_world_state_references(world_state_references: WorldStateReferences) -> Self {
         Self {
-            world_state: Arc::new(world_state.into()),
+            world_state_references: Arc::new(world_state_references.into()),
             writer: Arc::new(Semaphore::new(1)),
         }
     }
 
     /// Create a new `WorldStateService` initalized with the blocks from a `block_storage`.
-    pub fn from_block_storage(block_storage: &BlockStorage) -> Result<Self, BoxError> {
-        let mut world_state = WorldState::default();
+    pub fn from_block_storage(
+        block_storage: &BlockStorage,
+        peer_accounts: impl Iterator<Item = (PeerId, Account)>,
+        peers: Vector<(PeerId, SocketAddr)>,
+    ) -> Result<Self, BoxError> {
+        let mut world_state_references = WorldStateReferences::default();
 
-        for block in block_storage.read(..) {
-            world_state.apply_block(block?)?;
+        // TODO: Remove this. Currently for development purposes.
+        {
+            let world_state = &mut world_state_references.current;
+            world_state.load_fake_accounts();
+            world_state.accounts.extend(peer_accounts);
+            world_state.peers = peers;
         }
 
-        log::debug!("Current WorldState: {:#}", world_state);
+        let mut blocks = block_storage.read(..);
+        let last_block = blocks.next_back();
+        for block in blocks {
+            world_state_references.current.apply_block(block?)?;
+        }
 
-        Ok(Self::with_world_state(world_state))
+        if let Some(last_block) = last_block {
+            world_state_references.prev = Some(world_state_references.current.clone());
+            world_state_references.current.apply_block(last_block?)?;
+        }
+
+        log::debug!("Current WorldState: {:#}", world_state_references.current);
+
+        Ok(Self::with_world_state_references(world_state_references))
     }
 
     /// Create a new `WorldStateService`.
     pub fn new() -> Self {
-        let world_state = WorldState::default();
-        Self::with_world_state(world_state)
+        let world_state_references = WorldStateReferences::default();
+        Self::with_world_state_references(world_state_references)
     }
 
     /// Return a copy of the entire `WorldState`.
     #[must_use]
     pub fn get(&self) -> WorldState {
-        self.world_state.lock().unwrap().clone()
+        self.world_state_references.lock().unwrap().current.clone()
+    }
+    /// Rollback the `WorldState` to the previous state.
+    #[allow(clippy::must_use_candidate)]
+    pub fn rollback(&self) -> Option<WorldState> {
+        let mut world_state_references = self.world_state_references.lock().unwrap();
+        let previous = world_state_references.prev.take()?;
+        let old_current = std::mem::replace(&mut world_state_references.current, previous);
+        Some(old_current)
     }
 
     /// Return a copy of the entire `WorldState`.
     pub async fn get_writable(&self) -> WritableWorldState {
         let permit = self.writer.clone().acquire_owned().await;
         WritableWorldState {
-            shared_world_state: self.world_state.clone(),
-            world_state: self.world_state.lock().unwrap().clone(),
+            shared_world_state: self.world_state_references.clone(),
+            world_state: self.get(),
             permit,
         }
     }
@@ -92,7 +126,7 @@ impl WorldStateService {
 #[derive(Debug)]
 #[must_use]
 pub struct WritableWorldState {
-    shared_world_state: Arc<Mutex<WorldState>>,
+    shared_world_state: Arc<Mutex<WorldStateReferences>>,
     world_state: WorldState,
     #[allow(dead_code)]
     permit: OwnedSemaphorePermit,
@@ -102,7 +136,9 @@ impl WritableWorldState {
     /// Save the cahnged `WorldState`.
     pub fn save(self) {
         log::trace!("Changed WorldState: {:#}", self.world_state);
-        *self.shared_world_state.lock().unwrap() = self.world_state;
+        let mut world_state_references = self.shared_world_state.lock().unwrap();
+        world_state_references.prev = Some(world_state_references.current.clone());
+        world_state_references.current = self.world_state;
     }
 }
 
@@ -142,22 +178,14 @@ pub struct WorldState {
 
 impl WorldState {
     /// Function used for developement purposes, loads static accounts from a config file.
-    #[must_use]
-    pub fn with_fake_data() -> Self {
+    fn load_fake_accounts(&mut self) {
         let yaml_file = fs::read_to_string("./config/accounts.yaml").unwrap();
         let accounts_strings: HashMap<String, Account> = serde_yaml::from_str(&yaml_file).unwrap();
 
-        let accounts = accounts_strings
+        self.accounts = accounts_strings
             .into_iter()
             .map(|(key, account)| (key.parse().expect("peer_id in accounts.yaml"), account))
             .collect();
-        Self {
-            accounts,
-            peers: Vector::default(),
-            data: HashMap::new(),
-            block_number: BlockNumber::default(),
-            last_block_hash: BlockHash::default(),
-        }
     }
 
     /// Apply a block to the current world state.

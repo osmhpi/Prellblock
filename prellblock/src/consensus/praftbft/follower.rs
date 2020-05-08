@@ -5,6 +5,7 @@ use super::{
     state::{FollowerState, Phase, PhaseMeta, RoundState},
     Error, NewViewSignatures, PRaftBFT,
 };
+use crate::world_state::WritableWorldState;
 use pinxit::{PeerId, Signable, Signed};
 use prellblock_client_api::Transaction;
 use std::{sync::Arc, time::Duration};
@@ -86,6 +87,49 @@ impl PRaftBFT {
         Ok(ackprepare_message)
     }
 
+    async fn handle_append_message_rollback(&self, follower_state: &mut FollowerState) {
+        log::trace!("Doing rollback.");
+
+        // better save than sorry
+        follower_state.rollback_possible = false;
+
+        // Rollback WorldState by one block.
+        log::trace!(
+            "Rollback: Last block hash before rollback: {}.",
+            self.world_state.get().last_block_hash
+        );
+        self.world_state.rollback().unwrap();
+        log::trace!(
+            "Rollback: Last block hash after rollback: {}.",
+            self.world_state.get().last_block_hash,
+        );
+
+        // BlockStorage remove topmost block.
+        // Double Unwrap should be fine because there needs to be some block.
+        let removed_block = self.block_storage.pop_block().unwrap().unwrap();
+        let removed_block_number = removed_block.block_number();
+
+        // The transactions may not be lost.
+        self.take_transactions(removed_block.body.transactions)
+            .await;
+
+        // Reset RoundState (decrement)
+        follower_state.round_states.decrement(RoundState {
+            phase: Phase::Committed(removed_block.body.prev_block_hash),
+            buffered_commit_message: None,
+        });
+        *follower_state
+            .round_state_mut(removed_block_number)
+            .unwrap() = RoundState {
+            phase: Phase::Waiting,
+            buffered_commit_message: None,
+        };
+
+        // FollowerState reset / from WorldState
+        follower_state.block_number -= 1;
+        log::trace!("Done rollback.");
+    }
+
     #[allow(clippy::too_many_lines)]
     async fn handle_append_message(
         &self,
@@ -96,12 +140,37 @@ impl PRaftBFT {
         ackprepare_signatures: SignatureList,
         data: Vec<Signed<Transaction>>,
     ) -> Result<ConsensusMessage, Error> {
-        let mut follower_state = self
-            .follower_state_in_block(leader_term, block_number)
-            .await?;
+        let mut follower_state = self.follower_state.lock().await;
+        let mut follower_state = if follower_state.rollback_possible
+            && block_number == follower_state.block_number
+        {
+            // Check validity of signatures.
+            // FIXME: Code duplication.
+            let ackprepare_message = ConsensusMessage::AckPrepare {
+                leader_term,
+                block_number,
+                block_hash,
+            };
+            match self.verify_rpu_majority_signatures(&ackprepare_message, &ackprepare_signatures) {
+                Ok(()) => {}
+                Err(err) => {
+                    self.request_view_change(follower_state).await;
+                    return Err(err);
+                }
+            }
+            self.handle_append_message_rollback(&mut follower_state)
+                .await;
+            follower_state
+        } else {
+            drop(follower_state);
+            let follower_state = self
+                .follower_state_in_block(leader_term, block_number)
+                .await?;
 
-        log::trace!("Handle Append message #{}.", block_number);
-        self.verify_message_meta(&follower_state, peer_id, leader_term, block_number)?;
+            log::trace!("Handle Append message #{}.", block_number);
+            self.verify_message_meta(&follower_state, peer_id, leader_term, block_number)?;
+            follower_state
+        };
 
         // Check whether the state for the block is Prepare.
         // We only allow to receive messages once.
@@ -300,13 +369,10 @@ impl PRaftBFT {
         };
         let number_of_transactions = block.body.transactions.len();
 
-        self.increment_state_and_write_block(&mut follower_state, &block, block_hash)
-            .await;
-
         // Write Block to WorldState
-        let mut world_state = self.world_state.get_writable().await;
-        world_state.apply_block(block).unwrap();
-        world_state.save();
+        let world_state = self.world_state.get_writable().await;
+        self.increment_state_and_write_block(&mut follower_state, world_state, block, block_hash)
+            .await;
 
         log::debug!(
             "Committed block #{} with hash {:?} and {} transactions.",
@@ -515,7 +581,8 @@ impl PRaftBFT {
     pub(super) async fn increment_state_and_write_block(
         &self,
         follower_state: &mut FollowerState,
-        block: &Block,
+        mut world_state: WritableWorldState,
+        block: Block,
         block_hash: BlockHash,
     ) {
         {
@@ -531,15 +598,22 @@ impl PRaftBFT {
         assert!(old_round_state.buffered_commit_message.is_none());
 
         follower_state.block_number = block.block_number();
+        // No rollback possible after one commit.
+        follower_state.rollback_possible = false;
+
         let _ = self.block_changed_notifier.broadcast(());
 
         // Write Block to BlockStorage
-        self.block_storage.write_block(block).unwrap();
+        self.block_storage.write_block(&block).unwrap();
 
         // Remove committed transactions from our queue.
         self.queue
             .write()
             .await
             .retain(|(_, transaction)| !block.body.transactions.contains(transaction));
+
+        // Apply to the WorldState.
+        world_state.apply_block(block).unwrap();
+        world_state.save();
     }
 }

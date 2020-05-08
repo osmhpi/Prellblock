@@ -33,10 +33,7 @@ use message::ConsensusMessage;
 use pinxit::{Identity, PeerId, Signable, Signed};
 use prellblock_client_api::Transaction;
 use state::{FollowerState, LeaderState};
-use std::{
-    collections::VecDeque, iter::FromIterator, net::SocketAddr, ops::Deref, sync::Arc,
-    time::Instant,
-};
+use std::{collections::VecDeque, net::SocketAddr, ops::Deref, sync::Arc, time::Instant};
 use tokio::sync::{watch, Mutex, Notify, RwLock};
 
 const MAX_TRANSACTIONS_PER_BLOCK: usize = 500;
@@ -156,9 +153,8 @@ impl PRaftBFT {
         let new_entries = transactions
             .into_iter()
             .map(|transaction| (Instant::now(), transaction));
-        let mut new_entries = VecDeque::from_iter(new_entries);
         let mut queue = self.queue.write().await;
-        queue.append(&mut new_entries);
+        queue.extend(new_entries);
         if queue.len() >= MAX_TRANSACTIONS_PER_BLOCK {
             drop(queue);
             self.leader_notifier.notify();
