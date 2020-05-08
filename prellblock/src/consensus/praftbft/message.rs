@@ -87,6 +87,8 @@ pub enum ConsensusMessage {
         leader_term: LeaderTerm,
         /// The current block number of the sender.
         block_number: BlockNumber,
+        /// The block hash of the topmost block we have.
+        block_hash: BlockHash,
     },
     /// A Response to a `SynchronizationRequest`.
     SynchronizationResponse {

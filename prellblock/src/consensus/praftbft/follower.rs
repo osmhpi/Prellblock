@@ -87,7 +87,7 @@ impl PRaftBFT {
         Ok(ackprepare_message)
     }
 
-    async fn handle_append_message_rollback(&self, follower_state: &mut FollowerState) {
+    pub(super) async fn rollback_last_block(&self, follower_state: &mut FollowerState) {
         log::trace!("Doing rollback.");
 
         // better save than sorry
@@ -158,8 +158,7 @@ impl PRaftBFT {
                     return Err(err);
                 }
             }
-            self.handle_append_message_rollback(&mut follower_state)
-                .await;
+            self.rollback_last_block(&mut follower_state).await;
             follower_state
         } else {
             drop(follower_state);
@@ -458,8 +457,9 @@ impl PRaftBFT {
             ConsensusMessage::SynchronizationRequest {
                 leader_term,
                 block_number,
+                block_hash,
             } => {
-                self.handle_synchronization_request(&peer_id, leader_term, block_number)
+                self.handle_synchronization_request(&peer_id, leader_term, block_number, block_hash)
                     .await?
             }
             ConsensusMessage::AckPrepare { .. }

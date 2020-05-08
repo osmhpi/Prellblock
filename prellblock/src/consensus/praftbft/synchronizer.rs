@@ -1,5 +1,5 @@
 use super::{
-    super::{BlockNumber, LeaderTerm, SignatureList},
+    super::{BlockHash, BlockNumber, LeaderTerm, SignatureList},
     message::ConsensusMessage,
     state::FollowerState,
     Error, PRaftBFT,
@@ -94,6 +94,7 @@ impl PRaftBFT {
     ) -> Result<MutexGuard<'_, FollowerState>, Error> {
         let leader_term = follower_state.leader_term;
         let block_number = follower_state.block_number;
+        let block_hash = follower_state.last_block_hash();
         drop(follower_state);
 
         // send request to peer
@@ -104,6 +105,7 @@ impl PRaftBFT {
         let consensus_message = ConsensusMessage::SynchronizationRequest {
             leader_term,
             block_number,
+            block_hash,
         };
         let signed_consensus_message = consensus_message.sign(&self.identity)?;
         let request = peer_message::Consensus(signed_consensus_message);
@@ -119,6 +121,16 @@ impl PRaftBFT {
             let view_change = ConsensusMessage::ViewChange { new_leader_term };
             self.verify_rpu_majority_signatures(&view_change, &view_change_signatures)?;
             follower_state.leader_term = new_leader_term;
+        }
+
+        if let Some(first_block) = blocks.first() {
+            if follower_state.rollback_possible
+                && first_block.block_number() == block_number
+                && first_block.hash() != block_hash
+            {
+                // We had a chain split.
+                self.rollback_last_block(&mut follower_state).await;
+            }
         }
 
         for block in blocks {
@@ -177,6 +189,7 @@ impl PRaftBFT {
         peer_id: &PeerId,
         leader_term: LeaderTerm,
         block_number: BlockNumber,
+        expected_block_hash: BlockHash,
     ) -> Result<ConsensusMessage, Error> {
         println!("Request by {} to synchornize.", peer_id);
         self.transaction_checker.verify_is_rpu(peer_id)?;
@@ -195,11 +208,21 @@ impl PRaftBFT {
             (new_view, follower_state.block_number)
         };
 
-        let blocks: Result<_, _> = self
-            .block_storage
-            .read(block_number..=current_block_number)
-            .collect();
-        let blocks = blocks?;
+        // Only send all blocks of range block_number..=current_block_number,
+        // if the first requested block's hash does not match the sent one.
+        let mut blocks_iter = self.block_storage.read(block_number..=current_block_number);
+
+        let first_block = match blocks_iter.next() {
+            Some(Ok(first_block)) if expected_block_hash != first_block.hash() => {
+                Some(Ok(first_block))
+            }
+            Some(Err(err)) => Some(Err(err)),
+            _ => None,
+        };
+        let blocks = first_block
+            .into_iter()
+            .chain(blocks_iter)
+            .collect::<Result<_, _>>()?;
         Ok(ConsensusMessage::SynchronizationResponse { new_view, blocks })
     }
 
