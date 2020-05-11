@@ -6,7 +6,3 @@ members = [
     "prellblock-client",
     "prellblock-client-api",
 ]
-
-[patch.crates-io]
-newtype-enum = { path = "../newtype-enum/newtype-enum" }
-newtype-enum-macro = { path = "../newtype-enum/newtype-enum-macro" }
