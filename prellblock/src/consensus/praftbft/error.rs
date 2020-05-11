@@ -1,4 +1,4 @@
-use super::state::Phase;
+use super::{follower, ring_buffer};
 use crate::{
     block_storage,
     consensus::{BlockHash, BlockNumber, LeaderTerm},
@@ -11,10 +11,6 @@ use pinxit::PeerId;
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
-    /// A Message was received that was not expected.
-    #[error(display = "An unexpected message was received.")]
-    UnexpectedMessage,
-
     /// A Response was received that was not expected.
     #[error(display = "An unexpected response was received.")]
     UnexpectedResponse,
@@ -60,10 +56,6 @@ pub enum Error {
     #[error(display = "The RPU {} is not the current leader.", 0)]
     WrongLeader(PeerId),
 
-    /// The leader proposing the block is not the one the `Follower` saved (maybe there is no leader).
-    #[error(display = "There is no leader.")]
-    NoLeader,
-
     /// This peer is not allowed to take part in the consensus.
     #[error(
         display = "The RPU {} is not allowed to take part in the consensus.",
@@ -77,6 +69,10 @@ pub enum Error {
     /// The Leader tried to propose an empty block.
     #[error(display = "The proposed Block is empty.")]
     EmptyBlock,
+
+    /// The ack message does not match the request.
+    #[error(display = "The ack message does not match the request.")]
+    AckDoesNotMatch,
 
     // ----------------------------------------------------------------
     // Errors with the block hash.
@@ -100,22 +96,18 @@ pub enum Error {
     // ----------------------------------------------------------------
     // Errors with the block number.
     // ----------------------------------------------------------------
-    /// The current block number was already higher.
-    #[error(display = "Block number {} is too low.", 0)]
-    BlockNumberTooSmall(BlockNumber),
-
-    /// The request for the block number could not be processed
-    /// because it is too far in the future.
-    #[error(display = "Block number {} is too big.", 0)]
-    BlockNumberTooBig(BlockNumber),
-
     /// The `BlockNumber` does not match the expected `BlockNumber` (previous + 1).
     #[error(
         display = "The BlockNumber {} does not match the expected BlockNumber {}.",
         0,
         1
     )]
-    PrevBlockNumberDoesNotMatch(BlockNumber, BlockNumber),
+    WrongBlockNumber {
+        /// The received block number.
+        received: BlockNumber,
+        /// The expected block number.
+        expected: BlockNumber,
+    },
 
     // ----------------------------------------------------------------
     // Errors with the internal state
@@ -136,27 +128,66 @@ pub enum Error {
         current
     )]
     WrongPhase {
-        current: PhaseName,
-        expected: PhaseName,
+        /// The current phase of the consensus.
+        current: follower::Phase,
+        /// The expected phase for the received message.
+        expected: follower::Phase,
     },
+
+    /// Could not get supermajority.
+    #[error(display = "Could not get supermajority.")]
+    CouldNotGetSupermajority,
 }
 
-#[derive(Debug)]
-pub enum PhaseName {
-    Waiting,
-    Prepare,
-    Append,
-    Commited,
+impl LeaderTerm {
+    pub(super) fn verify(self, expected: Self) -> Result<(), Error> {
+        if self == expected {
+            Ok(())
+        } else {
+            Err(Error::WrongLeaderTerm)
+        }
+    }
 }
 
-impl Phase {
-    /// Convert a phase to the corresponding `PhaseName`.
-    pub(super) fn to_phase_name(&self) -> PhaseName {
-        match self {
-            Self::Waiting => PhaseName::Waiting,
-            Self::Prepare(..) => PhaseName::Prepare,
-            Self::Append(..) => PhaseName::Append,
-            Self::Committed(..) => PhaseName::Commited,
+impl BlockNumber {
+    pub(super) fn verify(self, expected: Self) -> Result<(), Error> {
+        if self == expected {
+            Ok(())
+        } else {
+            Err(Error::WrongBlockNumber {
+                received: self,
+                expected,
+            })
+        }
+    }
+}
+
+impl follower::Phase {
+    pub(super) fn error(self, expected: Self) -> Error {
+        Error::WrongPhase {
+            current: self,
+            expected,
+        }
+    }
+
+    pub(super) fn verify(self, expected: Self) -> Result<(), Error> {
+        if self == expected {
+            Ok(())
+        } else {
+            Err(self.error(expected))
+        }
+    }
+}
+
+impl From<ring_buffer::Error<LeaderTerm>> for Error {
+    fn from(v: ring_buffer::Error<LeaderTerm>) -> Self {
+        match v {
+            ring_buffer::Error::RingbufferUnderflow(leader_term) => {
+                Self::LeaderTermTooSmall(leader_term)
+            }
+            ring_buffer::Error::RingbufferOverflow(leader_term) => {
+                Self::LeaderTermTooBig(leader_term)
+            }
         }
     }
 }

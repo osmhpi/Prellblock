@@ -5,7 +5,9 @@ use std::{
 };
 
 /// Number of the Block in the Blockchain.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub struct BlockNumber(u64);
 
 impl BlockNumber {

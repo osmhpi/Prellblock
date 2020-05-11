@@ -1,7 +1,5 @@
 //! Module used for batching messages for a `Broadcaster`.
 
-#![allow(clippy::mutex_atomic)]
-
 use crate::{data_broadcaster::Broadcaster, peer::message};
 use pinxit::Signed;
 use prellblock_client_api::Transaction;

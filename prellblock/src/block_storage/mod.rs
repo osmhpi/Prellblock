@@ -14,6 +14,7 @@ const BLOCKS_TREE_NAME: &[u8] = b"blocks";
 /// A `BlockStorage` provides persistent storage on disk.
 ///
 /// Data is written to disk every 400ms.
+#[derive(Debug)]
 pub struct BlockStorage {
     // database: Db,
     blocks: Tree,
@@ -43,19 +44,18 @@ impl BlockStorage {
     ///
     /// The data will be accessible by the block number?.
     pub fn write_block(&self, block: &Block) -> Result<(), Error> {
-        let (last_block_hash, last_block_height) =
-            if let Some(last_block) = self.read(..).next_back() {
-                let last_block = last_block?;
-                (last_block.hash(), last_block.body.height)
-            } else {
-                (BlockHash::default(), BlockNumber::default())
-            };
+        let (last_block_hash, block_number) = if let Some(last_block) = self.read(..).next_back() {
+            let last_block = last_block?;
+            (last_block.hash(), last_block.body.height + 1)
+        } else {
+            (BlockHash::default(), BlockNumber::default())
+        };
 
-        if last_block_hash != block.body.prev_block_hash {
+        if block.body.prev_block_hash != last_block_hash {
             return Err(Error::BlockHashDoesNotMatch);
         }
 
-        if last_block_height + 1 != block.body.height {
+        if block.body.height != block_number {
             return Err(Error::BlockHeightDoesNotFit);
         }
 

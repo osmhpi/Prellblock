@@ -1,18 +1,33 @@
-use std::{convert::TryInto, mem};
+use std::{
+    cmp::Ord,
+    convert::TryInto,
+    fmt::Debug,
+    mem,
+    ops::{AddAssign, SubAssign},
+};
+
+#[derive(Debug)]
+pub enum Error<I> {
+    RingbufferUnderflow(I),
+    RingbufferOverflow(I),
+}
 
 /// The `RingBuffer` provides access to a circular buffer with fixed capactiy.
 ///
 /// Do you think "What is a ring buffer?" -> [Wikipedia](https://en.wikipedia.org/wiki/Circular_buffer)
 #[derive(Debug)]
-pub(super) struct RingBuffer<T> {
+pub struct RingBuffer<I, T> {
     data: Vec<T>,
-    start: u64,
+    start: I,
 }
 
-impl<T> RingBuffer<T> {
-    /// Create a new `RingBuffer` with `capacity` elements.
-    /// This will fill the buffer with
-    pub(super) fn new(default_item: T, capacity: usize, start: u64) -> Self
+impl<I, T> RingBuffer<I, T>
+where
+    I: Into<u64> + AddAssign<u64> + Ord + Copy + Debug,
+{
+    /// Create a new `RingBuffer` with `capacity` elements cloned from
+    /// `default_item` starting at `start`.
+    pub fn new(default_item: T, capacity: usize, start: I) -> Self
     where
         T: Clone,
     {
@@ -22,46 +37,76 @@ impl<T> RingBuffer<T> {
         }
     }
 
-    pub(super) fn get(&self, index: u64) -> Option<&T> {
-        let index = self.index2index(index)?;
-        Some(&self.data[index])
+    /// Get the current start index.
+    pub fn start(&self) -> I {
+        self.start
     }
 
-    /// Return a mutable reference
-    pub(super) fn get_mut(&mut self, index: u64) -> Option<&mut T> {
-        let index = self.index2index(index)?;
-        Some(&mut self.data[index])
+    /// Get the current end index.
+    pub fn end(&self) -> I {
+        let mut end = self.start;
+        end += self.data.len() as u64;
+        end
     }
 
+    fn first_mut(&mut self) -> &mut T {
+        let index = self.index2index_unchecked(self.start);
+        &mut self.data[index]
+    }
+
+    /// Return a reference to the item at `index`.
+    pub fn get(&self, index: I) -> Result<&T, Error<I>> {
+        let index = self.index2index(index)?;
+        Ok(&self.data[index])
+    }
+
+    /// Return a mutable reference to the item at `index`.
+    pub fn get_mut(&mut self, index: I) -> Result<&mut T, Error<I>> {
+        let index = self.index2index(index)?;
+        Ok(&mut self.data[index])
+    }
+
+    /// Increment the start index.
     pub fn increment(&mut self, new_item: T) -> T {
         // unwrap is ok here, because index2index always returns some with `self.start`
-        let old_item = mem::replace(self.get_mut(self.start).unwrap(), new_item);
+        let old_item = mem::replace(self.first_mut(), new_item);
         self.start += 1;
         old_item
     }
 
-    pub fn increment_to(&mut self, index: impl Into<u64>, new_item: T)
+    /// Increment the start index to a new `index`.
+    ///
+    /// This does nothing if `self.start() >= index`.
+    pub fn increment_to(&mut self, index: I, new_item: T)
     where
         T: Clone,
     {
-        for _i in self.start..index.into() {
-            *self.get_mut(self.start).unwrap() = new_item.clone();
-            self.start += 1;
+        for _ in self.start.into()..index.into() {
+            self.increment(new_item.clone());
         }
     }
 
-    pub fn decrement(&mut self, new_item: T) -> T {
+    /// Decrement the start index.
+    pub fn decrement(&mut self, new_item: T) -> T
+    where
+        I: SubAssign<u64>,
+    {
         self.start -= 1;
-        // unwrap is ok here, because index2index always returns some with `self.start`
-        mem::replace(self.get_mut(self.start).unwrap(), new_item)
+        mem::replace(self.first_mut(), new_item)
     }
 
-    fn index2index(&self, index: u64) -> Option<usize> {
-        let len = self.data.len() as u64;
-        if index >= self.start && index < self.start + len {
-            Some((index % len).try_into().unwrap())
+    fn index2index(&self, index: I) -> Result<usize, Error<I>> {
+        if index < self.start() {
+            Err(Error::RingbufferUnderflow(index))
+        } else if index < self.end() {
+            Ok(self.index2index_unchecked(index))
         } else {
-            None
+            Err(Error::RingbufferOverflow(index))
         }
+    }
+
+    fn index2index_unchecked(&self, index: I) -> usize {
+        let len = self.data.len() as u64;
+        (index.into() % len).try_into().unwrap()
     }
 }

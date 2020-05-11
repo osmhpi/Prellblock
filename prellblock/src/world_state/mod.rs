@@ -170,7 +170,7 @@ pub struct WorldState {
     pub peers: Vector<(PeerId, SocketAddr)>,
     /// Field storing the Transactiondata.
     pub data: HashMap<PeerId, HashMap<String, Vec<u8>>>,
-    /// Block number of the last `Block` applied to the `WorldState`.
+    /// The number of `Block`s applied to the `WorldState`.
     pub block_number: BlockNumber,
     /// Hash of the last `Block` in the `BlockStorage`.
     pub last_block_hash: BlockHash,
@@ -195,7 +195,7 @@ impl WorldState {
         }
         // TODO: validate block (peers, signatures, etc)
         self.last_block_hash = block.body.hash();
-        self.block_number = block.body.height;
+        self.block_number = block.body.height + 1;
         for transaction in block.body.transactions {
             self.apply_transaction(transaction);
         }

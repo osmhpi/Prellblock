@@ -27,6 +27,7 @@ pub enum PermissionError {
 }
 
 /// A `TransactionChecker` is used to check whether accounts are allowed to carry out transactions.
+#[derive(Debug)]
 pub struct TransactionChecker {
     world_state: WorldStateService,
 }

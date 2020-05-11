@@ -1,290 +1,262 @@
 use super::{
-    super::{Body, LeaderTerm},
-    message::ConsensusMessage,
-    state::LeaderState,
-    PRaftBFT, ViewChangeSignatures, MAX_TRANSACTIONS_PER_BLOCK,
+    message::{consensus_message as message, Metadata},
+    Core, Error, Follower, ViewChange, MAX_TRANSACTIONS_PER_BLOCK,
 };
+use crate::consensus::{BlockHash, BlockNumber, Body, LeaderTerm, SignatureList};
 use pinxit::Signed;
 use prellblock_client_api::Transaction;
 use std::{ops::Deref, sync::Arc, time::Duration};
-use tokio::{
-    sync::{watch, Notify},
-    time::timeout,
-};
+use tokio::time;
 
 const BLOCK_GENERATION_TIMEOUT: Duration = Duration::from_millis(400);
 
-pub(super) struct Leader {
-    pub(super) praftbft: Arc<PRaftBFT>,
-    pub(super) leader_state: LeaderState,
+#[derive(Debug)]
+pub struct Leader {
+    core: Arc<Core>,
+    follower: Arc<Follower>,
+    view_change: Arc<ViewChange>,
+    leader_term: LeaderTerm,
+    block_number: BlockNumber,
+    last_block_hash: BlockHash,
+    phase: Phase,
 }
 
 impl Deref for Leader {
-    type Target = PRaftBFT;
+    type Target = Core;
     fn deref(&self) -> &Self::Target {
-        &self.praftbft
+        &self.core
     }
 }
 
-impl Leader {
-    /// This function waits until it is triggered to process transactions.
-    // TODO: split this function into smaller phases
-    #[allow(clippy::too_many_lines)]
-    pub(super) async fn process_transactions(
-        mut self,
-        notifier: Arc<Notify>,
-        mut enough_view_changes_receiver: watch::Receiver<(LeaderTerm, ViewChangeSignatures)>,
-    ) {
-        loop {
-            // Wait when we are not the leader.
-            let mut view_change_signatures = None;
-            let mut leader_term = self
-                .leader_state
-                .leader_term
-                .max(enough_view_changes_receiver.borrow().0);
-            while !self.is_current_leader(leader_term, self.peer_id()) {
-                log::trace!("I am not the current leader.");
-                let new_data = enough_view_changes_receiver.recv().await.unwrap();
-                leader_term = new_data.0;
-                view_change_signatures = Some(new_data.1);
-            }
+#[derive(Debug)]
+enum Phase {
+    Waiting,
+    Prepare,
+    Append,
+    Commit,
+}
 
-            // Update leader state with data from the follower state when we are the new leader.
-            if let Some(view_change_signatures) = view_change_signatures {
-                let (block_number, last_block_hash) = {
-                    let follower_state = self.follower_state.lock().await;
-                    (
-                        follower_state.block_number,
-                        follower_state.last_block_hash(),
-                    )
-                };
-                log::info!(
-                    "I am the new leader in view {} (last block: #{}).",
-                    leader_term,
-                    block_number
-                );
+impl Leader {
+    pub fn new(core: Arc<Core>, follower: Arc<Follower>, view_change: Arc<ViewChange>) -> Self {
+        Self {
+            core,
+            follower,
+            view_change,
+            leader_term: LeaderTerm::default(),
+            block_number: BlockNumber::default(),
+            last_block_hash: BlockHash::default(),
+            phase: Phase::Waiting,
+        }
+    }
+
+    /// Execute the leader.
+    ///
+    /// This function waits until it is notified of a leader change.
+    pub async fn execute(mut self) {
+        loop {
+            self.synchronize_from_follower().await;
+
+            // Wait when we are not the leader.
+            while !self.is_current_leader() {
+                log::trace!("I am not the current leader.");
 
                 // Send new view message.
-                match self
-                    .send_new_view(leader_term, view_change_signatures, block_number)
-                    .await
-                {
-                    Ok(_) => log::trace!("Succesfully broadcasted NewView Message."),
-                    Err(err) => {
-                        log::warn!("Error while Broadcasting NewView Message: {}", err);
-                        // After not reaching the majority, we need to wait until the next time
-                        // we are elected. (At least one round later).
-                        self.leader_state.leader_term = leader_term + 1;
-                        continue;
-                    }
-                }
+                self.handle_new_view().await;
+                self.notify_leader.notified().await;
 
-                self.leader_state.leader_term = leader_term;
-                self.leader_state.block_number = block_number;
-                self.leader_state.last_block_hash = last_block_hash;
+                // Update leader state with data from the follower state when we are the new leader.
+                self.synchronize_from_follower().await;
             }
 
-            let timeout_result = timeout(BLOCK_GENERATION_TIMEOUT, notifier.notified()).await;
+            log::info!(
+                "I am the new leader in leader term {} (block: #{}).",
+                self.leader_term,
+                self.block_number
+            );
+            match self.execute_leader_term().await {
+                Ok(()) => log::info!(
+                    "Done with leader term {} (block: #{}).",
+                    self.leader_term,
+                    self.block_number
+                ),
+                Err(err) => log::error!(
+                    "Error during leader term {} (block: #{}, phase: {:?}): {}",
+                    self.leader_term,
+                    self.block_number,
+                    self.phase,
+                    err
+                ),
+            }
 
-            let minimum_queue_len = match timeout_result {
+            // After we are done with one leader term,
+            // we need to wait until the next time we are elected.
+            // (At least one round later)
+            self.leader_term += 1;
+        }
+    }
+
+    /// Update the leader state with the state from the follower.
+    async fn synchronize_from_follower(&mut self) {
+        let state = self.follower.state().await;
+        // This `if` is required because we set our `leader_term` to
+        // the next value when an error occurs (`self.leader_term += 1`)
+        // and we dont want to override this with the state of the follower.
+        if self.leader_term <= state.leader_term {
+            self.leader_term = state.leader_term;
+            self.block_number = state.block_number;
+            self.last_block_hash = state.last_block_hash;
+        }
+    }
+
+    /// Broadcast a `NewView` message of one is available.
+    /// Returns `true` if a `NewView` message was sent.
+    async fn handle_new_view(&mut self) {
+        if let Some(message) = self.view_change.get_new_view_message(self.block_number) {
+            let new_leader_term = message.leader_term;
+            match self.broadcast_until_majority(message, |_| Ok(())).await {
+                Ok(_) => log::trace!(
+                    "Succesfully broadcasted NewView Message {}.",
+                    new_leader_term,
+                ),
+                Err(err) => {
+                    log::warn!(
+                        "Error while Broadcasting NewView Message {}: {}",
+                        new_leader_term,
+                        err
+                    );
+                }
+            }
+        }
+    }
+
+    /// Execute the leader during a single leader term.
+    ///
+    /// This function waits until it is notified to process transactions.
+    async fn execute_leader_term(&mut self) -> Result<(), Error> {
+        let mut timeout_result = Ok(());
+        loop {
+            self.phase = Phase::Waiting;
+
+            let min_block_size = match timeout_result {
+                // No timout, send only full blocks
                 Ok(()) => MAX_TRANSACTIONS_PER_BLOCK,
-                // We want to propose a block with a minimum of 1 transaction
-                // when timed out.
+                // Timeout, send all pending transactions
                 Err(_) => 1,
             };
-
-            while self.queue.read().await.len() >= minimum_queue_len {
-                let mut transactions: Vec<Signed<Transaction>> = Vec::new();
-
-                // TODO: Check size of transactions cumulated.
-                while let Some((_, transaction)) = self.queue.write().await.pop_front() {
-                    // pack block
-                    // TODO: Validate transaction.
-
-                    transactions.push(transaction);
-
-                    if transactions.len() >= MAX_TRANSACTIONS_PER_BLOCK {
-                        break;
-                    }
-                }
-
-                let block_number = self.leader_state.block_number + 1;
-                let body = Body {
-                    leader_term,
-                    height: block_number,
-                    prev_block_hash: self.leader_state.last_block_hash,
-                    transactions,
-                };
-                let hash = body.hash();
-
-                let transactions = body.transactions;
-                log::trace!("Sending block with {} transactions.", transactions.len());
-
-                log::trace!("Sending block with {} transactions.", transactions.len());
-
-                // ----------------------------------------- //
-                //    _____                                  //
-                //   |  __ \                                 //
-                //   | |__) | __ ___ _ __   __ _ _ __ ___    //
-                //   |  ___/ '__/ _ \ '_ \ / _` | '__/ _ \   //
-                //   | |   | | |  __/ |_) | (_| | | |  __/   //
-                //   |_|   |_|  \___| .__/ \__,_|_|  \___|   //
-                //    --------------| |-------------------   //
-                //                  |_|                      //
-                // ----------------------------------------- //
-                let prepare_message = ConsensusMessage::Prepare {
-                    leader_term,
-                    block_number,
-                    block_hash: hash,
-                };
-
-                let validate_ackprepares = move |response: &ConsensusMessage| {
-                    // This is done for every ACKPREPARE.
-                    match response {
-                        ConsensusMessage::AckPrepare {
-                            leader_term: ack_leader_term,
-                            block_number: ack_block_number,
-                            block_hash: ack_block_hash,
-                        } => {
-                            // Check whether the ACKPREPARE is for the same message.
-                            if *ack_leader_term == leader_term
-                                && *ack_block_number == block_number
-                                && *ack_block_hash == hash
-                            {
-                                Ok(())
-                            } else {
-                                Err("This is an invalid ACK PREPARE message.".into())
-                            }
-                        }
-                        _ => Err("This is not an ACK PREPARE message.".into()),
-                    }
-                };
-                let ackprepares = self
-                    .broadcast_until_majority(prepare_message, validate_ackprepares)
-                    .await;
-
-                let ackprepares = match ackprepares {
-                    Ok(ackprepares) => ackprepares,
-                    Err(err) => {
-                        log::error!(
-                            "Consensus error during PREPARE phase for block #{}: {}",
-                            block_number,
-                            err
-                        );
-                        // TODO: retry the transactions
-                        continue;
-                    }
-                };
-                log::trace!(
-                    "Prepare #{} phase ended. Got ACKPREPARE signatures: {:?}",
-                    block_number,
-                    ackprepares,
-                );
-
-                // ------------------------------------------- //
-                //                                        _    //
-                //       /\                              | |   //
-                //      /  \   _ __  _ __   ___ _ __   __| |   //
-                //     / /\ \ | '_ \| '_ \ / _ \ '_ \ / _` |   //
-                //    / ____ \| |_) | |_) |  __/ | | | (_| |   //
-                //   /_/    \_\ .__/| .__/ \___|_| |_|\__,_|   //
-                //   ---------| |---| |---------------------   //
-                //            |_|   |_|                        //
-                // ------------------------------------------- //
-                let append_message = ConsensusMessage::Append {
-                    leader_term,
-                    block_number,
-                    block_hash: hash,
-                    ackprepare_signatures: ackprepares,
-                    data: transactions,
-                };
-                let validate_ackappends = move |response: &ConsensusMessage| {
-                    // This is done for every ACKPREPARE.
-                    match response {
-                        ConsensusMessage::AckAppend {
-                            leader_term: ack_leader_term,
-                            block_number: ack_block_number,
-                            block_hash: ack_block_hash,
-                        } => {
-                            // Check whether the ACKPREPARE is for the same message.
-                            if *ack_leader_term == leader_term
-                                && *ack_block_number == block_number
-                                && *ack_block_hash == hash
-                            {
-                                Ok(())
-                            } else {
-                                Err("This is an invalid ACK APPEND message.".into())
-                            }
-                        }
-                        _ => Err("This is not an ack append message.".into()),
-                    }
-                };
-                let ackappends = self
-                    .broadcast_until_majority(append_message, validate_ackappends)
-                    .await;
-                let ackappends = match ackappends {
-                    Ok(ackappends) => ackappends,
-                    Err(err) => {
-                        log::error!(
-                            "Consensus error during APPEND phase for block #{}: {}",
-                            block_number,
-                            err
-                        );
-                        // TODO: retry the transactions
-                        continue;
-                    }
-                };
-                log::trace!(
-                    "Append Phase #{} ended. Got ACKAPPEND signatures: {:?}",
-                    block_number,
-                    ackappends,
-                );
-
-                // after we collected enough signatures, we can update our state
-                self.leader_state.block_number = block_number;
-                self.leader_state.last_block_hash = hash;
-
-                // ------------------------------------------- //
-                //     _____                          _ _      //
-                //    / ____|                        (_) |     //
-                //   | |     ___  _ __ ___  _ __ ___  _| |_    //
-                //   | |    / _ \| '_ ` _ \| '_ ` _ \| | __|   //
-                //   | |___| (_) | | | | | | | | | | | | |_    //
-                //    \_____\___/|_| |_| |_|_| |_| |_|_|\__|   //
-                //   ---------------------------------------   //
-                //                                             //
-                // ------------------------------------------- //
-
-                let commit_message = ConsensusMessage::Commit {
-                    leader_term,
-                    block_number,
-                    block_hash: hash,
-                    ackappend_signatures: ackappends,
-                };
-
-                let validate_ackcommits = move |response: &ConsensusMessage| {
-                    // This is done for every ACKCOMMIT.
-                    match response {
-                        ConsensusMessage::AckCommit => Ok(()),
-                        _ => Err("This is not an ack commit message.".into()),
-                    }
-                };
-                let ackcommits = self
-                    .broadcast_until_majority(commit_message, validate_ackcommits)
-                    .await;
-                match ackcommits {
-                    Ok(_) => {
-                        log::info!("Comitted block #{} on majority of RPUs.", block_number);
-                    }
-                    Err(err) => {
-                        log::error!(
-                            "Consensus error during COMMIT phase for block #{}: {}",
-                            block_number,
-                            err
-                        );
-                    }
-                }
+            while self.queue.lock().await.len() >= min_block_size {
+                self.execute_round().await?;
             }
+            timeout_result =
+                time::timeout(BLOCK_GENERATION_TIMEOUT, self.notify_leader.notified()).await;
+        }
+    }
+
+    /// Execute the leader during a single round (block number).
+    async fn execute_round(&mut self) -> Result<(), Error> {
+        let mut transactions = Vec::new();
+
+        // TODO: Check size of transactions cumulated.
+        while let Some(transaction) = self.queue.lock().await.next() {
+            // TODO: Validate transaction.
+
+            transactions.push(transaction);
+
+            if transactions.len() >= MAX_TRANSACTIONS_PER_BLOCK {
+                break;
+            }
+        }
+
+        let body = Body {
+            leader_term: self.leader_term,
+            height: self.block_number,
+            prev_block_hash: self.last_block_hash,
+            transactions,
+        };
+
+        let block_hash = body.hash();
+
+        let ackprepare_signatures = self.prepare(block_hash).await?;
+        log::trace!(
+            "Prepare Phase #{} ended. Got ACKPREPARE signatures: {:?}",
+            self.block_number,
+            ackprepare_signatures,
+        );
+
+        let ackappend_signatures = self
+            .append(block_hash, body.transactions, ackprepare_signatures)
+            .await?;
+        log::trace!(
+            "Append Phase #{} ended. Got ACKAPPEND signatures: {:?}",
+            self.block_number,
+            ackappend_signatures,
+        );
+
+        self.commit(block_hash, ackappend_signatures).await?;
+        log::info!("Comitted block #{} on majority of RPUs.", self.block_number);
+
+        self.block_number += 1;
+        self.last_block_hash = block_hash;
+
+        Ok(())
+    }
+
+    async fn prepare(&mut self, block_hash: BlockHash) -> Result<SignatureList, Error> {
+        self.phase = Phase::Prepare;
+
+        let metadata = self.metadata_with(block_hash);
+        let message = message::Prepare {
+            metadata: metadata.clone(),
+        };
+
+        self.broadcast_until_majority(message, move |ack| ack.metadata.verify(&metadata))
+            .await
+    }
+
+    async fn append(
+        &mut self,
+        block_hash: BlockHash,
+        transactions: Vec<Signed<Transaction>>,
+        ackprepare_signatures: SignatureList,
+    ) -> Result<SignatureList, Error> {
+        self.phase = Phase::Append;
+
+        let metadata = self.metadata_with(block_hash);
+        let message = message::Append {
+            metadata: metadata.clone(),
+            data: transactions,
+            ackprepare_signatures,
+        };
+
+        self.broadcast_until_majority(message, move |ack| ack.metadata.verify(&metadata))
+            .await
+    }
+
+    async fn commit(
+        &mut self,
+        block_hash: BlockHash,
+        ackappend_signatures: SignatureList,
+    ) -> Result<SignatureList, Error> {
+        self.phase = Phase::Commit;
+
+        let metadata = self.metadata_with(block_hash);
+        let message = message::Commit {
+            metadata: metadata.clone(),
+            ackappend_signatures,
+        };
+
+        self.broadcast_until_majority(message, move |_| Ok(()))
+            .await
+    }
+
+    fn is_current_leader(&self) -> bool {
+        self.leader(self.leader_term) == *self.identity.id()
+    }
+
+    const fn metadata_with(&self, block_hash: BlockHash) -> Metadata {
+        Metadata {
+            leader_term: self.leader_term,
+            block_number: self.block_number,
+            block_hash,
         }
     }
 }

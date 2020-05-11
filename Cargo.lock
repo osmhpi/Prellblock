@@ -756,6 +756,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "newtype-enum"
+version = "0.1.0"
+dependencies = [
+ "newtype-enum-macro",
+]
+
+[[package]]
+name = "newtype-enum-macro"
+version = "0.1.0"
+dependencies = [
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "num-integer"
 version = "0.1.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -932,6 +949,7 @@ dependencies = [
  "im",
  "lazy_static",
  "log",
+ "newtype-enum",
  "pinxit",
  "postcard",
  "prellblock-client-api",
@@ -940,6 +958,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_yaml",
+ "slab",
  "sled",
  "structopt",
  "tokio",
@@ -982,6 +1001,15 @@ checksum = "926d36b9553851b8b0005f1275891b392ee4d2d833852c417ed025477350fb9d"
 dependencies = [
  "env_logger",
  "log",
+]
+
+[[package]]
+name = "proc-macro-crate"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e10d4b51f154c8a7fb96fd6dad097cb74b863943ec010ac94b9fd1be8861fe1e"
+dependencies = [
+ "toml",
 ]
 
 [[package]]

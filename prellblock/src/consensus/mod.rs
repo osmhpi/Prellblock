@@ -9,5 +9,7 @@ mod signature_list;
 pub use block::{Block, BlockHash, Body};
 pub use block_number::BlockNumber;
 pub use leader_term::LeaderTerm;
-pub use praftbft::{message::ConsensusMessage, PRaftBFT as Consensus};
+pub use praftbft::{
+    ConsensusMessage, ConsensusResponse, Error, PRaftBFT as Consensus, Queue, RingBuffer,
+};
 pub(crate) use signature_list::SignatureList;

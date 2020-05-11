@@ -10,7 +10,7 @@ pub use peer_inbox::PeerInbox;
 pub use receiver::Receiver;
 pub use sender::Sender;
 
-use crate::consensus::ConsensusMessage;
+use crate::consensus::{ConsensusMessage, ConsensusResponse};
 use balise::define_api;
 use pinxit::Signed;
 use prellblock_client_api::Transaction;
@@ -39,6 +39,6 @@ define_api! {
         ExecuteBatch(Vec<Signed<Transaction>>) => (),
 
         /// Messages exchanged by the consensus.
-        Consensus(Signed<ConsensusMessage>) => Signed<ConsensusMessage>,
+        Consensus(Signed<ConsensusMessage>) => Signed<ConsensusResponse>,
     }
 }

@@ -1,3 +1,5 @@
+#![allow(clippy::use_self)]
+
 use crate::{Error, Identity, PeerId, Signature};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -160,6 +162,15 @@ impl<T> Verified<T> {
     #[allow(clippy::missing_const_for_fn)] // stupid clippy :(
     pub fn into_inner(self) -> T {
         self.0.body
+    }
+
+    /// Try to map the `body` to another type.
+    pub fn try_map<U, E>(self, f: impl FnOnce(T) -> Result<U, E>) -> Result<Verified<U>, E> {
+        Ok(Verified(Signed {
+            signer: self.0.signer,
+            body: f(self.0.body)?,
+            signature: self.0.signature,
+        }))
     }
 }
 

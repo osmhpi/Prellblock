@@ -1,6 +1,6 @@
 use super::{message, Calculator, Pong};
 use crate::{
-    consensus::{Consensus, ConsensusMessage},
+    consensus::{Consensus, ConsensusResponse},
     data_storage::DataStorage,
     transaction_checker::TransactionChecker,
     BoxError,
@@ -106,7 +106,7 @@ impl PeerInbox {
     pub async fn handle_consensus(
         &self,
         params: message::Consensus,
-    ) -> Result<Signed<ConsensusMessage>, BoxError> {
+    ) -> Result<Signed<ConsensusResponse>, BoxError> {
         Ok(self.consensus.handle_message(params.0).await?)
     }
 }
