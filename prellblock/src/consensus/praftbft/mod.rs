@@ -48,6 +48,8 @@ impl PRaftBFT {
         block_storage: BlockStorage,
         world_state: WorldStateService,
     ) -> Arc<Self> {
+        log::debug!("Started consensus.");
+
         // Setup core
         let core = Arc::new(Core::new(identity, block_storage, world_state));
 
