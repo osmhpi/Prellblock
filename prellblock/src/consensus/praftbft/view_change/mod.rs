@@ -144,6 +144,10 @@ impl ViewChange {
 
             // Notify leader task to begin to work.
             self.notify_leader.notify();
+
+            // Start the new view timeout.
+            drop(state);
+            self.notify_new_view.notify();
         }
 
         Ok(response::Ok)
@@ -154,6 +158,8 @@ impl ViewChange {
         let mut state = self.state.lock().unwrap();
         if state.leader_term == leader_term {
             state.new_view_time = None;
+
+            // The new view arrived in time.
             drop(state);
             self.notify_new_view.notify();
         }

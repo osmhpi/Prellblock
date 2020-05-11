@@ -119,7 +119,7 @@ impl Follower {
                 continue;
             }
 
-            self.apply_syncronized_block(&mut state, block).await?;
+            self.apply_synchronized_block(&mut state, block).await?;
         }
 
         log::trace!("Done synchronizing.");
@@ -127,7 +127,7 @@ impl Follower {
         Ok(state)
     }
 
-    async fn apply_syncronized_block(&self, state: &mut State, block: Block) -> Result<(), Error> {
+    async fn apply_synchronized_block(&self, state: &mut State, block: Block) -> Result<(), Error> {
         block.body.height.verify(state.block_number)?;
 
         if block.body.prev_block_hash != state.last_block_hash {
@@ -169,7 +169,7 @@ impl Follower {
         peer_id: PeerId,
         message: message::SynchronizationRequest,
     ) -> Result<response::SynchronizationResponse, Error> {
-        println!("Request by {} to synchornize.", peer_id);
+        println!("Request by {} to synchronize.", peer_id);
 
         let (new_view, current_block_number) = {
             let state = self.state.lock().await;

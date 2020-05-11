@@ -138,7 +138,7 @@ impl Leader {
             self.phase = Phase::Waiting;
 
             let min_block_size = match timeout_result {
-                // No timout, send only full blocks
+                // No timeout, send only full blocks
                 Ok(()) => MAX_TRANSACTIONS_PER_BLOCK,
                 // Timeout, send all pending transactions
                 Err(_) => 1,

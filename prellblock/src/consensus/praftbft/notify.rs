@@ -35,6 +35,10 @@ impl<T> NotifyMap<T>
 where
     T: Eq + Hash,
 {
+    /// Wait until a given `state` is reached.
+    ///
+    /// The returned `Wait` future will resolve once
+    /// `notify_all(state)` is called or the `NotifyMap` is dropped.
     pub fn wait(&mut self, state: T) -> Wait<T> {
         Wait {
             index: 0,
@@ -43,6 +47,7 @@ where
         }
     }
 
+    /// Notify all futures waiting for a given `state`.
     pub fn notify_all(&mut self, state: &T) {
         if let Some(wakers) = self.inner.lock().unwrap().get_mut(state) {
             for (_, waker) in wakers {
@@ -59,6 +64,7 @@ where
     T: Hash + Eq,
 {
     fn drop(&mut self) {
+        // Notify all futurues waiting for any state.
         for wakers in self.inner.lock().unwrap().values_mut() {
             for (_, waker) in wakers {
                 if let Some(waker) = waker.take() {
@@ -102,6 +108,7 @@ where
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         let mut inner = self.inner.lock().unwrap();
         match (self.index.checked_sub(1), inner.get_mut(&self.state)) {
+            // A waker is already registered.
             (Some(index), Some(wakers)) => {
                 match &mut wakers[index] {
                     // Waker was notified.
@@ -112,12 +119,15 @@ where
                     Some(waker) => *waker = ctx.waker().clone(),
                 }
             }
+            // A waker is already registered, but the waker list is removed.
             (Some(_), None) => unreachable!(),
+            // No waker is registered and the wakers list already exists.
             (None, Some(wakers)) => {
                 let index = wakers.insert(Some(ctx.waker().clone()));
                 drop(inner);
                 self.index = 1 + index;
             }
+            // No waker is registered and there is no wakers list.
             (None, None) => {
                 let mut wakers = slab::Slab::new();
                 let index = wakers.insert(Some(ctx.waker().clone()));
@@ -135,10 +145,13 @@ where
     T: Hash + Eq,
 {
     fn drop(&mut self) {
+        // Remove our waker from the waker list.
         if let Some(index) = self.index.checked_sub(1) {
             let mut inner = self.inner.lock().unwrap();
             let wakers = inner.get_mut(&self.state).unwrap();
             wakers.remove(index);
+
+            // Remove the wakers list if it's empty.
             if wakers.is_empty() {
                 inner.remove(&self.state);
             }

@@ -181,6 +181,8 @@ impl State {
     /// Panics if no rollback is possible
     /// or the rollback has an unexpected `block_number`.
     pub async fn rollback(&mut self) {
+        assert!(self.rollback_possible);
+
         // BlockStorage remove topmost block.
         // Double Unwrap should be fine because there needs to be some block.
         let last_block = self.block_storage.pop_block().unwrap().unwrap();
