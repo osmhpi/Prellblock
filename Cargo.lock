@@ -276,7 +276,6 @@ checksum = "26778518a7f6cffa1d25a44b602b62b979bd88adb9e99ffec546998cf3404839"
 dependencies = [
  "byteorder",
  "digest",
- "packed_simd",
  "rand_core",
  "subtle 2.2.2",
  "zeroize",
@@ -300,11 +299,11 @@ checksum = "4358a9e11b9a09cf52383b451b49a169e8d797b68aa02301ff586d70d9661ea3"
 [[package]]
 name = "ed25519-dalek"
 version = "1.0.0-pre.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "978710b352437433c97b2bff193f2fb1dfd58a093f863dd95e225a19baa599a2"
+source = "git+https://github.com/dalek-cryptography/ed25519-dalek#36a51acbf0ca2c10d974940182c0ff63f530c9d3"
 dependencies = [
  "clear_on_drop",
  "curve25519-dalek",
+ "merlin",
  "rand",
  "sha2",
 ]
@@ -629,6 +628,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "keccak"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67c21572b4949434e4fc1e1978b99c5f77064153c59d998bf13ecd96fb5ecba7"
+
+[[package]]
 name = "kernel32-sys"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -693,6 +698,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4fc2c02a7e374099d4ee95a193111f72d2110197fe200272371758f6c3643d8"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "merlin"
+version = "1.2.1"
+source = "git+https://github.com/isislovecruft/merlin?branch=develop#c483190db3506732691d4a502a97de9774642111"
+dependencies = [
+ "byteorder",
+ "clear_on_drop",
+ "keccak",
+ "rand_core",
 ]
 
 [[package]]
@@ -852,15 +868,6 @@ dependencies = [
  "openssl-src",
  "pkg-config",
  "vcpkg",
-]
-
-[[package]]
-name = "packed_simd"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a85ea9fc0d4ac0deb6fe7911d38786b32fc11119afd9e9d38b84ff691ce64220"
-dependencies = [
- "cfg-if",
 ]
 
 [[package]]

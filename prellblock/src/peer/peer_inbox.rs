@@ -5,9 +5,8 @@ use crate::{
     transaction_checker::TransactionChecker,
     BoxError,
 };
-use pinxit::Signed;
+use pinxit::{verify_signed_batch_ref, Signed, VerifiedRef};
 use prellblock_client_api::Transaction;
-use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
 
 type ArcMut<T> = Arc<Mutex<T>>;
@@ -38,15 +37,12 @@ impl PeerInbox {
     }
 
     /// Handle an `execute` `Signable` message.
-    pub fn handle_execute(&self, params: &Signed<Transaction>) -> Result<(), BoxError> {
-        let transaction = params;
-        let transaction = transaction.verify_ref()?;
-
+    pub fn handle_execute(&self, transaction: &VerifiedRef<Transaction>) -> Result<(), BoxError> {
         // Verify permissions
         self.transaction_checker
-            .verify_permissions(transaction.signer(), &transaction)?;
+            .verify_permissions(transaction.signer(), transaction)?;
 
-        match &*transaction {
+        match &**transaction {
             Transaction::KeyValue { key, value } => {
                 // TODO: Deserialize value.
                 log::debug!(
@@ -70,13 +66,10 @@ impl PeerInbox {
     ) -> Result<(), BoxError> {
         let message::ExecuteBatch(batch) = params;
 
-        // Parallel verification makes it somewhat faster.
-        let result = batch
-            .par_iter()
-            .map(|message| self.handle_execute(message))
-            .collect::<Result<(), BoxError>>();
-        if let Err(err) = result {
-            log::error!("Error while handling message: {}", err);
+        // Batch verification makes it somewhat faster.
+        let verified = verify_signed_batch_ref(&batch)?;
+        for message in &verified {
+            self.handle_execute(message)?;
         }
 
         let consensus = self.consensus.clone();

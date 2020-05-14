@@ -197,11 +197,13 @@ pub struct VerifiedRef<'a, T>(&'a Signed<T>);
 
 impl<'a, T> VerifiedRef<'a, T> {
     /// Get the signer of the signature.
+    #[must_use]
     pub const fn signer(&self) -> &PeerId {
         self.0.signer()
     }
 
     /// Get the signature of the message.
+    #[must_use]
     pub const fn signature(&self) -> &Signature {
         &self.0.signature
     }
@@ -217,5 +219,73 @@ impl<'a, T> Deref for VerifiedRef<'a, T> {
 impl<'a, T> From<VerifiedRef<'a, T>> for &'a Signed<T> {
     fn from(v: VerifiedRef<'a, T>) -> Self {
         v.0
+    }
+}
+
+/// Verify a batch of `Signed<T>`.
+///
+/// This returns an array of `VerifiedRef` if and only if
+/// **all** signatures can be verified.
+///
+/// # Example
+/// ```
+/// use pinxit::{verify_signed_batch_ref, Identity, Signable, Signed, VerifiedRef};
+///
+/// // define example struct
+/// struct TestData<'a>(&'a str);
+///
+/// // make the struct signable
+/// impl<'a> Signable for TestData<'a> {
+///     type SignableData = &'a str;
+///     type Error = std::io::Error; // never used
+///     fn signable_data(&self) -> Result<Self::SignableData, Self::Error> {
+///         Ok(self.0)
+///     }
+/// }
+///
+/// // create an identity
+/// let identity = Identity::generate();
+///
+/// let mut batch: Vec<Signed<TestData>> = Vec::new();
+///
+/// for i in 0..200 {
+///     // create signable test data
+///     let test_data = TestData("Lorem ipsum");
+///
+///     // create a signed version of test data
+///     // you cannot access the data until it is verified
+///     let signed: Signed<TestData> = test_data.sign(&identity).unwrap();
+///     batch.push(signed);
+/// }
+///
+/// let verified_batch: Vec<VerifiedRef<TestData>> = verify_signed_batch_ref(&batch).unwrap();
+///
+/// for verified in verified_batch {
+///     // access the data
+///     println!("{}", verified.0);
+/// }
+/// ```
+pub fn verify_signed_batch_ref<T>(batch: &[Signed<T>]) -> Result<Vec<VerifiedRef<T>>, Error>
+where
+    T: Signable,
+{
+    let batch_length = batch.len();
+    let mut messages = Vec::with_capacity(batch_length);
+    let mut signers = Vec::with_capacity(batch_length);
+    let mut signatures = Vec::with_capacity(batch_length);
+    for signed in batch {
+        messages.push(
+            signed
+                .unverified_ref()
+                .signable_data()
+                .map_err(Error::signable_error)?,
+        );
+        signers.push(signed.signer().0);
+        signatures.push(signed.signature().0);
+    }
+    let messages_refs: Vec<_> = messages.iter().map(std::convert::AsRef::as_ref).collect();
+    match ed25519_dalek::verify_batch(&messages_refs[..], &signatures[..], &signers[..]) {
+        Ok(()) => Ok(batch.iter().map(|signed| VerifiedRef(signed)).collect()),
+        Err(err) => Err(err.into()),
     }
 }

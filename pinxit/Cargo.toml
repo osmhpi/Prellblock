@@ -10,7 +10,7 @@ authors = [
 edition = "2018"
 
 [dependencies]
-ed25519-dalek = { version = "1.0.0-pre.3", features = ["simd_backend"] }
+ed25519-dalek = { git = "https://github.com/dalek-cryptography/ed25519-dalek", features = ["batch"] }
 err-derive = "0.2.3"
 hexutil = "0.1.0"
 lazy_static = "1.4.0"

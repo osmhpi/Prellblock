@@ -28,10 +28,6 @@
 //! // you cannot access the data until it is verified
 //! let signed: Signed<TestData> = test_data.sign(&identity).unwrap();
 //!
-//! // get peer id of identity
-//! let peer_id = identity.id();
-//! println!("{}", peer_id);
-//!
 //! // verify the signature
 //! let verified: Verified<TestData> = signed.verify().unwrap();
 //!
@@ -48,5 +44,5 @@ mod signature;
 pub use error::Error;
 pub use identity::Identity;
 pub use peer_id::PeerId;
-pub use signable::{Signable, Signed, Verified};
+pub use signable::{verify_signed_batch_ref, Signable, Signed, Verified, VerifiedRef};
 pub use signature::Signature;

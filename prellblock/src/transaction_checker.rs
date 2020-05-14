@@ -2,7 +2,7 @@
 
 use crate::world_state::WorldStateService;
 use err_derive::Error;
-use pinxit::{PeerId, Signed};
+use pinxit::{verify_signed_batch_ref, PeerId, Signed};
 use prellblock_client_api::Transaction;
 
 /// An error of the `permission_checker` module.
@@ -62,10 +62,9 @@ impl TransactionChecker {
 
     /// Verify signatures of `Transaction`s
     pub fn verify_signatures(&self, data: &[Signed<Transaction>]) -> Result<(), PermissionError> {
-        for tx in data {
-            let signer = tx.signer().clone();
-            let transaction = tx.verify_ref()?;
-            self.verify_permissions(&signer, &transaction)?;
+        let verified_transactions = verify_signed_batch_ref(data)?;
+        for tx in verified_transactions {
+            self.verify_permissions(tx.signer(), &tx)?;
         }
         Ok(())
     }
