@@ -27,7 +27,7 @@ use prellblock_client_api::Transaction;
 use std::sync::Arc;
 use view_change::ViewChange;
 
-const MAX_TRANSACTIONS_PER_BLOCK: usize = 500;
+const MAX_TRANSACTIONS_PER_BLOCK: usize = 4000;
 
 /// See the [paper](https://www.scs.stanford.edu/17au-cs244b/labs/projects/clow_jiang.pdf).
 #[derive(Debug)]

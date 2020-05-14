@@ -283,9 +283,9 @@ where
         signers.push(signed.signer().0);
         signatures.push(signed.signature().0);
     }
-    let messages_refs: Vec<_> = messages.iter().map(std::convert::AsRef::as_ref).collect();
-    match ed25519_dalek::verify_batch(&messages_refs[..], &signatures[..], &signers[..]) {
-        Ok(()) => Ok(batch.iter().map(|signed| VerifiedRef(signed)).collect()),
+    let messages_refs: Vec<_> = messages.iter().map(AsRef::as_ref).collect();
+    match ed25519_dalek::verify_batch(&messages_refs, &signatures, &signers) {
+        Ok(()) => Ok(batch.iter().map(VerifiedRef).collect()),
         Err(err) => Err(err.into()),
     }
 }

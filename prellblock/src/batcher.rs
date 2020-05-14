@@ -9,7 +9,7 @@ use tokio::{
     time::timeout,
 };
 
-const MAX_TRANSACTIONS_PER_BATCH: usize = 500;
+const MAX_TRANSACTIONS_PER_BATCH: usize = 4000;
 const MAX_TIME_BETWEEN_BATCHES: Duration = Duration::from_millis(400);
 
 /// A Batcher for messages.
