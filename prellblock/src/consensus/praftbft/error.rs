@@ -163,7 +163,7 @@ impl BlockNumber {
 }
 
 impl follower::Phase {
-    pub(super) fn error(self, expected: Self) -> Error {
+    pub(super) const fn error(self, expected: Self) -> Error {
         Error::WrongPhase {
             current: self,
             expected,
