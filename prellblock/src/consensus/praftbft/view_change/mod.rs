@@ -156,7 +156,13 @@ impl ViewChange {
     /// A `NewView` message arrived for a given `leader_term`.
     pub fn new_view_received(&self, leader_term: LeaderTerm) {
         let mut state = self.state.lock().unwrap();
-        if state.leader_term == leader_term {
+        if leader_term > state.leader_term {
+            // It is safe to advance the buffer as the validity
+            // of this NewView message was already checked in 
+            // `Follower::handle_new_view_message`.
+            state.did_reach_supermajority(leader_term);
+        }
+        if leader_term == state.leader_term {
             state.new_view_time = None;
 
             // The new view arrived in time.
@@ -171,7 +177,7 @@ impl ViewChange {
             match self.new_view_duration() {
                 // Check if the `NewView` message arrives in time.
                 Some(new_view_duration) => self.check_new_view_timeout(new_view_duration).await,
-                // Wait for the newxt `NewView` message timeout
+                // Wait for the next `NewView` message timeout
                 None => self.notify_new_view.notified().await,
             }
         }
@@ -192,7 +198,7 @@ impl ViewChange {
         };
 
         if new_view_arrived_in_time {
-            log::trace!("NewView arrived in time.");
+            log::trace!("NewView arrived in time for term {}.", self.state.lock().unwrap().leader_term);
         } else {
             log::debug!("NewView has not arrived in time.");
             self.request_view_change().await;
@@ -213,5 +219,12 @@ impl ViewChange {
     /// Calculates the number that represents f + 1 nodes.
     fn nonfaulty_count(&self) -> usize {
         (self.world_state.get().peers.len() - 1) / 3 + 1
+    }
+
+    pub fn synchronized_leader_term(&self, leader_term: LeaderTerm) {
+        let mut state = self.state.lock().unwrap();
+        if leader_term > state.leader_term {
+            state.did_reach_supermajority(leader_term);
+        }
     }
 }

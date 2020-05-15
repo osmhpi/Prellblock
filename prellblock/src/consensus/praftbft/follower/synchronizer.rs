@@ -98,6 +98,7 @@ impl Follower {
                 &view_change_signatures,
             )?;
             state.new_leader_term(new_leader_term, view_change_signatures);
+            self.view_change.synchronized_leader_term(new_leader_term);
         }
 
         if let Some(first_block) = response.blocks.first() {
