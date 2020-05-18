@@ -4,5 +4,5 @@ members = [
     "pinxit",
     "prellblock",
     "prellblock-client",
-    "prellblock-client-api",
+    "prellblock-client-api"
 ]

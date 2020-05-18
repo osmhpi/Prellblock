@@ -7,6 +7,7 @@ pub mod account_permissions;
 
 use account_permissions::ReadingRight;
 use balise::define_api;
+use chrono::prelude::*;
 use newtype_enum::newtype_enum;
 use pinxit::{PeerId, Signable, Signed};
 use serde::{Deserialize, Serialize};
@@ -46,7 +47,13 @@ pub enum Transaction {
         id: PeerId,
 
         /// Setting this to `true` enables accounts to take part in the the consensus.
+        is_admin: Option<bool>,
+
+        /// Setting this to `true` enables accounts to take part in the the consensus.
         is_rpu: Option<bool>,
+
+        /// Setting this will make an account expire at the given timestamp.
+        expire_at: Option<Option<DateTime<Utc>>>,
 
         /// Setting this to `true` enables an accounts to write data to its own namespace.
         has_writing_rights: Option<bool>,

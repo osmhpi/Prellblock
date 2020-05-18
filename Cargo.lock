@@ -927,8 +927,7 @@ checksum = "05da548ad6865900e60eaba7f589cc0783590a92e940c26953ff81ddbab2d677"
 [[package]]
 name = "postcard"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2ba083a6a640a9f09d294c0f504acdd7a2b000c179e80c73d4b7a036bfd8164"
+source = "git+https://github.com/felix-gohla/postcard.git#master#d9bdfe2ba9a057a4e9b24fb5985c42e8d7f64d0a"
 dependencies = [
  "heapless",
  "postcard-cobs",
@@ -981,6 +980,7 @@ name = "prellblock-client"
 version = "0.1.0"
 dependencies = [
  "balise",
+ "chrono",
  "hex",
  "log",
  "newtype-enum",
@@ -990,6 +990,7 @@ dependencies = [
  "pretty_env_logger",
  "rand",
  "serde",
+ "serde_yaml",
  "structopt",
  "tokio",
  "toml",
@@ -1000,6 +1001,7 @@ name = "prellblock-client-api"
 version = "0.1.0"
 dependencies = [
  "balise",
+ "chrono",
  "newtype-enum",
  "pinxit",
  "postcard",

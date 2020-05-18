@@ -11,7 +11,8 @@ edition = "2018"
 
 [dependencies]
 balise = { path = "../balise" }
+chrono = { version = "0.4.11", features = ["serde"] }
 newtype-enum = "0.1.0"
 pinxit = { path = "../pinxit" }
-postcard = "0.5.0"
+postcard = { version = "0.5.0", git = "https://github.com/felix-gohla/postcard.git#master", features = ["use-std"] }
 serde = { version = "1.0.105", features = ["derive"] }

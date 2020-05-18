@@ -3,10 +3,11 @@
 
 //! An example client used to simulate clients.
 
+use chrono::prelude::*;
 use newtype_enum::Enum;
-use pinxit::Signable;
+use pinxit::{Identity, Signable};
 use prellblock_client::Client;
-use prellblock_client_api::{message, transaction, Transaction};
+use prellblock_client_api::{account_permissions::ReadingRight, message, transaction, Transaction};
 use rand::{
     rngs::{OsRng, StdRng},
     seq::SliceRandom,
@@ -31,7 +32,7 @@ enum Command {
         /// The value of the corresponding key.
         value: String,
     },
-    /// Benchmark the blockchain
+    /// Benchmark the blockchain.
     #[structopt(name = "bench")]
     Benchmark {
         /// The name of the RPU to benchmark.
@@ -47,6 +48,14 @@ enum Command {
         #[structopt(short, long, default_value = "1")]
         workers: usize,
     },
+    /// Update the permissions for a given account.
+    #[structopt(name = "update")]
+    UpdateAccount {
+        /// The id of the account to update.
+        id: String,
+        /// The filepath to a yaml-file cotaining the accounts permissions.
+        permission_file: String,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -60,6 +69,20 @@ struct RpuConfig {
     peer_id: String,
     peer_address: SocketAddr,
     turi_address: SocketAddr,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct Permissions {
+    /// Whether the account shall be an admin.
+    is_admin: Option<bool>,
+    /// Whether the account shall be a RPU.
+    is_rpu: Option<bool>,
+    /// Expiry of the account.
+    expire_at: Option<Option<DateTime<Utc>>>,
+    /// Whether the account shall have permissions to write into its namespace.
+    has_writing_rights: Option<bool>,
+    /// Permissions for reading the namespaces of other accounts.
+    reading_rights: Option<Vec<ReadingRight>>,
 }
 
 #[tokio::main]
@@ -90,7 +113,7 @@ async fn main() {
                 .unwrap();
 
             match client.send_request(message::Execute(transaction)).await {
-                Err(err) => log::error!("Failed to send transaction: {}.", err),
+                Err(err) => log::error!("Failed to send transaction: {}", err),
                 Ok(()) => log::debug!("Transaction ok!"),
             }
         }
@@ -135,7 +158,7 @@ async fn main() {
                                 .sign(&identity)
                                 .unwrap();
                         match client.send_request(message::Execute(transaction)).await {
-                            Err(err) => log::error!("Failed to send transaction: {}.", err),
+                            Err(err) => log::error!("Failed to send transaction: {}", err),
                             Ok(()) => log::debug!("Transaction ok!"),
                         }
                     }
@@ -163,6 +186,47 @@ async fn main() {
                 } else {
                     log::error!("Failed to benchmark with worker {}", n);
                 }
+            }
+        }
+        Command::UpdateAccount {
+            id,
+            permission_file,
+        } => {
+            let mut rng = thread_rng();
+            let turi_address = config.rpu.choose(&mut rng).unwrap().turi_address;
+
+            // execute the test client
+            let mut client = Client::new(turi_address);
+
+            // matching peerid is: cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc
+            let identity: Identity =
+                "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256"
+                    .parse()
+                    .unwrap();
+
+            // TestCLI: 256cdb0197402705f96d39eab7dd3d47a39cb75673a58852d83f666973d80e01
+            let id = id.parse().expect("Invalid account id given");
+
+            // Read `Permissions` from the given file.
+            let permission_file_content =
+                fs::read_to_string(permission_file).expect("Could not read permission file");
+
+            let permissions: Permissions = serde_yaml::from_str(&permission_file_content)
+                .expect("Invalid permission file content");
+            let transaction = Transaction::from_variant(transaction::UpdateAccount {
+                id,
+                is_admin: permissions.is_admin,
+                is_rpu: permissions.is_rpu,
+                expire_at: permissions.expire_at,
+                has_writing_rights: permissions.has_writing_rights,
+                reading_rights: permissions.reading_rights,
+            })
+            .sign(&identity)
+            .unwrap();
+
+            match client.send_request(message::Execute(transaction)).await {
+                Err(err) => log::error!("Failed to send transaction: {}", err),
+                Ok(()) => log::debug!("Transaction ok!"),
             }
         }
     }
