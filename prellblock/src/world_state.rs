@@ -2,9 +2,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-mod account;
-
-pub use account::Account;
+pub use prellblock_client_api::account::Account;
 
 use crate::{
     block_storage::BlockStorage,

@@ -952,8 +952,6 @@ name = "prellblock"
 version = "0.1.0"
 dependencies = [
  "balise",
- "blake2",
- "chrono",
  "err-derive",
  "futures",
  "hexutil",
@@ -999,6 +997,9 @@ name = "prellblock-client-api"
 version = "0.1.0"
 dependencies = [
  "balise",
+ "blake2",
+ "chrono",
+ "hexutil",
  "pinxit",
  "postcard",
  "serde",

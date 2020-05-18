@@ -11,8 +11,6 @@ edition = "2018"
 
 [dependencies]
 balise = { path = "../balise", features = ["server", "client", "tls"] }
-blake2 = "0.8.1"
-chrono = { version = "0.4.11", features = ["serde"] }
 err-derive = "0.2.3"
 futures = "0.3.4"
 hexutil = "0.1.0"

@@ -1,18 +1,20 @@
 use super::{BlockNumber, LeaderTerm, SignatureList};
+use crate::Transaction;
 use blake2::{
     digest::{generic_array::typenum::Unsigned, FixedOutput},
     Blake2b, Digest,
 };
 use pinxit::Signed;
-use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// A `Block` stores transactions verified by the blockchain.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
-    pub(crate) body: Body,
-    pub(crate) signatures: SignatureList,
+    /// The `Body` of a block. (Everything that is signed)
+    pub body: Body,
+    /// The list of append signatures that accepted the body.
+    pub signatures: SignatureList,
 }
 
 impl Block {
@@ -23,7 +25,8 @@ impl Block {
     }
 
     /// Return the `Block`s block number.
-    pub(crate) const fn block_number(&self) -> BlockNumber {
+    #[must_use]
+    pub const fn block_number(&self) -> BlockNumber {
         self.body.height
     }
 }
@@ -32,15 +35,23 @@ impl Block {
 /// and an Array of the actual `Transaction`s with their corresponding Signature in the `Block`.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Body {
-    pub(crate) leader_term: LeaderTerm,
-    pub(crate) height: BlockNumber,
-    pub(crate) prev_block_hash: BlockHash,
-    pub(crate) transactions: Vec<Signed<Transaction>>,
+    /// The `LeaderTerm` of the `Block`.
+    pub leader_term: LeaderTerm,
+
+    /// The `BlockNumber` of the `Block`.
+    pub height: BlockNumber,
+
+    /// The `BlockHash` of the previous `Block`.
+    pub prev_block_hash: BlockHash,
+
+    /// The actual data (`Signed<Transactions>`).
+    pub transactions: Vec<Signed<Transaction>>,
 }
 
 impl Body {
     /// Calculate the hash of the blocks body.
-    pub(crate) fn hash(&self) -> BlockHash {
+    #[must_use]
+    pub fn hash(&self) -> BlockHash {
         let val = postcard::to_stdvec(self).unwrap();
 
         let result = Blake2b::digest(&val);

@@ -1,4 +1,4 @@
-use super::{super::message::Metadata, message, response, Error, Follower, State};
+use super::{super::message::Metadata, message, response, Error, ErrorVerify, Follower, State};
 use crate::consensus::{Block, BlockNumber, LeaderTerm};
 use pinxit::PeerId;
 use rand::Rng;

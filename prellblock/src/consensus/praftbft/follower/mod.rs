@@ -5,7 +5,7 @@ pub use state::Phase;
 
 use super::{
     message::{consensus_message as message, consensus_response as response},
-    Core, Error, NotifyMap, ViewChange,
+    Core, Error, ErrorVerify, NotifyMap, ViewChange,
 };
 use crate::consensus::{BlockNumber, LeaderTerm};
 use pinxit::PeerId;

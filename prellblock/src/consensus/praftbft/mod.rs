@@ -17,6 +17,7 @@ pub use ring_buffer::RingBuffer;
 use self::core::Core;
 use crate::{block_storage::BlockStorage, world_state::WorldStateService};
 use censorship_checker::CensorshipChecker;
+use error::ErrorVerify;
 use follower::Follower;
 use leader::Leader;
 use message::Request;

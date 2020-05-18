@@ -139,8 +139,12 @@ pub enum Error {
     CouldNotGetSupermajority,
 }
 
-impl LeaderTerm {
-    pub(super) fn verify(self, expected: Self) -> Result<(), Error> {
+pub(super) trait ErrorVerify {
+    fn verify(self, expected: Self) -> Result<(), Error>;
+}
+
+impl ErrorVerify for LeaderTerm {
+    fn verify(self, expected: Self) -> Result<(), Error> {
         if self == expected {
             Ok(())
         } else {
@@ -149,8 +153,8 @@ impl LeaderTerm {
     }
 }
 
-impl BlockNumber {
-    pub(super) fn verify(self, expected: Self) -> Result<(), Error> {
+impl ErrorVerify for BlockNumber {
+    fn verify(self, expected: Self) -> Result<(), Error> {
         if self == expected {
             Ok(())
         } else {

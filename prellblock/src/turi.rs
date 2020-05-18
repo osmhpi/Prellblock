@@ -6,8 +6,10 @@ use balise::{
     server::{Server, TlsIdentity},
 };
 use prellblock_client_api::{message, ClientMessage, Pong, Transaction};
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::net::TcpListener;
+
+type Response<R> = Result<<R as balise::Request<ClientMessage>>::Response, BoxError>;
 
 /// A receiver (server) instance.
 ///
@@ -44,6 +46,10 @@ impl Turi {
             handler!(ClientMessage, {
                 Ping(_) => Ok(Pong),
                 Execute(params) => self.handle_execute(params).await,
+                GetValue(params) => self.handle_get_value(params).await,
+                GetAccount(params) => self.handle_get_account(params).await,
+                GetBlock(params) => self.handle_get_block(params).await,
+                GetCurrentBlockNumber(params) => self.handle_get_current_block_number(params).await,
             }),
             tls_identity,
         )?;
@@ -51,7 +57,7 @@ impl Turi {
         Ok(())
     }
 
-    async fn handle_execute(&self, params: message::Execute) -> Result<(), BoxError> {
+    async fn handle_execute(&self, params: message::Execute) -> Response<message::Execute> {
         let message::Execute(transaction) = params;
         // Check validity of transaction signature.
         let transaction = transaction.verify()?;
@@ -74,5 +80,50 @@ impl Turi {
         });
 
         Ok(())
+    }
+
+    async fn handle_get_value(&self, params: message::GetValue) -> Response<message::GetValue> {
+        let message::GetValue(peer_ids, filter, query) = params;
+        let response = HashMap::new();
+
+        // TODO: implement :D
+        let _ = (peer_ids, filter, query);
+
+        Ok(response)
+    }
+
+    async fn handle_get_account(
+        &self,
+        params: message::GetAccount,
+    ) -> Response<message::GetAccount> {
+        let message::GetAccount(peer_ids) = params;
+        let response = Vec::new();
+
+        // TODO: implement :D
+        let _ = peer_ids;
+
+        Ok(response)
+    }
+
+    async fn handle_get_block(&self, params: message::GetBlock) -> Response<message::GetBlock> {
+        let message::GetBlock(filter) = params;
+        let response = Vec::new();
+
+        // TODO: implement :D
+        let _ = filter;
+
+        Ok(response)
+    }
+
+    async fn handle_get_current_block_number(
+        &self,
+        params: message::GetCurrentBlockNumber,
+    ) -> Response<message::GetCurrentBlockNumber> {
+        let message::GetCurrentBlockNumber() = params;
+        let response = crate::consensus::BlockNumber::default();
+
+        // TODO: implement :D
+
+        Ok(response)
     }
 }

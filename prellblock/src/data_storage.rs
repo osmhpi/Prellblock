@@ -1,6 +1,5 @@
 //! The `DataStorage` is a temporary storage for incoming transactions persisted on disk.
 
-use chrono::{DateTime, Utc};
 use hexutil::ToHex;
 use pinxit::PeerId;
 use sled::{Config, Db, IVec, Tree};
@@ -48,8 +47,7 @@ impl DataStorage {
         let key_tree = self.tree_for_name(&peer_tree, key)?;
 
         // insert value with timestamp
-        let now: DateTime<Utc> = Utc::now();
-        let time = now.timestamp_millis().to_be_bytes();
+        let time = timestamp_millis().to_be_bytes();
         let value = postcard::to_stdvec(&value)?;
         key_tree.insert(&time, value)?;
 
@@ -86,5 +84,14 @@ impl DataStorage {
             new_tree_id
         };
         Ok(self.database.open_tree(&tree_id)?)
+    }
+}
+
+// We do not expect a system time that far off:
+#[allow(clippy::cast_possible_truncation)]
+fn timestamp_millis() -> i64 {
+    match std::time::SystemTime::UNIX_EPOCH.elapsed() {
+        Ok(duration) => duration.as_millis() as i64,
+        Err(err) => -(err.duration().as_millis() as i64),
     }
 }

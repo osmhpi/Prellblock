@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 
