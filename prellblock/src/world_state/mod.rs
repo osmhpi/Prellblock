@@ -206,13 +206,24 @@ impl WorldState {
     pub fn apply_transaction(&mut self, transaction: Signed<Transaction>) {
         let signer = transaction.signer().clone();
         match transaction.unverified() {
-            Transaction::KeyValue { key, value } => {
+            Transaction::KeyValue(params) => {
                 if let Some(namespace) = self.data.get_mut(&signer) {
-                    namespace.insert(key, value);
+                    namespace.insert(params.key, params.value);
                 } else {
                     let mut namespace = HashMap::new();
-                    namespace.insert(key, value);
+                    namespace.insert(params.key, params.value);
                     self.data.insert(signer.clone(), namespace);
+                }
+            }
+            Transaction::UpdateAccount(params) => {
+                if let Some(account) = self.accounts.get_mut(&params.id) {
+                    account.is_rpu = params.is_rpu.unwrap_or(account.is_rpu);
+                    account.writing_rights =
+                        params.has_writing_rights.unwrap_or(account.writing_rights);
+                    if let Some(reading_rights) = params.reading_rights {
+                        account.reading_rights = reading_rights;
+                    }
+                } else {
                 }
             }
         }

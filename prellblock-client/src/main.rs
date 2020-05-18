@@ -3,9 +3,10 @@
 
 //! An example client used to simulate clients.
 
+use newtype_enum::Enum;
 use pinxit::Signable;
 use prellblock_client::Client;
-use prellblock_client_api::{message, Transaction};
+use prellblock_client_api::{message, transaction, Transaction};
 use rand::{
     rngs::{OsRng, StdRng},
     seq::SliceRandom,
@@ -84,7 +85,7 @@ async fn main() {
                 .unwrap();
             let value = postcard::to_stdvec(&value).unwrap();
 
-            let transaction = Transaction::KeyValue { key, value }
+            let transaction = Transaction::from_variant(transaction::KeyValue { key, value })
                 .sign(&identity)
                 .unwrap();
 
@@ -129,9 +130,10 @@ async fn main() {
                         hex::encode_to_slice(&bytes, &mut value).unwrap();
                         let value = str::from_utf8(&value[..size]).unwrap();
                         let value = postcard::to_stdvec(value).unwrap();
-                        let transaction = Transaction::KeyValue { key, value }
-                            .sign(&identity)
-                            .unwrap();
+                        let transaction =
+                            Transaction::from_variant(transaction::KeyValue { key, value })
+                                .sign(&identity)
+                                .unwrap();
                         match client.send_request(message::Execute(transaction)).await {
                             Err(err) => log::error!("Failed to send transaction: {}.", err),
                             Ok(()) => log::debug!("Transaction ok!"),

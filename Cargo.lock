@@ -983,6 +983,7 @@ dependencies = [
  "balise",
  "hex",
  "log",
+ "newtype-enum",
  "pinxit",
  "postcard",
  "prellblock-client-api",
@@ -999,6 +1000,7 @@ name = "prellblock-client-api"
 version = "0.1.0"
 dependencies = [
  "balise",
+ "newtype-enum",
  "pinxit",
  "postcard",
  "serde",

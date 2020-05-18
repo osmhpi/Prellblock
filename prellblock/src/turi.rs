@@ -59,12 +59,30 @@ impl Turi {
 
         // Verify permissions
         self.transaction_checker
-            .verify_permissions(peer_id, &transaction)?;
+            .verify_permissions(peer_id, transaction.borrow())?;
 
         match &transaction as &Transaction {
-            Transaction::KeyValue { key, value } => {
+            Transaction::KeyValue(params) => {
                 // TODO: Deserialize value.
-                log::info!("Client {} set {} to {:?}.", peer_id, key, value);
+                log::debug!(
+                    "Client {} set {} to {:?}.",
+                    peer_id,
+                    params.key,
+                    params.value,
+                );
+            }
+            Transaction::UpdateAccount(params) => {
+                log::debug!(
+                    "Client {} updates account {}:\
+                    |---- is_rpu: {:?}\
+                    |---- writing_right: {:?}\
+                    |---- reading_rights: {:?}",
+                    peer_id,
+                    params.id,
+                    params.is_rpu,
+                    params.has_writing_rights,
+                    params.reading_rights,
+                );
             }
         }
 

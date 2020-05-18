@@ -11,6 +11,7 @@ edition = "2018"
 
 [dependencies]
 balise = { path = "../balise" }
+newtype-enum = "0.1.0"
 pinxit = { path = "../pinxit" }
 postcard = "0.5.0"
 serde = { version = "1.0.105", features = ["derive"] }

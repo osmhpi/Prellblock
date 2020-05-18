@@ -37,23 +37,41 @@ impl PeerInbox {
     }
 
     /// Handle an `execute` `Signable` message.
-    pub fn handle_execute(&self, transaction: &VerifiedRef<Transaction>) -> Result<(), BoxError> {
+    pub fn handle_execute(&self, transaction: VerifiedRef<Transaction>) -> Result<(), BoxError> {
         // Verify permissions
         self.transaction_checker
             .verify_permissions(transaction.signer(), transaction)?;
 
-        match &**transaction {
-            Transaction::KeyValue { key, value } => {
+        match &*transaction {
+            Transaction::KeyValue(params) => {
                 // TODO: Deserialize value.
                 log::debug!(
                     "Client {} set {} to {:?} (via another RPU)",
                     &transaction.signer(),
-                    key,
-                    value,
+                    params.key,
+                    params.value,
                 );
 
                 // TODO: Continue with warning or error?
-                self.data_storage.write(transaction.signer(), key, value)?;
+                self.data_storage
+                    .write(transaction.signer(), &params.key, &params.value)?;
+            }
+            Transaction::UpdateAccount(params) => {
+                log::debug!(
+                    "Client {} updates account {}:\
+                    |---- is_rpu: {:?}\
+                    |---- writing_right: {:?}\
+                    |---- reading_rights: {:?}",
+                    &transaction.signer(),
+                    params.id,
+                    params.is_rpu,
+                    params.has_writing_rights,
+                    params.reading_rights,
+                );
+
+                // TODO: Write in data storage. Maybe use hardcoded key like "AccountUpdate"
+                // self.data_storage
+                //     .write(transaction.signer(), &params.key, &params)?;
             }
         }
         Ok(())
@@ -68,7 +86,7 @@ impl PeerInbox {
 
         // Batch verification makes it somewhat faster.
         let verified = verify_signed_batch_ref(&batch)?;
-        for message in &verified {
+        for message in verified {
             self.handle_execute(message)?;
         }
 

@@ -172,6 +172,12 @@ impl<T> Verified<T> {
             signature: self.0.signature,
         }))
     }
+
+    /// Immutably borrows from an owned value.
+    #[must_use]
+    pub const fn borrow(&self) -> VerifiedRef<T> {
+        VerifiedRef(&self.0)
+    }
 }
 
 impl<T> Deref for Verified<T> {
@@ -192,20 +198,38 @@ impl<T> From<Verified<T>> for Signed<T> {
         v.0
     }
 }
+
 /// A verified signed message.
 pub struct VerifiedRef<'a, T>(&'a Signed<T>);
+
+impl<'a, T> Copy for VerifiedRef<'a, T> {}
+
+impl<'a, T> Clone for VerifiedRef<'a, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
 
 impl<'a, T> VerifiedRef<'a, T> {
     /// Get the signer of the signature.
     #[must_use]
-    pub const fn signer(&self) -> &PeerId {
+    pub const fn signer(self) -> &'a PeerId {
         self.0.signer()
     }
 
     /// Get the signature of the message.
     #[must_use]
-    pub const fn signature(&self) -> &Signature {
+    pub const fn signature(self) -> &'a Signature {
         &self.0.signature
+    }
+
+    /// Creates owned data from borrowed data, by cloning.
+    #[must_use]
+    pub fn to_owned(self) -> Verified<T>
+    where
+        T: Clone,
+    {
+        Verified(self.0.clone())
     }
 }
 

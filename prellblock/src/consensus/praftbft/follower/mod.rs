@@ -146,8 +146,7 @@ impl Follower {
                 }
 
                 // Check for transaction validity.
-                self.transaction_checker
-                    .verify_signatures(&body.transactions)?;
+                self.transaction_checker.verify(&body.transactions)?;
 
                 Ok(body)
             })

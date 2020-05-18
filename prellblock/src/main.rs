@@ -91,6 +91,7 @@ async fn main() {
             Account {
                 name: rpu_config.name.clone(),
                 is_rpu: true,
+                is_admin: false,
                 expire_at: None,
                 writing_rights: false,
                 reading_rights: Vec::new(),

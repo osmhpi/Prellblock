@@ -3,8 +3,12 @@
 
 //! Library Crate used for Communication between external Clients and internal RPUs.
 
+pub mod account_permissions;
+
+use account_permissions::ReadingRight;
 use balise::define_api;
-use pinxit::{Signable, Signed};
+use newtype_enum::newtype_enum;
+use pinxit::{PeerId, Signable, Signed};
 use serde::{Deserialize, Serialize};
 
 /// Play ping pong. See [`Ping`](message/struct.Ping.html).
@@ -24,14 +28,31 @@ define_api! {
 }
 
 /// A blockchain transaction for prellblock.
+#[newtype_enum(variants = "pub transaction")]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Transaction {
     /// Set a `key` to a `value`.
     KeyValue {
         /// The key.
         key: String,
+
         /// The value.
         value: Vec<u8>,
+    },
+
+    /// Update an account.
+    UpdateAccount {
+        /// The account to set the permissions for.
+        id: PeerId,
+
+        /// Setting this to `true` enables accounts to take part in the the consensus.
+        is_rpu: Option<bool>,
+
+        /// Setting this to `true` enables an accounts to write data to its own namespace.
+        has_writing_rights: Option<bool>,
+
+        /// Permissions for reading from other accounts.
+        reading_rights: Option<Vec<ReadingRight>>,
     },
 }
 

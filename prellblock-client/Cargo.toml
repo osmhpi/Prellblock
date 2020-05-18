@@ -13,6 +13,7 @@ edition = "2018"
 balise = { path= "../balise", features = ["client", "tls"] }
 hex = "0.4.2"
 log = "0.4.8"
+newtype-enum = "0.1.0"
 pinxit = { path = "../pinxit" }
 postcard = "0.5.0"
 prellblock-client-api = { path = "../prellblock-client-api" }
