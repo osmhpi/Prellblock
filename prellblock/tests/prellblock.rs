@@ -9,6 +9,7 @@ use prellblock::{
     data_broadcaster::Broadcaster,
     data_storage::DataStorage,
     peer::{Calculator, PeerInbox, Receiver},
+    reader::Reader,
     transaction_checker::TransactionChecker,
     turi::Turi,
     world_state::WorldStateService,
@@ -38,12 +39,14 @@ async fn test_prellblock() {
         world_state.save();
     }
 
-    let consensus = Consensus::new(identity, block_storage, world_state.clone()).await;
+    let consensus = Consensus::new(identity, block_storage.clone(), world_state.clone()).await;
 
     let broadcaster = Broadcaster::new(world_state.clone());
     let broadcaster = Arc::new(broadcaster);
 
     let batcher = Batcher::new(broadcaster);
+
+    let reader = Reader::new(block_storage);
 
     let transaction_checker = TransactionChecker::new(world_state);
     let transaction_checker = Arc::new(transaction_checker);
@@ -57,7 +60,7 @@ async fn test_prellblock() {
         let test_identity = test_identity.clone();
         tokio::spawn(async move {
             let mut listener = TcpListener::bind(turi_address).await?;
-            let turi = Turi::new(test_identity, batcher, transaction_checker);
+            let turi = Turi::new(test_identity, batcher, reader, transaction_checker);
             turi.serve(&mut listener).await
         })
     };

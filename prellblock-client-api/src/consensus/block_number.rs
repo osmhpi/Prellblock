@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
+    convert::TryInto,
     fmt,
     ops::{Add, AddAssign, Sub, SubAssign},
 };
@@ -15,6 +16,13 @@ impl BlockNumber {
     #[must_use]
     pub fn to_be_bytes(self) -> impl AsRef<[u8]> {
         self.0.to_be_bytes()
+    }
+
+    /// Create a `BlockNumber` from a byte slice.
+    #[must_use]
+    pub fn from_be_bytes(bytes: impl AsRef<[u8]>) -> Option<Self> {
+        let bytes = bytes.as_ref().try_into().ok()?;
+        Some(Self(u64::from_be_bytes(bytes)))
     }
 }
 

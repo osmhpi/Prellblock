@@ -18,6 +18,7 @@ use prellblock::{
     data_broadcaster::Broadcaster,
     data_storage::DataStorage,
     peer::{Calculator, PeerInbox, Receiver},
+    reader::Reader,
     transaction_checker::TransactionChecker,
     turi::Turi,
     world_state::{Account, WorldStateService},
@@ -106,12 +107,14 @@ async fn main() {
     let world_state =
         WorldStateService::from_block_storage(&block_storage, peer_accounts, peers).unwrap();
 
-    let consensus = Consensus::new(identity, block_storage, world_state.clone()).await;
+    let consensus = Consensus::new(identity, block_storage.clone(), world_state.clone()).await;
 
     let broadcaster = Broadcaster::new(world_state.clone());
     let broadcaster = Arc::new(broadcaster);
 
     let batcher = Batcher::new(broadcaster);
+
+    let reader = Reader::new(block_storage);
 
     let transaction_checker = TransactionChecker::new(world_state);
     let transaction_checker = Arc::new(transaction_checker);
@@ -125,7 +128,7 @@ async fn main() {
         tokio::spawn(async move {
             let tls_identity = load_identity_from_env(private_config.tls_id).await?;
             let mut listener = TcpListener::bind(public_config.turi_address).await?;
-            let turi = Turi::new(tls_identity, batcher, transaction_checker);
+            let turi = Turi::new(tls_identity, batcher, reader, transaction_checker);
             turi.serve(&mut listener).await
         })
     };

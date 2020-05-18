@@ -14,7 +14,7 @@ const BLOCKS_TREE_NAME: &[u8] = b"blocks";
 /// A `BlockStorage` provides persistent storage on disk.
 ///
 /// Data is written to disk every 400ms.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BlockStorage {
     // database: Db,
     blocks: Tree,
@@ -63,6 +63,17 @@ impl BlockStorage {
         self.blocks
             .insert(block.block_number().to_be_bytes(), value)?;
         Ok(())
+    }
+
+    /// Retreive the current `BlockNumber`.
+    pub fn block_number(&self) -> Result<BlockNumber, Error> {
+        match self.blocks.iter().keys().rev().next() {
+            Some(key) => {
+                let block_number = BlockNumber::from_be_bytes(key?).unwrap();
+                Ok(block_number + 1)
+            }
+            None => Ok(BlockNumber::default()),
+        }
     }
 
     /// Read a range of blocks from the store.

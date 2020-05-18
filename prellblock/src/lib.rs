@@ -15,6 +15,7 @@ pub mod consensus;
 pub mod data_broadcaster;
 pub mod data_storage;
 pub mod peer;
+pub mod reader;
 pub mod transaction_checker;
 pub mod turi;
 pub mod world_state;
