@@ -1,5 +1,4 @@
-use chrono::prelude::*;
-use prellblock_client_api::account_permissions::ReadingRight;
+use prellblock_client_api::account_permissions::{Expiry, ReadingRight};
 use serde::{Deserialize, Serialize};
 
 /// `Account` stores data needed for permission checking.
@@ -11,15 +10,16 @@ pub struct Account {
     /// Determines whether the account is an admin. (Default `false`).
     ///
     /// Being admin enables to add / remove other accounts and modify permissions.
+    #[serde(default)]
     pub is_admin: bool,
 
     /// Whether the `Account`'s is an rpu. (Default `false`).
     #[serde(default)]
     pub is_rpu: bool,
 
-    /// The `Account`'s expiring date. (Default `None`).
+    /// The `Account`'s expiring date. (Default `Expiry::Never`).
     #[serde(default)]
-    pub expire_at: Option<DateTime<Utc>>,
+    pub expire_at: Expiry,
 
     /// The `Account`'s writing rights. (Default `false`).
     /// When set to `true`, the account is allowed to write into its own namespace.

@@ -5,9 +5,8 @@
 
 pub mod account_permissions;
 
-use account_permissions::ReadingRight;
+use account_permissions::{Expiry, ReadingRight};
 use balise::define_api;
-use chrono::prelude::*;
 use newtype_enum::newtype_enum;
 use pinxit::{PeerId, Signable, Signed};
 use serde::{Deserialize, Serialize};
@@ -53,7 +52,7 @@ pub enum Transaction {
         is_rpu: Option<bool>,
 
         /// Setting this will make an account expire at the given timestamp.
-        expire_at: Option<Option<DateTime<Utc>>>,
+        expire_at: Option<Expiry>,
 
         /// Setting this to `true` enables an accounts to write data to its own namespace.
         has_writing_rights: Option<bool>,

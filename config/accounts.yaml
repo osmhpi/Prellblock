@@ -2,7 +2,9 @@
   name: TestClientCLI
   is_admin: false
   # is_rpu: false
-  # expire_at: 2020-04-15T10:04:59.300878700Z
+  # expire_at: 
+  #  at_date: 2020-04-15T10:04:59.300878700Z # or see below
+  # expire_at: never
   writing_rights: true
   # reading_rights:
   #   - accounts:

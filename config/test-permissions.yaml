@@ -1,0 +1,18 @@
+is_admin: true
+is_rpu: false
+expire_at:
+  at_date: 2020-04-15T10:04:59.300878700Z
+writing_rights: true
+reading_rights:
+  - accounts:
+      whitelist:
+        - scope: Emily
+    namespace:
+      blacklist:
+        - scope: speed
+  - accounts:
+      whitelist:
+        - scope: Thomas
+    namespace:
+      blacklist:
+        - scope: speed

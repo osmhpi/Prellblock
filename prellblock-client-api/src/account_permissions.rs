@@ -1,6 +1,49 @@
 //! Defines permissions for accounts.
 
+use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
+
+/// An accounts permission can either be `never` expiring or expiring at a certain date (`AtDate`).
+///
+/// # Example
+/// ```
+/// use chrono::{Duration, Utc};
+/// use prellblock_client_api::account_permissions::Expiry;
+///
+/// let never_expired = Expiry::Never;
+/// assert_eq!(never_expired.is_expired(), false);
+///
+/// let not_expired = Expiry::AtDate(Utc::now() + Duration::days(1));
+/// assert_eq!(not_expired.is_expired(), false);
+///
+/// let already_expired = Expiry::AtDate(Utc::now() - Duration::days(1));
+/// assert_eq!(already_expired.is_expired(), true);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Expiry {
+    /// The permission never expires.
+    Never,
+    /// The permission expires at the given date.
+    AtDate(DateTime<Utc>),
+}
+
+impl Expiry {
+    /// Check whether the expiry date has passed (if set).
+    #[must_use]
+    pub fn is_expired(&self) -> bool {
+        match self {
+            Self::Never => false,
+            Self::AtDate(expiry) => Utc::now() > *expiry,
+        }
+    }
+}
+
+impl Default for Expiry {
+    fn default() -> Self {
+        Self::Never
+    }
+}
 
 /// The right to read from specific accounts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -3,11 +3,13 @@
 
 //! An example client used to simulate clients.
 
-use chrono::prelude::*;
 use newtype_enum::Enum;
 use pinxit::{Identity, Signable};
 use prellblock_client::Client;
-use prellblock_client_api::{account_permissions::ReadingRight, message, transaction, Transaction};
+use prellblock_client_api::{
+    account_permissions::{Expiry, ReadingRight},
+    message, transaction, Transaction,
+};
 use rand::{
     rngs::{OsRng, StdRng},
     seq::SliceRandom,
@@ -77,8 +79,8 @@ struct Permissions {
     is_admin: Option<bool>,
     /// Whether the account shall be a RPU.
     is_rpu: Option<bool>,
-    /// Expiry of the account.
-    expire_at: Option<Option<DateTime<Utc>>>,
+    /// Expiry of the permission.
+    expire_at: Option<Expiry>,
     /// Whether the account shall have permissions to write into its namespace.
     has_writing_rights: Option<bool>,
     /// Permissions for reading the namespaces of other accounts.
