@@ -6,6 +6,7 @@ use crate::{
 };
 use err_derive::Error;
 use pinxit::PeerId;
+use prellblock_client_api::Transaction;
 
 /// An error of the `praftbft` consensus.
 #[derive(Debug, Error)]
@@ -69,6 +70,20 @@ pub enum Error {
     /// The Leader tried to propose an empty block.
     #[error(display = "The proposed Block is empty.")]
     EmptyBlock,
+
+    /// The leader identified a valid transaction as invalid.
+    #[error(
+        display = "The leader identified a valid transaction as invalid: {:?}",
+        0
+    )]
+    CensorshipDetected(Box<Transaction>),
+
+    /// The leader proposed a bad index for an invalid transaction.
+    #[error(
+        display = "The leader proposed a bad index for an invalid transaction: {}",
+        0
+    )]
+    BadInvalidTransactionIndex(usize),
 
     /// The ack message does not match the request.
     #[error(display = "The ack message does not match the request.")]

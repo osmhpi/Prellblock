@@ -3,6 +3,22 @@
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 
+/// Permission fields for a account.
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Permissions {
+    /// Whether the account shall be an admin.
+    pub is_admin: Option<bool>,
+    /// Whether the account shall be a RPU.
+    pub is_rpu: Option<bool>,
+    /// Expiry of the account.
+    pub expire_at: Option<Expiry>,
+    /// Whether the account shall have permissions to write into its namespace.
+    pub has_writing_rights: Option<bool>,
+    /// Permissions for reading the namespaces of other accounts.
+    pub reading_rights: Option<Vec<ReadingRight>>,
+}
+
 /// An accounts permission can either be `never` expiring or expiring at a certain date (`AtDate`).
 ///
 /// # Example

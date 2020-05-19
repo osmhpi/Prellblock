@@ -1,4 +1,4 @@
-use super::{message, Core, Error, NotifyMap};
+use super::{message, Core, Error, InvalidTransaction, NotifyMap};
 use crate::consensus::{Block, BlockHash, BlockNumber, Body, LeaderTerm, SignatureList};
 use pinxit::{PeerId, Signed};
 use prellblock_client_api::Transaction;
@@ -22,7 +22,7 @@ pub struct State {
     /// The hash of the current block. (Set in prepare phase)
     pub block_hash: Option<BlockHash>,
     /// The body of the current block. (Set in append phase)
-    pub block_body: Option<Body>,
+    pub block_content: Option<(Body, Vec<InvalidTransaction>)>,
     /// Wheter an rollback is currently allowed (only once after a leader change)
     pub rollback_possible: bool,
 
@@ -55,7 +55,7 @@ impl State {
             block_number: world_state.block_number,
             last_block_hash: world_state.last_block_hash,
             block_hash: None,
-            block_body: None,
+            block_content: None,
             rollback_possible: world_state.block_number > BlockNumber::default(),
             buffered_commit_message: None,
         }
@@ -63,7 +63,7 @@ impl State {
 
     /// Get the current phase.
     pub fn phase(&self) -> Phase {
-        match (&self.block_hash, &self.block_body) {
+        match (&self.block_hash, &self.block_content) {
             (None, None) => Phase::Waiting,
             (Some(_), None) => Phase::Prepare,
             (Some(_), Some(_)) => Phase::Append,
@@ -93,7 +93,7 @@ impl State {
     /// Create a body signed by `ackappend_signatures`.
     fn block_with(&self, ackappend_signatures: SignatureList) -> Block {
         Block {
-            body: self.block_body.clone().unwrap(),
+            body: self.block_content.as_ref().unwrap().0.clone(),
             signatures: ackappend_signatures,
         }
     }
@@ -109,21 +109,38 @@ impl State {
     /// Move to the append phase.
     ///
     /// Panics if not in prepare phase.
-    pub fn append(&mut self, body: Body) {
+    pub fn append(&mut self, body: Body, invalid_transactions: Vec<InvalidTransaction>) {
         assert_eq!(self.phase(), Phase::Prepare);
-        self.block_body = Some(body)
+        self.block_content = Some((body, invalid_transactions))
     }
 
     /// Commit a block using a list of ackappend `signatures`.
     ///
     /// Panics if not in append phase.
     pub async fn commit(&mut self, ackappend_signatures: SignatureList) {
+        // Unwrap of `block_hash` and `block_content` should be safe
+        // because we assert being in the Append phase.
         assert_eq!(self.phase(), Phase::Append);
         assert!(self.buffered_commit_message.is_none());
 
         let block = self.block_with(ackappend_signatures);
         let block_hash = self.block_hash.take().unwrap();
 
+        // We are sure that these transactions are really invalid and therefore
+        // they can be removed from the queue without losing good transactions.
+        let (_, invalid_transactions) = self.block_content.as_ref().unwrap();
+        if !invalid_transactions.is_empty() {
+            log::warn!(
+                "Removing invalid transactions from queue: {:#?}",
+                invalid_transactions
+            );
+            self.queue
+                .lock()
+                .await
+                .remove_all(invalid_transactions.iter().map(|(_, tx)| tx));
+        }
+
+        // Must be called at last because it resets the state.
         self.apply_block(block_hash, block).await;
     }
 
@@ -150,7 +167,7 @@ impl State {
         // Setup next round
         self.block_number += 1;
         self.last_block_hash = block_hash;
-        self.block_body = None;
+        self.block_content = None;
         // No rollback possible after one commit.
         self.rollback_possible = false;
 
@@ -166,7 +183,7 @@ impl State {
         self.new_view_signatures = new_view_signatures;
 
         self.block_hash = None;
-        self.block_body = None;
+        self.block_content = None;
         self.rollback_possible = true;
 
         self.buffered_commit_message = None;
@@ -191,6 +208,11 @@ impl State {
         // The transactions may not be lost.
         self.queue.lock().await.extend(last_block.body.transactions);
 
+        // We ignore all invalid transactions during rolllback. They will be lost.
+        // (They would be lost anyway after a restart.)
+        // If there are two peers left having these transactions in their queue, they
+        // should be able to be elected as leader and propose the "lost" transactions.
+
         // Rollback WorldState by one block.
         self.world_state.rollback().unwrap();
         let world_state = self.world_state.get();
@@ -200,7 +222,7 @@ impl State {
         // Reset State
         self.last_block_hash = world_state.last_block_hash;
         self.block_hash = None;
-        self.block_body = None;
+        self.block_content = None;
         // better save than sorry
         self.rollback_possible = false;
 

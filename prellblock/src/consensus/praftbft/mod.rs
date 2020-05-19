@@ -29,6 +29,8 @@ use view_change::ViewChange;
 
 const MAX_TRANSACTIONS_PER_BLOCK: usize = 4000;
 
+type InvalidTransaction = (usize, Signed<Transaction>);
+
 /// See the [paper](https://www.scs.stanford.edu/17au-cs244b/labs/projects/clow_jiang.pdf).
 #[derive(Debug)]
 #[must_use]

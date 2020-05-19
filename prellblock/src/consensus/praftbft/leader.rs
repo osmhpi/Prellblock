@@ -1,9 +1,9 @@
 use super::{
     message::{consensus_message as message, Metadata},
-    Core, Error, Follower, ViewChange, MAX_TRANSACTIONS_PER_BLOCK,
+    Core, Error, Follower, InvalidTransaction, ViewChange, MAX_TRANSACTIONS_PER_BLOCK,
 };
 use crate::consensus::{BlockHash, BlockNumber, Body, LeaderTerm, SignatureList};
-use pinxit::Signed;
+use pinxit::{verify_signed_batch, Signed};
 use prellblock_client_api::Transaction;
 use std::{ops::Deref, sync::Arc, time::Duration};
 use tokio::time;
@@ -157,8 +157,6 @@ impl Leader {
 
         // TODO: Check size of transactions cumulated.
         while let Some(transaction) = self.queue.lock().await.next() {
-            // TODO: Validate transaction.
-
             transactions.push(transaction);
 
             if transactions.len() >= MAX_TRANSACTIONS_PER_BLOCK {
@@ -166,11 +164,13 @@ impl Leader {
             }
         }
 
+        let (valid_transactions, invalid_transactions) = self.stateful_validate(transactions)?;
+
         let body = Body {
             leader_term: self.leader_term,
             height: self.block_number,
             prev_block_hash: self.last_block_hash,
-            transactions,
+            transactions: valid_transactions,
         };
 
         let block_hash = body.hash();
@@ -183,7 +183,12 @@ impl Leader {
         );
 
         let ackappend_signatures = self
-            .append(block_hash, body.transactions, ackprepare_signatures)
+            .append(
+                block_hash,
+                body.transactions,
+                invalid_transactions,
+                ackprepare_signatures,
+            )
             .await?;
         log::trace!(
             "Append Phase #{} ended. Got ACKAPPEND signatures: {:?}",
@@ -215,7 +220,8 @@ impl Leader {
     async fn append(
         &mut self,
         block_hash: BlockHash,
-        transactions: Vec<Signed<Transaction>>,
+        valid_transactions: Vec<Signed<Transaction>>,
+        invalid_transactions: Vec<(usize, Signed<Transaction>)>,
         ackprepare_signatures: SignatureList,
     ) -> Result<SignatureList, Error> {
         self.phase = Phase::Append;
@@ -223,7 +229,8 @@ impl Leader {
         let metadata = self.metadata_with(block_hash);
         let message = message::Append {
             metadata: metadata.clone(),
-            data: transactions,
+            valid_transactions,
+            invalid_transactions,
             ackprepare_signatures,
         };
 
@@ -258,5 +265,28 @@ impl Leader {
             block_number: self.block_number,
             block_hash,
         }
+    }
+
+    fn stateful_validate(
+        &self,
+        transactions: Vec<Signed<Transaction>>,
+    ) -> Result<(Vec<Signed<Transaction>>, Vec<InvalidTransaction>), Error> {
+        let verified_transactions = verify_signed_batch(transactions)?;
+
+        let mut check = self.transaction_checker.check();
+        let mut valid_transactions = Vec::new();
+        let mut invalid_transactions = Vec::new();
+        for (index, transaction) in verified_transactions.enumerate() {
+            if check
+                .verify_permissions_and_apply(transaction.borrow())
+                .is_ok()
+            {
+                valid_transactions.push(transaction.into());
+            } else {
+                invalid_transactions.push((index, transaction.into()));
+            }
+        }
+
+        Ok((valid_transactions, invalid_transactions))
     }
 }

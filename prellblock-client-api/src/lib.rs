@@ -5,7 +5,7 @@
 
 pub mod account_permissions;
 
-use account_permissions::{Expiry, ReadingRight};
+use account_permissions::Permissions;
 use balise::define_api;
 use newtype_enum::newtype_enum;
 use pinxit::{PeerId, Signable, Signed};
@@ -44,21 +44,8 @@ pub enum Transaction {
     UpdateAccount {
         /// The account to set the permissions for.
         id: PeerId,
-
-        /// Setting this to `true` enables accounts to take part in the the consensus.
-        is_admin: Option<bool>,
-
-        /// Setting this to `true` enables accounts to take part in the the consensus.
-        is_rpu: Option<bool>,
-
-        /// Setting this will make an account expire at the given timestamp.
-        expire_at: Option<Expiry>,
-
-        /// Setting this to `true` enables an accounts to write data to its own namespace.
-        has_writing_rights: Option<bool>,
-
-        /// Permissions for reading from other accounts.
-        reading_rights: Option<Vec<ReadingRight>>,
+        /// The permission fields to update.
+        permissions: Permissions,
     },
 }
 

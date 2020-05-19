@@ -1,11 +1,12 @@
 mod state;
+mod stateful_validation;
 mod synchronizer;
 
 pub use state::Phase;
 
 use super::{
     message::{consensus_message as message, consensus_response as response},
-    Core, Error, NotifyMap, ViewChange,
+    Core, Error, InvalidTransaction, NotifyMap, ViewChange,
 };
 use crate::consensus::{BlockNumber, LeaderTerm};
 use pinxit::PeerId;
@@ -114,12 +115,12 @@ impl Follower {
         message.block_number.verify(state.block_number)?;
 
         let metadata = message.metadata.clone();
-        let body = self
+        let (body, invalid_transactions) = self
             .view_change
             .request_view_change_on_error(async {
                 // Validate the Block Hash.
                 let block_hash = message.block_hash;
-                let body = state.body_with(message.data);
+                let body = state.body_with(message.valid_transactions);
                 if body.hash() != block_hash {
                     return Err(Error::BlockNotMatchingHash);
                 }
@@ -146,14 +147,14 @@ impl Follower {
                 }
 
                 // Check for transaction validity.
-                self.transaction_checker.verify(&body.transactions)?;
+                self.stateful_validate(&body.transactions, &message.invalid_transactions)?;
 
-                Ok(body)
+                Ok((body, message.invalid_transactions))
             })
             .await?;
 
         // All checks passed, update our state.
-        state.append(body);
+        state.append(body, invalid_transactions);
 
         // There could be a commit message for this block number that arrived first.
         // We then need to apply the commit (or at least check).

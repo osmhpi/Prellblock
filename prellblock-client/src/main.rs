@@ -6,10 +6,7 @@
 use newtype_enum::Enum;
 use pinxit::{Identity, Signable};
 use prellblock_client::Client;
-use prellblock_client_api::{
-    account_permissions::{Expiry, ReadingRight},
-    message, transaction, Transaction,
-};
+use prellblock_client_api::{account_permissions::Permissions, message, transaction, Transaction};
 use rand::{
     rngs::{OsRng, StdRng},
     seq::SliceRandom,
@@ -71,20 +68,6 @@ struct RpuConfig {
     peer_id: String,
     peer_address: SocketAddr,
     turi_address: SocketAddr,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct Permissions {
-    /// Whether the account shall be an admin.
-    is_admin: Option<bool>,
-    /// Whether the account shall be a RPU.
-    is_rpu: Option<bool>,
-    /// Expiry of the account.
-    expire_at: Option<Expiry>,
-    /// Whether the account shall have permissions to write into its namespace.
-    has_writing_rights: Option<bool>,
-    /// Permissions for reading the namespaces of other accounts.
-    reading_rights: Option<Vec<ReadingRight>>,
 }
 
 #[tokio::main]
@@ -215,16 +198,10 @@ async fn main() {
 
             let permissions: Permissions = serde_yaml::from_str(&permission_file_content)
                 .expect("Invalid permission file content");
-            let transaction = Transaction::from_variant(transaction::UpdateAccount {
-                id,
-                is_admin: permissions.is_admin,
-                is_rpu: permissions.is_rpu,
-                expire_at: permissions.expire_at,
-                has_writing_rights: permissions.has_writing_rights,
-                reading_rights: permissions.reading_rights,
-            })
-            .sign(&identity)
-            .unwrap();
+            let transaction =
+                Transaction::from_variant(transaction::UpdateAccount { id, permissions })
+                    .sign(&identity)
+                    .unwrap();
 
             match client.send_request(message::Execute(transaction)).await {
                 Err(err) => log::error!("Failed to send transaction: {}", err),

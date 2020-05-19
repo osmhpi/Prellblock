@@ -5,7 +5,7 @@ use crate::{
     transaction_checker::TransactionChecker,
     BoxError,
 };
-use pinxit::{verify_signed_batch_ref, Signed, VerifiedRef};
+use pinxit::{verify_signed_batch_iter, Signed, VerifiedRef};
 use prellblock_client_api::Transaction;
 use std::sync::{Arc, Mutex};
 
@@ -39,8 +39,7 @@ impl PeerInbox {
     /// Handle an `execute` `Signable` message.
     pub fn handle_execute(&self, transaction: VerifiedRef<Transaction>) -> Result<(), BoxError> {
         // Verify permissions
-        self.transaction_checker
-            .verify_permissions(transaction.signer(), transaction)?;
+        self.transaction_checker.verify_permissions(transaction)?;
 
         match &*transaction {
             Transaction::KeyValue(params) => {
@@ -61,15 +60,10 @@ impl PeerInbox {
             }
             Transaction::UpdateAccount(params) => {
                 log::debug!(
-                    "Client {} updates account {}:\
-                    |---- is_rpu: {:?}\
-                    |---- writing_right: {:?}\
-                    |---- reading_rights: {:?}",
+                    "Client {} updates account {}: {:#?}",
                     &transaction.signer(),
                     params.id,
-                    params.is_rpu,
-                    params.has_writing_rights,
-                    params.reading_rights,
+                    params.permissions,
                 );
 
                 self.data_storage
@@ -87,7 +81,7 @@ impl PeerInbox {
         let message::ExecuteBatch(batch) = params;
 
         // Batch verification makes it somewhat faster.
-        let verified = verify_signed_batch_ref(&batch)?;
+        let verified = verify_signed_batch_iter(batch.iter())?;
         for message in verified {
             self.handle_execute(message)?;
         }

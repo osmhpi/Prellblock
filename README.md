@@ -124,7 +124,7 @@ is_rpu: false
 expire_at:
   at_date: 2020-04-15T10:04:59.300878700Z # any date according to RFC3339
 # expire_at: never # this can be used for accounts to never expire
-writing_rights: true
+has_writing_rights: true
 reading_rights:
   - accounts:
       whitelist:

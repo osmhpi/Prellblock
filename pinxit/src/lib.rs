@@ -44,5 +44,7 @@ mod signature;
 pub use error::Error;
 pub use identity::Identity;
 pub use peer_id::PeerId;
-pub use signable::{verify_signed_batch_ref, Signable, Signed, Verified, VerifiedRef};
+pub use signable::{
+    verify_signed_batch, verify_signed_batch_iter, Signable, Signed, Verified, VerifiedRef,
+};
 pub use signature::Signature;

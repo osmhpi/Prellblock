@@ -53,15 +53,16 @@ impl Turi {
 
     async fn handle_execute(&self, params: message::Execute) -> Result<(), BoxError> {
         let message::Execute(transaction) = params;
+
         // Check validity of transaction signature.
         let transaction = transaction.verify()?;
-        let peer_id = transaction.signer();
 
         // Verify permissions
         self.transaction_checker
-            .verify_permissions(peer_id, transaction.borrow())?;
+            .verify_permissions(transaction.borrow())?;
 
-        match &transaction as &Transaction {
+        let peer_id = transaction.signer();
+        match &*transaction {
             Transaction::KeyValue(params) => {
                 // TODO: Deserialize value.
                 log::debug!(
@@ -73,15 +74,10 @@ impl Turi {
             }
             Transaction::UpdateAccount(params) => {
                 log::debug!(
-                    "Client {} updates account {}:\
-                    |---- is_rpu: {:?}\
-                    |---- writing_right: {:?}\
-                    |---- reading_rights: {:?}",
-                    peer_id,
+                    "Client {} updates account {}: {:#?}",
+                    &transaction.signer(),
                     params.id,
-                    params.is_rpu,
-                    params.has_writing_rights,
-                    params.reading_rights,
+                    params.permissions,
                 );
             }
         }
