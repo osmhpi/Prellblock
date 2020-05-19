@@ -64,4 +64,10 @@ impl PeerId {
         let data = message.signable_data().map_err(Error::signable_error)?;
         Ok(self.0.verify(data.as_ref(), &signature.0)?)
     }
+
+    /// Get a reference to a binary representation.
+    #[must_use]
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
 }

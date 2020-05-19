@@ -5,19 +5,22 @@ mod error;
 pub use error::Error;
 
 use crate::consensus::{Block, BlockHash, BlockNumber};
-
-use sled::{Config, Tree};
+use pinxit::PeerId;
+use prellblock_client_api::Transaction;
+use sled::{Config, Db, Tree};
 use std::ops::{Bound, RangeBounds};
-// use sled::Db;
+
 const BLOCKS_TREE_NAME: &[u8] = b"blocks";
+const ACCOUNTS_TREE_NAME: &[u8] = b"accounts";
 
 /// A `BlockStorage` provides persistent storage on disk.
 ///
 /// Data is written to disk every 400ms.
 #[derive(Debug, Clone)]
 pub struct BlockStorage {
-    // database: Db,
+    database: Db,
     blocks: Tree,
+    accounts: Tree,
 }
 
 impl BlockStorage {
@@ -33,10 +36,12 @@ impl BlockStorage {
 
         let database = config.open()?;
         let blocks = database.open_tree(BLOCKS_TREE_NAME)?;
+        let accounts = database.open_tree(ACCOUNTS_TREE_NAME)?;
 
         Ok(Self {
-            // database,
+            database,
             blocks,
+            accounts,
         })
     }
 
@@ -62,6 +67,34 @@ impl BlockStorage {
         let value = postcard::to_stdvec(&block)?;
         self.blocks
             .insert(block.block_number().to_be_bytes(), value)?;
+
+        for transaction in &block.body.transactions {
+            match transaction.unverified_ref() {
+                Transaction::KeyValue { key, value } => {
+                    self.write_value(transaction.signer(), key, value)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn write_value(&self, peer_id: &PeerId, key: &str, value: &[u8]) -> Result<(), Error> {
+        // Add the peer to the account db.
+        self.accounts.insert(peer_id.as_bytes(), &[])?;
+
+        // Add the value name the time_series tree.
+        self.database
+            .open_tree(peer_id.as_bytes())?
+            .insert(key, &[])?;
+
+        // Insert value with timestamp into the time_series tree.
+        let time_series_name = [peer_id.as_bytes(), key.as_bytes()].join(&0);
+        let time = timestamp_millis().to_be_bytes();
+        self.database
+            .open_tree(time_series_name)?
+            .insert(time, value)?;
+
         Ok(())
     }
 
@@ -99,7 +132,19 @@ impl BlockStorage {
     /// Remove the last block (at the end of the chain) and return it.
     pub fn pop_block(&self) -> Result<Option<Block>, Error> {
         if let Some((_, value)) = self.blocks.pop_max()? {
-            let block = postcard::from_bytes(&value)?;
+            let block: Block = postcard::from_bytes(&value)?;
+
+            // update value tree
+            for transaction in &block.body.transactions {
+                match transaction.unverified_ref() {
+                    Transaction::KeyValue { key, value: _ } => {
+                        let peer_id = transaction.signer();
+                        let time_series_name = [peer_id.as_bytes(), key.as_bytes()].join(&0);
+                        self.database.open_tree(time_series_name)?.pop_max()?;
+                    }
+                }
+            }
+
             Ok(Some(block))
         } else {
             Ok(None)
@@ -116,5 +161,14 @@ fn map_bound<T, U>(bound: Bound<T>, f: impl FnOnce(T) -> U) -> Bound<U> {
         Bound::Included(v) => Bound::Included(f(v)),
         Bound::Excluded(v) => Bound::Excluded(f(v)),
         Bound::Unbounded => Bound::Unbounded,
+    }
+}
+
+// FIXME: This is a copy from data_storage. Also the timestamp should come from the leader?
+#[allow(clippy::cast_possible_truncation)]
+fn timestamp_millis() -> i64 {
+    match std::time::SystemTime::UNIX_EPOCH.elapsed() {
+        Ok(duration) => duration.as_millis() as i64,
+        Err(err) => -(err.duration().as_millis() as i64),
     }
 }
