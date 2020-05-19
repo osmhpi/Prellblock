@@ -3,18 +3,21 @@
 use chrono::{DateTime, Utc};
 use hexutil::ToHex;
 use pinxit::PeerId;
+use prellblock_client_api::transaction::UpdateAccount;
 use sled::{Config, Db, IVec, Tree};
 
 use crate::BoxError;
 
-const ROOT_TREE_NAME: &[u8] = b"root";
+const KEY_VALUE_ROOT_TREE_NAME: &[u8] = b"root";
+const ACCOUNTS_TREE_NAME: &[u8] = b"accounts";
 
 /// A `DataStorage` provides persistent storage on disk.
 ///
 /// Data is written to disk every 400ms.
 pub struct DataStorage {
     database: Db,
-    root: Tree,
+    key_value_root: Tree,
+    accounts: Tree,
 }
 
 impl DataStorage {
@@ -29,20 +32,25 @@ impl DataStorage {
             .compression_factor(20);
 
         let database = config.open()?;
-        let root = database.open_tree(ROOT_TREE_NAME)?;
+        let key_value_root = database.open_tree(KEY_VALUE_ROOT_TREE_NAME)?;
+        let accounts = database.open_tree(ACCOUNTS_TREE_NAME)?;
 
-        Ok(Self { database, root })
+        Ok(Self {
+            database,
+            key_value_root,
+            accounts,
+        })
     }
 
-    /// Write a value to the store.
+    /// Write a value to the data storage.
     ///
-    /// The data will be associated with the peer via its id.
-    pub fn write<K>(&self, peer: &PeerId, key: K, value: &[u8]) -> Result<(), BoxError>
+    /// The data will be associated with the peer via its `PeerId`.
+    pub fn write_key_value<K>(&self, peer: &PeerId, key: K, value: &[u8]) -> Result<(), BoxError>
     where
         K: AsRef<[u8]>,
     {
         // find id for peer tree
-        let peer_tree = self.tree_for_name(&self.root, peer.to_hex())?;
+        let peer_tree = self.tree_for_name(&self.key_value_root, peer.to_hex())?;
 
         // find id for key tree
         let key_tree = self.tree_for_name(&peer_tree, key)?;
@@ -52,14 +60,6 @@ impl DataStorage {
         let time = now.timestamp_millis().to_be_bytes();
         let value = postcard::to_stdvec(&value)?;
         key_tree.insert(&time, value)?;
-
-        // Demo that it's working.
-        // log::debug!("Data storage now has {} entries.", key_tree.len());
-        // for value in key_tree.iter() {
-        //     if let Ok((key, value)) = value {
-        //         log::trace!("Found {:x?} => {:x?}", key, value);
-        //     }
-        // }
 
         Ok(())
     }
@@ -86,5 +86,25 @@ impl DataStorage {
             new_tree_id
         };
         Ok(self.database.open_tree(&tree_id)?)
+    }
+
+    /// Write an `UpdateAccount` transaction to the data storage.
+    ///
+    /// The data will be associated with the sender peer via its `PeerId`.
+    pub fn write_account_update(
+        &self,
+        peer: &PeerId,
+        transaction: &UpdateAccount,
+    ) -> Result<(), BoxError> {
+        // find tree for sender account
+        let peer_tree = self.tree_for_name(&self.accounts, peer.to_hex())?;
+
+        // insert update transaction with timestamp
+        let now: DateTime<Utc> = Utc::now();
+        let time = now.timestamp_millis().to_be_bytes();
+        let transaction = postcard::to_stdvec(transaction)?;
+        peer_tree.insert(time, transaction)?;
+
+        Ok(())
     }
 }

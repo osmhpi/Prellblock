@@ -79,7 +79,7 @@ struct Permissions {
     is_admin: Option<bool>,
     /// Whether the account shall be a RPU.
     is_rpu: Option<bool>,
-    /// Expiry of the permission.
+    /// Expiry of the account.
     expire_at: Option<Expiry>,
     /// Whether the account shall have permissions to write into its namespace.
     has_writing_rights: Option<bool>,

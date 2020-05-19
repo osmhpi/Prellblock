@@ -53,8 +53,11 @@ impl PeerInbox {
                 );
 
                 // TODO: Continue with warning or error?
-                self.data_storage
-                    .write(transaction.signer(), &params.key, &params.value)?;
+                self.data_storage.write_key_value(
+                    transaction.signer(),
+                    &params.key,
+                    &params.value,
+                )?;
             }
             Transaction::UpdateAccount(params) => {
                 log::debug!(
@@ -69,9 +72,8 @@ impl PeerInbox {
                     params.reading_rights,
                 );
 
-                // TODO: Write in data storage. Maybe use hardcoded key like "AccountUpdate"
-                // self.data_storage
-                //     .write(transaction.signer(), &params.key, &params)?;
+                self.data_storage
+                    .write_account_update(transaction.signer(), params)?;
             }
         }
         Ok(())
