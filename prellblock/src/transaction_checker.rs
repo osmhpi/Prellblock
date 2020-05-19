@@ -31,6 +31,13 @@ pub enum PermissionError {
         0
     )]
     PermissionChangeDenied(PeerId),
+
+    /// The account's expiry date has passed.
+    #[error(
+        display = "The account {} has expired. All transaction from this account will be denied.",
+        0
+    )]
+    AccountExpired(PeerId),
 }
 
 /// A `TransactionChecker` is used to check whether accounts are allowed to carry out transactions.
@@ -89,20 +96,21 @@ fn verify_permissions_and_apply(
     transaction: VerifiedRef<Transaction>,
     world_state: &mut WorldState,
 ) -> Result<(), PermissionError> {
-    match &*transaction {
-        Transaction::KeyValue { .. } => {
-            if let Some(account) = world_state.accounts.get(peer_id) {
+    if let Some(account) = world_state.accounts.get(peer_id) {
+        // If a account is expired, *all* transactions will be denied.
+        if account.expire_at.is_expired() {
+            return Err(PermissionError::AccountExpired(peer_id.clone()));
+        }
+
+        match &*transaction {
+            Transaction::KeyValue { .. } => {
                 if account.writing_rights {
                     Ok(())
                 } else {
                     Err(PermissionError::WriteDenied(peer_id.clone()))
                 }
-            } else {
-                Err(PermissionError::AccountNotFound(peer_id.clone()))
             }
-        }
-        Transaction::UpdateAccount(params) => {
-            if let Some(account) = world_state.accounts.get(peer_id) {
+            Transaction::UpdateAccount(params) => {
                 if account.is_admin {
                     if world_state.accounts.get(&params.id).is_none() {
                         return Err(PermissionError::AccountNotFound(params.id.clone()));
@@ -112,9 +120,9 @@ fn verify_permissions_and_apply(
                 } else {
                     Err(PermissionError::PermissionChangeDenied(peer_id.clone()))
                 }
-            } else {
-                Err(PermissionError::AccountNotFound(peer_id.clone()))
             }
         }
+    } else {
+        Err(PermissionError::AccountNotFound(peer_id.clone()))
     }
 }
