@@ -2,6 +2,8 @@
 
 Bahndaten verlässlich und schnell in die Blockchain gepuffert - **Persistente Redundante Einheit für Langzeit-Logging über Blockchain**
 
+[[_TOC_]]
+
 ## Overview
 
 `PrellBlock` is a lightweight logging blockchain, written in `Rust`, which is designed for datastorage purposes in a railway environment.
@@ -88,6 +90,55 @@ tls_id = "./certificates/emily/emily.pfx"
 
 The `identity` here is the private key as generated in [RPU Identitiy](#RPU-Identitiy).
 The `tls_id` is the `pfx`-file containing the private key and certificate signed by the CA.
+
+### Using `prellblock-client`
+
+The `prellblock-client` binary provides a CLI with predefined Commands for each of the transaction types. Otherwise, you can use the provided library as dependency to build your own clients.
+
+Currently implemented actions are:
+
+- setting a key to a specific Value (using `set <key> <value>` subcommand)
+- updating account permissions  (using `update <AccountId> <PermissionFilePath>` subcommand)
+- benchmarking (using `bench <rpu_name> <key> <number of transactions>` subcommand)
+
+#### Key-Value Transactions
+
+The keys for this type of transaction needs to be of type `string`, whereas values may be of any type. 
+
+#### Updating Account permissions:
+
+For updating the permissions of a account, the sender account **must be an administrator**
+The specified AccountID needs to be a hex-value `PeerId`.
+
+```sh
+prellblock-client <target account id as hex> <path to permission file>
+```
+
+The permission file is a `yaml`-file containing all necessary permission inforamtions to be applied onto the target account.
+Reading rights can be specified as white- or blacklist. They refer to one or more accounts. Futhermore you can define white- or blacklists for specific keys that either can or must not be read.
+For its structure, see the example below (all fields can be ommitted resulting in that field being left unchanged):
+
+```yaml
+is_admin: true
+is_rpu: false
+expire_at:
+  at_date: 2020-04-15T10:04:59.300878700Z # any date according to RFC3339
+# expire_at: never # this can be used for accounts to never expire
+writing_rights: true
+reading_rights:
+  - accounts:
+      whitelist:
+        - scope: Emily
+    namespace:
+      blacklist:
+        - scope: speed
+  - accounts:
+      whitelist:
+        - scope: Thomas
+    namespace:
+      blacklist:
+        - scope: temperature
+```
 
 ### Logging
 
