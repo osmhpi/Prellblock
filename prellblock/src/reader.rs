@@ -50,12 +50,10 @@ impl Reader {
         params: message::GetBlock,
     ) -> Response<message::GetBlock> {
         let message::GetBlock(filter) = params;
-        let response = Vec::new();
 
-        // TODO: implement :D
-        let _ = filter;
+        let blocks: Result<_, _> = self.block_storage.read(filter).collect();
 
-        Ok(response)
+        Ok(blocks?)
     }
 
     pub(crate) async fn handle_get_current_block_number(

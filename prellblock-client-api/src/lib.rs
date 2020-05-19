@@ -13,6 +13,7 @@ use pinxit::{PeerId, Signable, Signature, Signed};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    ops::{Bound, RangeBounds},
     time::{Duration, SystemTime},
 };
 
@@ -29,6 +30,25 @@ pub enum Filter<T> {
     Range(std::ops::Range<T>),
     /// Select an unbound range of values, starting from a given value.
     RangeFrom(T),
+}
+
+#[allow(clippy::match_same_arms)]
+impl<T> RangeBounds<T> for Filter<T> {
+    fn start_bound(&self) -> Bound<&T> {
+        match self {
+            Self::Exact(value) => Bound::Included(value),
+            Self::Range(range) => range.start_bound(),
+            Self::RangeFrom(value) => Bound::Included(value),
+        }
+    }
+
+    fn end_bound(&self) -> Bound<&T> {
+        match self {
+            Self::Exact(value) => Bound::Included(value),
+            Self::Range(range) => range.end_bound(),
+            Self::RangeFrom(_) => Bound::Unbounded,
+        }
+    }
 }
 
 /// A span or selection of a given point in time / number of values.
