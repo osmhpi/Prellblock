@@ -1,6 +1,6 @@
 //! A server for communicating between RPUs.
 
-use crate::{block_storage::BlockStorage, BoxError};
+use crate::{block_storage::BlockStorage, world_state::WorldStateService, BoxError};
 use prellblock_client_api::{message, ClientMessage};
 use std::collections::HashMap;
 
@@ -10,13 +10,17 @@ type Response<R> = Result<<R as balise::Request<ClientMessage>>::Response, BoxEr
 #[derive(Clone)]
 pub struct Reader {
     block_storage: BlockStorage,
+    world_state: WorldStateService,
 }
 
 impl Reader {
     /// Create a new reader instance.
     #[must_use]
-    pub const fn new(block_storage: BlockStorage) -> Self {
-        Self { block_storage }
+    pub const fn new(block_storage: BlockStorage, world_state: WorldStateService) -> Self {
+        Self {
+            block_storage,
+            world_state,
+        }
     }
 
     pub(crate) async fn handle_get_value(
@@ -37,10 +41,12 @@ impl Reader {
         params: message::GetAccount,
     ) -> Response<message::GetAccount> {
         let message::GetAccount(peer_ids) = params;
-        let response = Vec::new();
 
-        // TODO: implement :D
-        let _ = peer_ids;
+        let world_state = self.world_state.get();
+        let response = peer_ids
+            .iter()
+            .filter_map(|peer_id| world_state.accounts.get(peer_id).cloned())
+            .collect();
 
         Ok(response)
     }

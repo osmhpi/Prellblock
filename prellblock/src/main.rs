@@ -114,7 +114,7 @@ async fn main() {
 
     let batcher = Batcher::new(broadcaster);
 
-    let reader = Reader::new(block_storage);
+    let reader = Reader::new(block_storage, world_state.clone());
 
     let transaction_checker = TransactionChecker::new(world_state);
     let transaction_checker = Arc::new(transaction_checker);
