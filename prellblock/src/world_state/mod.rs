@@ -217,13 +217,18 @@ impl WorldState {
             }
             Transaction::UpdateAccount(params) => {
                 if let Some(account) = self.accounts.get_mut(&params.id) {
-                    account.is_admin = params.is_admin.unwrap_or(account.is_admin);
-                    account.is_rpu = params.is_rpu.unwrap_or(account.is_rpu);
+                    if let Some(is_admin) = params.is_admin {
+                        account.is_admin = is_admin;
+                    }
+                    if let Some(is_rpu) = params.is_rpu {
+                        account.is_rpu = is_rpu;
+                    }
                     if let Some(expire_at) = params.expire_at {
                         account.expire_at = expire_at;
                     }
-                    account.writing_rights =
-                        params.has_writing_rights.unwrap_or(account.writing_rights);
+                    if let Some(writing_rights) = params.has_writing_rights {
+                        account.writing_rights = writing_rights;
+                    }
                     if let Some(reading_rights) = params.reading_rights {
                         account.reading_rights = reading_rights;
                     }
