@@ -2,7 +2,10 @@ use super::{
     message::{consensus_message as message, Metadata},
     Core, Error, Follower, InvalidTransaction, ViewChange, MAX_TRANSACTIONS_PER_BLOCK,
 };
-use crate::consensus::{BlockHash, BlockNumber, Body, LeaderTerm, SignatureList};
+use crate::{
+    consensus::{BlockHash, BlockNumber, Body, LeaderTerm, SignatureList},
+    transaction_checker::TransactionCheck,
+};
 use pinxit::{verify_signed_batch, Signed};
 use prellblock_client_api::Transaction;
 use std::{ops::Deref, sync::Arc, time::Duration};
@@ -19,6 +22,8 @@ pub struct Leader {
     block_number: BlockNumber,
     last_block_hash: BlockHash,
     phase: Phase,
+    /// Represents the leader's internal `WorldState`.
+    transaction_check: TransactionCheck,
 }
 
 impl Deref for Leader {
@@ -38,6 +43,7 @@ enum Phase {
 
 impl Leader {
     pub fn new(core: Arc<Core>, follower: Arc<Follower>, view_change: Arc<ViewChange>) -> Self {
+        let transaction_check = core.transaction_checker.check();
         Self {
             core,
             follower,
@@ -46,6 +52,7 @@ impl Leader {
             block_number: BlockNumber::default(),
             last_block_hash: BlockHash::default(),
             phase: Phase::Waiting,
+            transaction_check,
         }
     }
 
@@ -106,6 +113,9 @@ impl Leader {
             self.block_number = state.block_number;
             self.last_block_hash = state.last_block_hash;
         }
+
+        // Update the leader's world state.
+        self.transaction_check = self.transaction_checker.check();
     }
 
     /// Broadcast a `NewView` message of one is available.
@@ -164,6 +174,7 @@ impl Leader {
             }
         }
 
+        // Also applies valid transactions onto the leader's virutal world state.
         let (valid_transactions, invalid_transactions) = self.stateful_validate(transactions)?;
 
         let body = Body {
@@ -268,16 +279,17 @@ impl Leader {
     }
 
     fn stateful_validate(
-        &self,
+        &mut self,
         transactions: Vec<Signed<Transaction>>,
     ) -> Result<(Vec<Signed<Transaction>>, Vec<InvalidTransaction>), Error> {
         let verified_transactions = verify_signed_batch(transactions)?;
 
-        let mut check = self.transaction_checker.check();
         let mut valid_transactions = Vec::new();
         let mut invalid_transactions = Vec::new();
         for (index, transaction) in verified_transactions.enumerate() {
-            if check
+            // This applies valid transaction to the leader's own world state.
+            if self
+                .transaction_check
                 .verify_permissions_and_apply(transaction.borrow())
                 .is_ok()
             {

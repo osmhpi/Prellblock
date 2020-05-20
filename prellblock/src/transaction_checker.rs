@@ -94,6 +94,7 @@ impl TransactionChecker {
 }
 
 /// Helps verifying transactions statefully on a virtual `WorldState`.
+#[derive(Debug)]
 pub struct TransactionCheck {
     world_state: WorldState,
 }
