@@ -15,6 +15,7 @@ pub use queue::Queue;
 pub use ring_buffer::RingBuffer;
 
 use self::core::Core;
+use super::TransactionApplier;
 use crate::{block_storage::BlockStorage, world_state::WorldStateService};
 use censorship_checker::CensorshipChecker;
 use follower::Follower;
@@ -52,8 +53,16 @@ impl PRaftBFT {
     ) -> Arc<Self> {
         log::debug!("Started consensus.");
 
+        let transaction_applier =
+            TransactionApplier::new(block_storage.clone(), world_state.clone());
+
         // Setup core
-        let core = Arc::new(Core::new(identity, block_storage, world_state));
+        let core = Arc::new(Core::new(
+            identity,
+            block_storage,
+            world_state,
+            transaction_applier,
+        ));
 
         // Setup view_change
         let view_change = Arc::new(ViewChange::new(core.clone()));

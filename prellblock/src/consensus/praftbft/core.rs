@@ -1,7 +1,7 @@
 use super::{message::Request, ConsensusMessage, Error, Queue};
 use crate::{
     block_storage::BlockStorage,
-    consensus::{LeaderTerm, SignatureList},
+    consensus::{LeaderTerm, SignatureList, TransactionApplier},
     peer::{message as peer_message, Sender},
     transaction_checker::TransactionChecker,
     world_state::WorldStateService,
@@ -16,8 +16,9 @@ use tokio::sync::{Mutex, Notify};
 #[derive(Debug)]
 pub struct Core {
     pub(super) identity: Identity,
-    pub(super) world_state: WorldStateService,
     pub(super) block_storage: BlockStorage,
+    pub(super) world_state: WorldStateService,
+    pub(super) transaction_applier: TransactionApplier,
     pub(super) transaction_checker: TransactionChecker,
     pub(super) queue: Mutex<Queue<Signed<Transaction>>>,
     pub(super) notify_censorship_checker: Notify,
@@ -29,11 +30,13 @@ impl Core {
         identity: Identity,
         block_storage: BlockStorage,
         world_state: WorldStateService,
+        transaction_applier: TransactionApplier,
     ) -> Self {
         Self {
             identity,
             block_storage,
             world_state: world_state.clone(),
+            transaction_applier,
             transaction_checker: TransactionChecker::new(world_state),
             queue: Mutex::default(),
             notify_censorship_checker: Notify::new(),

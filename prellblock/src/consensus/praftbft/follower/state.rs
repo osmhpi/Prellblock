@@ -150,21 +150,16 @@ impl State {
     pub async fn apply_block(&mut self, block_hash: BlockHash, block: Block) {
         assert_eq!(block.block_number(), self.block_number);
 
-        // Write Block to BlockStorage
-        self.block_storage.write_block(&block).unwrap();
-
         // Remove committed transactions from our queue.
         self.queue
             .lock()
             .await
             .remove_all(block.body.transactions.iter());
 
-        // Write Block to WorldState
-        let mut world_state = self.world_state.get_writable().await;
-        world_state.apply_block(block).unwrap();
-        world_state.save();
+        // Applies block.
+        self.transaction_applier.apply_block(block).await;
 
-        // Setup next round
+        // Setup next round.
         self.block_number += 1;
         self.last_block_hash = block_hash;
         self.block_content = None;

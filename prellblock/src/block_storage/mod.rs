@@ -14,7 +14,7 @@ const BLOCKS_TREE_NAME: &[u8] = b"blocks";
 /// A `BlockStorage` provides persistent storage on disk.
 ///
 /// Data is written to disk every 400ms.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BlockStorage {
     // database: Db,
     blocks: Tree,
