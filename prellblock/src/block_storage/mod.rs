@@ -5,10 +5,18 @@ mod error;
 pub use error::Error;
 
 use crate::consensus::{Block, BlockHash, BlockNumber};
-use pinxit::PeerId;
-use prellblock_client_api::Transaction;
+use pinxit::{PeerId, Signature};
+use prellblock_client_api::{
+    Filter, Query, ReadTransactionsOfPeer, ReadTransactionsOfSeries, Span, Transaction,
+};
 use sled::{Config, Db, Tree};
-use std::ops::{Bound, RangeBounds};
+use std::{
+    collections::HashMap,
+    convert::TryInto,
+    ops::{Bound, RangeBounds},
+    str,
+    time::{Duration, SystemTime},
+};
 
 const BLOCKS_TREE_NAME: &[u8] = b"blocks";
 const ACCOUNTS_TREE_NAME: &[u8] = b"accounts";
@@ -71,7 +79,7 @@ impl BlockStorage {
         for transaction in &block.body.transactions {
             match transaction.unverified_ref() {
                 Transaction::KeyValue { key, value } => {
-                    self.write_value(transaction.signer(), key, value)?;
+                    self.write_value(transaction.signer(), key, value, transaction.signature())?;
                 }
             }
         }
@@ -79,7 +87,13 @@ impl BlockStorage {
         Ok(())
     }
 
-    fn write_value(&self, peer_id: &PeerId, key: &str, value: &[u8]) -> Result<(), Error> {
+    fn write_value(
+        &self,
+        peer_id: &PeerId,
+        key: &str,
+        value: &[u8],
+        signature: &Signature,
+    ) -> Result<(), Error> {
         // Add the peer to the account db.
         self.accounts.insert(peer_id.as_bytes(), &[])?;
 
@@ -90,10 +104,11 @@ impl BlockStorage {
 
         // Insert value with timestamp into the time_series tree.
         let time_series_name = [peer_id.as_bytes(), key.as_bytes()].join(&0);
-        let time = timestamp_millis().to_be_bytes();
+        let time = system_time_to_bytes(SystemTime::now());
+        let data = postcard::to_stdvec(&(value, signature))?;
         self.database
             .open_tree(time_series_name)?
-            .insert(time, value)?;
+            .insert(time, data)?;
 
         Ok(())
     }
@@ -114,19 +129,154 @@ impl BlockStorage {
     where
         R: RangeBounds<BlockNumber>,
     {
-        let start = range.start_bound();
-        let end = range.end_bound();
         self.blocks
-            .range((
-                map_bound_from_block_number(start),
-                map_bound_from_block_number(end),
-            ))
+            .range(map_range_bound(range, |v| v.to_be_bytes()))
             .values()
             .map(|result| {
                 let value = result?;
                 let block = postcard::from_bytes(&value)?;
                 Ok(block)
             })
+    }
+
+    /// Read transactions filtered by a `Filter` and a `Query` from `Blockstorage`.
+    pub fn read_transactions(
+        &self,
+        peer_id: &PeerId,
+        filter: Filter<&str>,
+        query: &Query,
+    ) -> Result<ReadTransactionsOfPeer, Error> {
+        self.database
+            .open_tree(peer_id.as_bytes())?
+            .range(filter)
+            .keys()
+            .map(|key| {
+                let key = key?;
+                let time_series_name = [peer_id.as_bytes(), &key].join(&0);
+                let transactions = self.read_transactions_inner(&time_series_name, query)?;
+                let key = str::from_utf8(&key).unwrap().into();
+                Ok((key, transactions))
+            })
+            .collect()
+    }
+
+    /// Get a all transactions of a `time_series`, filtered by a `Query`, in a `HashMap`.
+    fn read_transactions_inner(
+        &self,
+        time_series_name: &[u8],
+        query: &Query,
+    ) -> Result<ReadTransactionsOfSeries, Error> {
+        let mut transactions = HashMap::new();
+
+        match query {
+            // Get the latest value in this series.
+            Query::CurrentValue => {
+                if let Some((key, value)) = self
+                    .read_time_series(time_series_name, ..)?
+                    .rev()
+                    .next()
+                    .transpose()?
+                {
+                    transactions.insert(key, value);
+                }
+            }
+            // Get all values in this series.
+            Query::AllValues => {
+                for result in self.read_time_series(time_series_name, ..)? {
+                    let (key, value) = result?;
+                    transactions.insert(key, value);
+                }
+            }
+            // Get all values of a give `Range`.
+            Query::Range { span, end, skip } => {
+                let mut skip_end = 0;
+                let end = match *end {
+                    Span::Count(count) => {
+                        skip_end = count;
+                        Bound::Unbounded
+                    }
+                    Span::Time(time) => Bound::Excluded(time),
+                    Span::Duration(duration) => Bound::Excluded(SystemTime::now() - duration),
+                };
+
+                let mut iter = self
+                    .read_time_series(time_series_name, ((Bound::Unbounded), end))?
+                    .rev()
+                    .peekable();
+
+                // Skip to last wanted value
+                for _ in 0..skip_end {
+                    iter.next().transpose()?;
+                }
+
+                let mut span = *span;
+                while let Some((key, value)) = iter.next().transpose()? {
+                    match &mut span {
+                        Span::Count(count) => {
+                            if *count == 0 {
+                                break;
+                            } else {
+                                *count -= 1;
+                            }
+                        }
+                        Span::Time(time) => {
+                            if key < *time {
+                                break;
+                            }
+                        }
+                        Span::Duration(duration) => span = Span::Time(key - *duration),
+                    }
+                    transactions.insert(key, value);
+                    // Skip items according to `skip`
+                    if let Some(skip) = skip {
+                        match skip {
+                            Span::Count(count) => {
+                                for _ in 0..*count {
+                                    iter.next().transpose()?;
+                                }
+                            }
+                            Span::Time(_) => {}
+                            Span::Duration(duration) => {
+                                let skip_to = key - *duration;
+                                while let Some(Ok((key, _))) = iter.peek() {
+                                    if *key < skip_to {
+                                        break;
+                                    }
+                                    iter.next().transpose()?;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(transactions)
+    }
+
+    // Read a timeseries from `Blockstorage` and transform the raw data into a `Transaction` tuple.
+    fn read_time_series<R>(
+        &self,
+        time_series_name: &[u8],
+        range: R,
+    ) -> Result<
+        impl DoubleEndedIterator<Item = Result<(SystemTime, (Vec<u8>, Signature)), Error>>,
+        Error,
+    >
+    where
+        R: RangeBounds<SystemTime>,
+    {
+        let iter = self
+            .database
+            .open_tree(time_series_name)?
+            .range(map_range_bound(range, |v| system_time_to_bytes(*v)))
+            .map(|result| {
+                let (key, value) = result?;
+                let key = system_time_from_bytes(&key);
+                let value: (Vec<u8>, Signature) = postcard::from_bytes(&value)?;
+                Ok((key, value))
+            });
+        Ok(iter)
     }
 
     /// Remove the last block (at the end of the chain) and return it.
@@ -152,8 +302,14 @@ impl BlockStorage {
     }
 }
 
-fn map_bound_from_block_number(bound: Bound<&BlockNumber>) -> Bound<impl AsRef<[u8]>> {
-    map_bound(bound, |v| v.to_be_bytes())
+fn map_range_bound<T, R, U>(range_bound: R, mut f: impl FnMut(&T) -> U) -> impl RangeBounds<U>
+where
+    R: RangeBounds<T>,
+{
+    (
+        map_bound(range_bound.start_bound(), |v| f(v)),
+        map_bound(range_bound.start_bound(), |v| f(v)),
+    )
 }
 
 fn map_bound<T, U>(bound: Bound<T>, f: impl FnOnce(T) -> U) -> Bound<U> {
@@ -164,11 +320,23 @@ fn map_bound<T, U>(bound: Bound<T>, f: impl FnOnce(T) -> U) -> Bound<U> {
     }
 }
 
-// FIXME: This is a copy from data_storage. Also the timestamp should come from the leader?
 #[allow(clippy::cast_possible_truncation)]
-fn timestamp_millis() -> i64 {
-    match std::time::SystemTime::UNIX_EPOCH.elapsed() {
+fn system_time_to_bytes(time: SystemTime) -> impl AsRef<[u8]> {
+    match time.duration_since(SystemTime::UNIX_EPOCH) {
         Ok(duration) => duration.as_millis() as i64,
         Err(err) => -(err.duration().as_millis() as i64),
+    }
+    .to_be_bytes()
+}
+
+#[allow(clippy::cast_sign_loss)]
+fn system_time_from_bytes(bytes: &[u8]) -> SystemTime {
+    let time = i64::from_be_bytes(bytes.try_into().unwrap());
+    if time >= 0 {
+        let duration = Duration::from_millis(time as u64);
+        SystemTime::UNIX_EPOCH + duration
+    } else {
+        let duration = Duration::from_millis((-(time + 1)) as u64 + 1);
+        SystemTime::UNIX_EPOCH - duration
     }
 }

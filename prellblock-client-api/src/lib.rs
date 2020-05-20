@@ -13,7 +13,7 @@ use pinxit::{PeerId, Signable, Signature, Signed};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    ops::{Bound, RangeBounds},
+    ops::{Bound, Deref, RangeBounds},
     time::{Duration, SystemTime},
 };
 
@@ -30,6 +30,24 @@ pub enum Filter<T> {
     Range(std::ops::Range<T>),
     /// Select an unbound range of values, starting from a given value.
     RangeFrom(T),
+}
+
+#[allow(clippy::use_self)]
+impl<T> Filter<T> {
+    /// Converts from `Filter<T>` (or `&Filter<T>`) to `Filter<&T::Target>`.
+    ///
+    /// Leaves the original Filter in-place, creating a new one with a reference
+    /// to the original one, additionally coercing the contents via `Deref`.
+    pub fn as_deref(&self) -> Filter<&T::Target>
+    where
+        T: Deref,
+    {
+        match self {
+            Self::Exact(value) => Filter::Exact(&**value),
+            Self::Range(range) => Filter::Range(&*range.start..&*range.end),
+            Self::RangeFrom(value) => Filter::RangeFrom(&**value),
+        }
+    }
 }
 
 #[allow(clippy::match_same_arms)]
@@ -52,7 +70,7 @@ impl<T> RangeBounds<T> for Filter<T> {
 }
 
 /// A span or selection of a given point in time / number of values.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum Span {
     /// A number of values.
     Count(usize),
@@ -79,19 +97,19 @@ pub enum Query {
         end: Span,
         /// An optional specification to skip some values.
         ///
-        /// `Time` does not make sense in this context and will be ignroed.
+        /// `Time` does not make sense in this context and will be ignored.
         skip: Option<Span>,
     },
 }
 
 /// The `Transaction`s in response to a `GetValue` request of a single data series of a `Peer`.
-type ReadTransactionsOfSeries = HashMap<SystemTime, (Vec<u8>, Signature)>;
+pub type ReadTransactionsOfSeries = HashMap<SystemTime, (Vec<u8>, Signature)>;
 
 /// The `Transaction`s in response to a `GetValue` request of a single `Peer`.
-type ReadTransactionsOfPeer = HashMap<String, ReadTransactionsOfSeries>;
+pub type ReadTransactionsOfPeer = HashMap<String, ReadTransactionsOfSeries>;
 
 /// The `Transaction`s in response to a `GetValue` request of all `Peer`s.
-type ReadTransactions = HashMap<PeerId, ReadTransactionsOfPeer>;
+pub type ReadTransactions = HashMap<PeerId, ReadTransactionsOfPeer>;
 
 define_api! {
     /// The message API module for communication between RPUs.

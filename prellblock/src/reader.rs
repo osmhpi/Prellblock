@@ -2,7 +2,6 @@
 
 use crate::{block_storage::BlockStorage, world_state::WorldStateService, BoxError};
 use prellblock_client_api::{message, ClientMessage};
-use std::collections::HashMap;
 
 type Response<R> = Result<<R as balise::Request<ClientMessage>>::Response, BoxError>;
 
@@ -28,12 +27,16 @@ impl Reader {
         params: message::GetValue,
     ) -> Response<message::GetValue> {
         let message::GetValue(peer_ids, filter, query) = params;
-        let response = HashMap::new();
 
-        // TODO: implement :D
-        let _ = (peer_ids, filter, query);
-
-        Ok(response)
+        peer_ids
+            .into_iter()
+            .map(|peer_id| {
+                let transactions =
+                    self.block_storage
+                        .read_transactions(&peer_id, filter.as_deref(), &query)?;
+                Ok((peer_id, transactions))
+            })
+            .collect()
     }
 
     pub(crate) async fn handle_get_account(
@@ -43,12 +46,12 @@ impl Reader {
         let message::GetAccount(peer_ids) = params;
 
         let world_state = self.world_state.get();
-        let response = peer_ids
+        let acccounts = peer_ids
             .iter()
             .filter_map(|peer_id| world_state.accounts.get(peer_id).cloned())
             .collect();
 
-        Ok(response)
+        Ok(acccounts)
     }
 
     pub(crate) async fn handle_get_block(
@@ -68,8 +71,8 @@ impl Reader {
     ) -> Response<message::GetCurrentBlockNumber> {
         let message::GetCurrentBlockNumber() = params;
 
-        let response = self.block_storage.block_number()?;
+        let block_number = self.block_storage.block_number()?;
 
-        Ok(response)
+        Ok(block_number)
     }
 }
