@@ -156,7 +156,7 @@ impl Follower {
         }
 
         // Validate Transactions
-        self.transaction_checker.verify_signatures(data)?;
+        self.transaction_checker.verify(data)?;
 
         // Persist the blocks after all checks have passed.
         state.apply_block(block_hash, block).await;

@@ -3,9 +3,9 @@
 
 //! An example client used to simulate clients.
 
-use pinxit::Signable;
+use pinxit::Identity;
 use prellblock_client::Client;
-use prellblock_client_api::{message, Transaction};
+use prellblock_client_api::account::Permissions;
 use rand::{
     rngs::{OsRng, StdRng},
     seq::SliceRandom,
@@ -30,7 +30,7 @@ enum Command {
         /// The value of the corresponding key.
         value: String,
     },
-    /// Benchmark the blockchain
+    /// Benchmark the blockchain.
     #[structopt(name = "bench")]
     Benchmark {
         /// The name of the RPU to benchmark.
@@ -45,6 +45,14 @@ enum Command {
         /// The number of workers (clients) to use simultaneously.
         #[structopt(short, long, default_value = "1")]
         workers: usize,
+    },
+    /// Update the permissions for a given account.
+    #[structopt(name = "update")]
+    UpdateAccount {
+        /// The id of the account to update.
+        id: String,
+        /// The filepath to a yaml-file cotaining the accounts permissions.
+        permission_file: String,
     },
 }
 
@@ -77,19 +85,13 @@ async fn main() {
             let mut rng = thread_rng();
             let turi_address = config.rpu.choose(&mut rng).unwrap().turi_address;
             // execute the test client
-            let mut client = Client::new(turi_address);
-
             let identity = "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc"
                 .parse()
                 .unwrap();
-            let value = postcard::to_stdvec(&value).unwrap();
+            let mut client = Client::new(turi_address, identity);
 
-            let transaction = Transaction::KeyValue { key, value }
-                .sign(&identity)
-                .unwrap();
-
-            match client.send_request(message::Execute(transaction)).await {
-                Err(err) => log::error!("Failed to send transaction: {}.", err),
+            match client.send_key_value(key, value).await {
+                Err(err) => log::error!("Failed to send transaction: {}", err),
                 Ok(()) => log::debug!("Transaction ok!"),
             }
         }
@@ -106,17 +108,17 @@ async fn main() {
                 .find(|rpu| rpu.name == rpu_name)
                 .unwrap()
                 .turi_address;
-            // execute the test client
+
             let mut worker_handles = Vec::new();
             for _ in 0..workers {
                 let key = key.clone();
                 worker_handles.push(tokio::spawn(async move {
                     let mut rng = StdRng::from_rng(OsRng {}).unwrap();
-                    let mut client = Client::new(turi_address);
                     let identity =
                         "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc"
                             .parse()
                             .unwrap();
+                    let mut client = Client::new(turi_address, identity);
 
                     let start = Instant::now();
                     let half_size = (size + 1) / 2;
@@ -128,12 +130,8 @@ async fn main() {
                         rng.fill_bytes(&mut bytes);
                         hex::encode_to_slice(&bytes, &mut value).unwrap();
                         let value = str::from_utf8(&value[..size]).unwrap();
-                        let value = postcard::to_stdvec(value).unwrap();
-                        let transaction = Transaction::KeyValue { key, value }
-                            .sign(&identity)
-                            .unwrap();
-                        match client.send_request(message::Execute(transaction)).await {
-                            Err(err) => log::error!("Failed to send transaction: {}.", err),
+                        match client.send_key_value(key, value).await {
+                            Err(err) => log::error!("Failed to send transaction: {}", err),
                             Ok(()) => log::debug!("Transaction ok!"),
                         }
                     }
@@ -161,6 +159,35 @@ async fn main() {
                 } else {
                     log::error!("Failed to benchmark with worker {}", n);
                 }
+            }
+        }
+        Command::UpdateAccount {
+            id,
+            permission_file,
+        } => {
+            let mut rng = thread_rng();
+            let turi_address = config.rpu.choose(&mut rng).unwrap().turi_address;
+
+            // matching peerid is: cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc
+            let identity: Identity =
+                "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256"
+                    .parse()
+                    .unwrap();
+
+            let mut client = Client::new(turi_address, identity);
+
+            // TestCLI: 256cdb0197402705f96d39eab7dd3d47a39cb75673a58852d83f666973d80e01
+            let id = id.parse().expect("Invalid account id given");
+
+            // Read `Permissions` from the given file.
+            let permission_file_content =
+                fs::read_to_string(permission_file).expect("Could not read permission file");
+            let permissions: Permissions = serde_yaml::from_str(&permission_file_content)
+                .expect("Invalid permission file content");
+
+            match client.update_account(id, permissions).await {
+                Err(err) => log::error!("Failed to send transaction: {}", err),
+                Ok(()) => log::debug!("Transaction ok!"),
             }
         }
     }

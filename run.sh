@@ -72,7 +72,7 @@ elif [ "$watch" == "1" ]; then
         cmd="$cmd '$c'"
     done
     mkdir -p logs
-    cargo watch -i logs -x "$cmd" 2>&1 | tee "logs/$1.log"
+    cargo watch -i logs -x "$cmd"
 else
     exec cargo run $release --bin "$bin" -- "$@"
 fi

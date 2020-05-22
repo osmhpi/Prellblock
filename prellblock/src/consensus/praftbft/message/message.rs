@@ -1,4 +1,4 @@
-use super::Metadata;
+use super::{InvalidTransaction, Metadata};
 use crate::consensus::{BlockHash, BlockNumber, LeaderTerm, SignatureList};
 use newtype_enum::newtype_enum;
 use pinxit::Signed;
@@ -25,7 +25,10 @@ pub enum ConsensusMessage {
         /// The transactions of the current `Block`.
         ///
         /// This should match the current `block_hash`.
-        data: Vec<Signed<Transaction>>,
+        valid_transactions: Vec<Signed<Transaction>>,
+        /// Invalid transactions to remove from the follower's queue.
+        /// The indices point to the position at which they whould be applied.
+        invalid_transactions: Vec<InvalidTransaction>,
     },
 
     /// A `ConsensusMessage` signalizing the Followers to Store the Block in the `BlockStorage` together with the `ACKAPPEND`-Signatures.

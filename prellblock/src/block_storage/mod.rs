@@ -78,15 +78,25 @@ impl BlockStorage {
 
         for transaction in &block.body.transactions {
             match transaction.unverified_ref() {
-                Transaction::KeyValue { key, value } => {
-                    self.write_value(transaction.signer(), key, value, transaction.signature())?;
+                Transaction::KeyValue(params) => {
+                    self.write_value(
+                        transaction.signer(),
+                        &params.key,
+                        &params.value,
+                        transaction.signature(),
+                    )?;
                 }
+                // We don't need to do anything here. Account permissions are saved in the `WorldState`.
+                Transaction::UpdateAccount(_) => {}
             }
         }
 
         Ok(())
     }
 
+    /// Write the peer's id to the peer tree.
+    /// Write the key to the timeseries tree of the peer.
+    /// Write the transaction to the general transaction tree.
     fn write_value(
         &self,
         peer_id: &PeerId,
@@ -287,11 +297,13 @@ impl BlockStorage {
             // update value tree
             for transaction in &block.body.transactions {
                 match transaction.unverified_ref() {
-                    Transaction::KeyValue { key, value: _ } => {
+                    Transaction::KeyValue(params) => {
                         let peer_id = transaction.signer();
-                        let time_series_name = [peer_id.as_bytes(), key.as_bytes()].join(&0);
+                        let time_series_name = [peer_id.as_bytes(), params.key.as_bytes()].join(&0);
                         self.database.open_tree(time_series_name)?.pop_max()?;
                     }
+                    // We don't need to do anything here. Account permissions are rolled back in the `WorldState`.
+                    Transaction::UpdateAccount(_) => {}
                 }
             }
 

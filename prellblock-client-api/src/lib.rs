@@ -6,9 +6,10 @@
 pub mod account;
 pub mod consensus;
 
-use account::Account;
+use account::{Account, Permissions};
 use balise::define_api;
 use consensus::{Block, BlockNumber};
+use newtype_enum::newtype_enum;
 use pinxit::{PeerId, Signable, Signature, Signed};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -137,14 +138,24 @@ define_api! {
 }
 
 /// A blockchain transaction for prellblock.
+#[newtype_enum(variants = "pub transaction")]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Transaction {
     /// Set a `key` to a `value`.
     KeyValue {
         /// The key.
         key: String,
+
         /// The value.
         value: Vec<u8>,
+    },
+
+    /// Update an account.
+    UpdateAccount {
+        /// The account to set the permissions for.
+        id: PeerId,
+        /// The permission fields to update.
+        permissions: Permissions,
     },
 }
 

@@ -23,6 +23,7 @@ pub enum Error {
     Encoding(#[error(from)] postcard::Error),
 
     /// A tls error.
+    #[cfg(feature = "tls")]
     #[error(display = "{}", 0)]
     Tls(#[error(from)] native_tls::Error),
 

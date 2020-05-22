@@ -172,6 +172,12 @@ impl<T> Verified<T> {
             signature: self.0.signature,
         }))
     }
+
+    /// Immutably borrows from an owned value.
+    #[must_use]
+    pub const fn borrow(&self) -> VerifiedRef<T> {
+        VerifiedRef(&self.0)
+    }
 }
 
 impl<T> Deref for Verified<T> {
@@ -192,20 +198,38 @@ impl<T> From<Verified<T>> for Signed<T> {
         v.0
     }
 }
+
 /// A verified signed message.
 pub struct VerifiedRef<'a, T>(&'a Signed<T>);
+
+impl<'a, T> Copy for VerifiedRef<'a, T> {}
+
+impl<'a, T> Clone for VerifiedRef<'a, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
 
 impl<'a, T> VerifiedRef<'a, T> {
     /// Get the signer of the signature.
     #[must_use]
-    pub const fn signer(&self) -> &PeerId {
+    pub const fn signer(self) -> &'a PeerId {
         self.0.signer()
     }
 
     /// Get the signature of the message.
     #[must_use]
-    pub const fn signature(&self) -> &Signature {
+    pub const fn signature(self) -> &'a Signature {
         &self.0.signature
+    }
+
+    /// Creates owned data from borrowed data, by cloning.
+    #[must_use]
+    pub fn to_owned(self) -> Verified<T>
+    where
+        T: Clone,
+    {
+        Verified(self.0.clone())
     }
 }
 
@@ -222,14 +246,14 @@ impl<'a, T> From<VerifiedRef<'a, T>> for &'a Signed<T> {
     }
 }
 
-/// Verify a batch of `Signed<T>`.
+/// Verify an `Iterator` over `Signed<T>` items.
 ///
-/// This returns an array of `VerifiedRef` if and only if
+/// This returns an `Iterator` over `VerifiedRef<T>` if and only if
 /// **all** signatures can be verified.
 ///
 /// # Example
 /// ```
-/// use pinxit::{verify_signed_batch_ref, Identity, Signable, Signed, VerifiedRef};
+/// use pinxit::{verify_signed_batch_iter, Identity, Signable, Signed, VerifiedRef};
 ///
 /// // define example struct
 /// struct TestData<'a>(&'a str);
@@ -258,14 +282,80 @@ impl<'a, T> From<VerifiedRef<'a, T>> for &'a Signed<T> {
 ///     batch.push(signed);
 /// }
 ///
-/// let verified_batch: Vec<VerifiedRef<TestData>> = verify_signed_batch_ref(&batch).unwrap();
+/// let verified_batch = verify_signed_batch_iter(batch.iter()).unwrap();
 ///
 /// for verified in verified_batch {
 ///     // access the data
 ///     println!("{}", verified.0);
 /// }
 /// ```
-pub fn verify_signed_batch_ref<T>(batch: &[Signed<T>]) -> Result<Vec<VerifiedRef<T>>, Error>
+pub fn verify_signed_batch_iter<'a, I, T>(
+    batch: I,
+) -> Result<impl ExactSizeIterator<Item = VerifiedRef<'a, T>>, Error>
+where
+    I: ExactSizeIterator<Item = &'a Signed<T>> + Clone,
+    T: Signable + 'a,
+{
+    verify_signed_batch_inner(batch.clone())?;
+    Ok(batch.map(VerifiedRef))
+}
+
+/// Verify a batch of `Signed<T>`.
+///
+/// This returns an `Iterator` over `Verified<T>` if and only if
+/// **all** signatures can be verified.
+///
+/// # Example
+/// ```
+/// use pinxit::{verify_signed_batch, Identity, Signable, Signed, VerifiedRef};
+///
+/// // define example struct
+/// struct TestData<'a>(&'a str);
+///
+/// // make the struct signable
+/// impl<'a> Signable for TestData<'a> {
+///     type SignableData = &'a str;
+///     type Error = std::io::Error; // never used
+///     fn signable_data(&self) -> Result<Self::SignableData, Self::Error> {
+///         Ok(self.0)
+///     }
+/// }
+///
+/// // create an identity
+/// let identity = Identity::generate();
+///
+/// let mut batch: Vec<Signed<TestData>> = Vec::new();
+///
+/// for i in 0..200 {
+///     // create signable test data
+///     let test_data = TestData("Lorem ipsum");
+///
+///     // create a signed version of test data
+///     // you cannot access the data until it is verified
+///     let signed: Signed<TestData> = test_data.sign(&identity).unwrap();
+///     batch.push(signed);
+/// }
+///
+/// let verified_batch = verify_signed_batch(batch).unwrap();
+///
+/// for verified in verified_batch {
+///     // access the data
+///     println!("{}", verified.0);
+/// }
+/// ```
+pub fn verify_signed_batch<T>(
+    batch: Vec<Signed<T>>,
+) -> Result<impl ExactSizeIterator<Item = Verified<T>>, Error>
+where
+    T: Signable,
+{
+    verify_signed_batch_inner(batch.iter())?;
+    Ok(batch.into_iter().map(Verified))
+}
+
+fn verify_signed_batch_inner<'a, T: 'a>(
+    batch: impl ExactSizeIterator<Item = &'a Signed<T>>,
+) -> Result<(), Error>
 where
     T: Signable,
 {
@@ -285,7 +375,7 @@ where
     }
     let messages_refs: Vec<_> = messages.iter().map(AsRef::as_ref).collect();
     match ed25519_dalek::verify_batch(&messages_refs, &signatures, &signers) {
-        Ok(()) => Ok(batch.iter().map(VerifiedRef).collect()),
+        Ok(()) => Ok(()),
         Err(err) => Err(err.into()),
     }
 }

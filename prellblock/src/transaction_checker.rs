@@ -1,8 +1,8 @@
 //! Module to check permissions of transactions.
 
-use crate::world_state::WorldStateService;
+use crate::world_state::{WorldState, WorldStateService};
 use err_derive::Error;
-use pinxit::{verify_signed_batch_ref, PeerId, Signed};
+use pinxit::{verify_signed_batch_iter, PeerId, Signed, VerifiedRef};
 use prellblock_client_api::Transaction;
 
 /// An error of the `permission_checker` module.
@@ -24,6 +24,20 @@ pub enum PermissionError {
     /// The signature could not be verified.
     #[error(display = "{}", 0)]
     InvalidSignature(#[error(from)] pinxit::Error),
+
+    /// The account *setting* the permissions is not permitted to do so.
+    #[error(
+        display = "The account {} is no permitted to change permissions of other accounts.",
+        0
+    )]
+    PermissionChangeDenied(PeerId),
+
+    /// The account's expiry date has passed.
+    #[error(
+        display = "The account {} has expired. All transaction from this account will be denied.",
+        0
+    )]
+    AccountExpired(PeerId),
 }
 
 /// A `TransactionChecker` is used to check whether accounts are allowed to carry out transactions.
@@ -39,32 +53,28 @@ impl TransactionChecker {
         Self { world_state }
     }
 
-    /// Verify whether a given `transaction` issued by a `peer_id` is valid.
-    pub fn verify_permissions(
-        &self,
-        peer_id: &PeerId,
-        transaction: &Transaction,
-    ) -> Result<(), PermissionError> {
-        match transaction {
-            Transaction::KeyValue { .. } => {
-                if let Some(account) = self.world_state.get().accounts.get(peer_id) {
-                    if account.writing_rights {
-                        Ok(())
-                    } else {
-                        Err(PermissionError::WriteDenied(peer_id.clone()))
-                    }
-                } else {
-                    Err(PermissionError::AccountNotFound(peer_id.clone()))
-                }
-            }
+    /// Returns a `TransactionCheck` with the current world state as virtual clone.
+    #[must_use]
+    pub fn check(&self) -> TransactionCheck {
+        TransactionCheck {
+            world_state: self.world_state.get(),
         }
     }
 
+    /// Verify whether a given `transaction` issued by a `peer_id` is valid.
+    pub fn verify_permissions(
+        &self,
+        transaction: VerifiedRef<Transaction>,
+    ) -> Result<(), PermissionError> {
+        self.check().verify_permissions_and_apply(transaction)
+    }
+
     /// Verify signatures of `Transaction`s
-    pub fn verify_signatures(&self, data: &[Signed<Transaction>]) -> Result<(), PermissionError> {
-        let verified_transactions = verify_signed_batch_ref(data)?;
+    pub fn verify(&self, data: &[Signed<Transaction>]) -> Result<(), PermissionError> {
+        let verified_transactions = verify_signed_batch_iter(data.iter())?;
+        let mut check = self.check();
         for tx in verified_transactions {
-            self.verify_permissions(tx.signer(), &tx)?;
+            check.verify_permissions_and_apply(tx)?;
         }
         Ok(())
     }
@@ -79,6 +89,55 @@ impl TransactionChecker {
             }
         } else {
             Err(PermissionError::AccountNotFound(peer_id.clone()))
+        }
+    }
+}
+
+/// Helps verifying transactions statefully on a virtual `WorldState`.
+#[derive(Debug)]
+pub struct TransactionCheck {
+    world_state: WorldState,
+}
+
+impl TransactionCheck {
+    /// Verify whether a given `transaction` issued by a `peer_id` is valid.
+    ///
+    /// This also applies the `transaction` to the `world_state`.
+    /// Provide a temporary copy that will be dropped if you do not want this to have an effect.
+    pub fn verify_permissions_and_apply(
+        &mut self,
+        transaction: VerifiedRef<Transaction>,
+    ) -> Result<(), PermissionError> {
+        let signer = transaction.signer();
+        if let Some(account) = self.world_state.accounts.get(signer) {
+            // If a account is expired, *all* transactions will be denied.
+            if account.expire_at.is_expired() {
+                return Err(PermissionError::AccountExpired(signer.clone()));
+            }
+
+            match &*transaction {
+                Transaction::KeyValue { .. } => {
+                    if account.writing_rights {
+                        Ok(())
+                    } else {
+                        Err(PermissionError::WriteDenied(signer.clone()))
+                    }
+                }
+                Transaction::UpdateAccount(params) => {
+                    if account.is_admin {
+                        if self.world_state.accounts.get(&params.id).is_none() {
+                            return Err(PermissionError::AccountNotFound(params.id.clone()));
+                        }
+                        self.world_state
+                            .apply_transaction(transaction.to_owned().into());
+                        Ok(())
+                    } else {
+                        Err(PermissionError::PermissionChangeDenied(signer.clone()))
+                    }
+                }
+            }
+        } else {
+            Err(PermissionError::AccountNotFound(signer.clone()))
         }
     }
 }

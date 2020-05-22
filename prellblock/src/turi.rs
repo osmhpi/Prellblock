@@ -62,18 +62,32 @@ impl Turi {
 
     async fn handle_execute(&self, params: message::Execute) -> Response<message::Execute> {
         let message::Execute(transaction) = params;
+
         // Check validity of transaction signature.
         let transaction = transaction.verify()?;
-        let peer_id = transaction.signer();
 
         // Verify permissions
         self.transaction_checker
-            .verify_permissions(peer_id, &transaction)?;
+            .verify_permissions(transaction.borrow())?;
 
-        match &transaction as &Transaction {
-            Transaction::KeyValue { key, value } => {
+        let peer_id = transaction.signer();
+        match &*transaction {
+            Transaction::KeyValue(params) => {
                 // TODO: Deserialize value.
-                log::info!("Client {} set {} to {:?}.", peer_id, key, value);
+                log::debug!(
+                    "Client {} set {} to {:?}.",
+                    peer_id,
+                    params.key,
+                    params.value,
+                );
+            }
+            Transaction::UpdateAccount(params) => {
+                log::debug!(
+                    "Client {} updates account {}: {:#?}",
+                    &transaction.signer(),
+                    params.id,
+                    params.permissions,
+                );
             }
         }
 

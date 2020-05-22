@@ -5,7 +5,7 @@ use crate::{
     transaction_checker::TransactionChecker,
     BoxError,
 };
-use pinxit::{verify_signed_batch_ref, Signed, VerifiedRef};
+use pinxit::{verify_signed_batch_iter, Signed, VerifiedRef};
 use prellblock_client_api::Transaction;
 use std::sync::{Arc, Mutex};
 
@@ -37,23 +37,37 @@ impl PeerInbox {
     }
 
     /// Handle an `execute` `Signable` message.
-    pub fn handle_execute(&self, transaction: &VerifiedRef<Transaction>) -> Result<(), BoxError> {
+    pub fn handle_execute(&self, transaction: VerifiedRef<Transaction>) -> Result<(), BoxError> {
         // Verify permissions
-        self.transaction_checker
-            .verify_permissions(transaction.signer(), transaction)?;
+        self.transaction_checker.verify_permissions(transaction)?;
 
-        match &**transaction {
-            Transaction::KeyValue { key, value } => {
+        match &*transaction {
+            Transaction::KeyValue(params) => {
                 // TODO: Deserialize value.
                 log::debug!(
                     "Client {} set {} to {:?} (via another RPU)",
                     &transaction.signer(),
-                    key,
-                    value,
+                    params.key,
+                    params.value,
                 );
 
                 // TODO: Continue with warning or error?
-                self.data_storage.write(transaction.signer(), key, value)?;
+                self.data_storage.write_key_value(
+                    transaction.signer(),
+                    &params.key,
+                    &params.value,
+                )?;
+            }
+            Transaction::UpdateAccount(params) => {
+                log::debug!(
+                    "Client {} updates account {}: {:#?}",
+                    &transaction.signer(),
+                    params.id,
+                    params.permissions,
+                );
+
+                self.data_storage
+                    .write_account_update(transaction.signer(), params)?;
             }
         }
         Ok(())
@@ -67,8 +81,8 @@ impl PeerInbox {
         let message::ExecuteBatch(batch) = params;
 
         // Batch verification makes it somewhat faster.
-        let verified = verify_signed_batch_ref(&batch)?;
-        for message in &verified {
+        let verified = verify_signed_batch_iter(batch.iter())?;
+        for message in verified {
             self.handle_execute(message)?;
         }
 

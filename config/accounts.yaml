@@ -1,14 +1,21 @@
 256cdb0197402705f96d39eab7dd3d47a39cb75673a58852d83f666973d80e01:
   name: TestClientCLI
+  is_admin: false
   # is_rpu: false
-  # expire_at: 2020-04-15T10:04:59.300878700Z
+  # expire_at: 
+  #  at_date: 2020-04-15T10:04:59.300878700Z # or see below
+  # expire_at: never
   writing_rights: true
   # reading_rights:
   #   - accounts:
   #       whitelist:
-  #         permissions:
-  #           - scope: Emily
+  #         - scope: Emily
   #     namespace:
   #       blacklist:
-  #         permissions:
-  #           - scope: speed
+  #         - scope: speed
+
+cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc:
+  name: TestAdminCLI
+  is_admin: true
+  is_rpu: false
+  writing_rights: false

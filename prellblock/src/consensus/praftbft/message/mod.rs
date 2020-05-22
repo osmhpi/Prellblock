@@ -13,7 +13,7 @@ pub use message::{consensus_message, ConsensusMessage};
 pub use request::Request;
 pub use response::{consensus_response, ConsensusResponse};
 
-use super::Error;
+use super::{Error, InvalidTransaction};
 use crate::consensus::{BlockHash, BlockNumber, LeaderTerm};
 use serde::{Deserialize, Serialize};
 
