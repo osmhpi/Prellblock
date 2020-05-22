@@ -1,7 +1,7 @@
 //! A client for communicating between RPUs.
 
 use balise::{client, Error};
-use newtype_enum::Enum;
+use newtype_enum::{Enum, Variant};
 use pinxit::{Identity, PeerId, Signable};
 use prellblock_client_api::{
     account_permissions::Permissions, message, transaction, ClientMessage, Transaction,
@@ -48,20 +48,27 @@ impl Client {
         }
     }
 
-    /// Send a key-value transaction.
-    pub async fn send_key_value<V>(&mut self, key: String, value: V) -> Result<(), Error>
+    /// Execute a transaction.Transaction
+    async fn execute<T>(&mut self, transaction: T) -> Result<(), Error>
     where
-        V: AsRef<[u8]> + Serialize + Send,
+        T: Variant<Transaction> + Send,
     {
-        let value = postcard::to_stdvec(&value).unwrap();
-
-        let transaction = Transaction::from_variant(transaction::KeyValue { key, value })
+        let transaction = Transaction::from_variant(transaction)
             .sign(&self.identity)
-            .unwrap();
+            .map_err(|err| Error::BoxError(err.into()))?;
 
         self.rpu_client
             .send_request(message::Execute(transaction))
             .await
+    }
+
+    /// Send a key-value transaction.
+    pub async fn send_key_value<V>(&mut self, key: String, value: V) -> Result<(), Error>
+    where
+        V: Serialize + Send,
+    {
+        let value = postcard::to_stdvec(&value)?;
+        self.execute(transaction::KeyValue { key, value }).await
     }
 
     /// Update a `target` account's `permissions`.
@@ -70,14 +77,10 @@ impl Client {
         target: PeerId,
         permissions: Permissions,
     ) -> Result<(), Error> {
-        let transaction = Transaction::from_variant(transaction::UpdateAccount {
+        self.execute(transaction::UpdateAccount {
             id: target,
             permissions,
         })
-        .sign(&self.identity)
-        .unwrap();
-        self.rpu_client
-            .send_request(message::Execute(transaction))
-            .await
+        .await
     }
 }
