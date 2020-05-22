@@ -12,6 +12,24 @@ use std::net::SocketAddr;
 /// A Client Instance.
 ///
 /// Used for Communication between Client Entities and RPU Servers.
+///
+/// # Example
+///
+/// ```no_run
+/// use pinxit::Identity;
+/// use prellblock_client::Client;
+///
+/// # async fn test() {
+/// let identity: Identity = "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256"
+///     .parse()
+///     .unwrap();
+/// let mut client = Client::new("10.10.10.10:2480".parse().unwrap(), identity);
+/// client
+///     .send_key_value("key".to_string(), "value")
+///     .await
+///     .unwrap();
+/// # }
+/// ```
 pub struct Client {
     rpu_client: client::Client<ClientMessage>,
     identity: Identity,
@@ -47,7 +65,7 @@ impl Client {
     }
 
     /// Update a `target` account's `permissions`.
-    pub async extern "C" fn update_account(
+    pub async fn update_account(
         &mut self,
         target: PeerId,
         permissions: Permissions,
