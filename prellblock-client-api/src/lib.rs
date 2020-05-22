@@ -23,6 +23,26 @@ use std::{
 pub struct Pong;
 
 /// Filter to select a value.
+///
+/// # Examples
+/// ```
+/// use prellblock_client_api::Filter;
+///
+/// // fetch the items identified by 42
+/// Filter::Exact(42);
+///
+/// // fetch the items identified by the values between 0 (inclusive) and 42 (exclusive)
+/// Filter::Range(0..42);
+///
+/// // fetch the items identified by the values starting from 42 (inclusive)
+/// Filter::RangeFrom(42);
+///
+/// // fetch the items identified by the value prefix "temperature" (between "temperature" (inclusive) and "temperaturf" (exclusive))
+/// Filter::Range("temperature".."temperaturf");
+///
+/// // fetch the items identified by the values starting from "temperature" (inclusive)
+/// Filter::RangeFrom("temperature");
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Filter<T> {
     /// Select one exactly matching value.
@@ -81,12 +101,71 @@ pub enum Span {
     Duration(Duration),
 }
 
-/// A `Query` describribes what kind of value will be retreived.
+/// A `Query` describes what kind of value will be retreived.
+///
+/// # Examples
+/// ```
+/// use chrono::{DateTime, Utc};
+/// use prellblock_client_api::{Query, Span};
+/// use std::time::Duration;
+///
+/// let timestamp_8_am = DateTime::parse_from_rfc3339("2020-05-22T08:00:00Z").unwrap();
+/// let timestamp_10_am = DateTime::parse_from_rfc3339("2020-05-22T10:00:00Z").unwrap();
+///
+/// // fetch the last 1000 values
+/// Query::Range {
+///     span: Span::Count(1000),
+///     end: Span::Count(0),
+///     skip: None,
+/// };
+///
+/// // fetch every other value 1000 times going backward from the current value.
+/// Query::Range {
+///     span: Span::Count(1000),
+///     end: Span::Count(0),
+///     skip: Some(Span::Count(1)),
+/// };
+///
+/// // fetch all values between T-60 and T-20.
+/// Query::Range {
+///     span: Span::Duration(Duration::from_secs(40 * 60)),
+///     end: Span::Duration(Duration::from_secs(20 * 60)),
+///     skip: None,
+/// };
+///
+/// // fetch all new values after 10 AM.
+/// Query::Range {
+///     span: Span::Time(timestamp_10_am.into()),
+///     end: Span::Count(0),
+///     skip: None,
+/// };
+///
+/// // fetch all values between 8 AM and 10 AM.
+/// Query::Range {
+///     span: Span::Time(timestamp_8_am.into()),
+///     end: Span::Time(timestamp_10_am.into()),
+///     skip: None,
+/// };
+///
+/// // fetch a value every minute between 8 AM and 10 AM.
+/// Query::Range {
+///     span: Span::Time(timestamp_8_am.into()),
+///     end: Span::Time(timestamp_10_am.into()),
+///     skip: Some(Span::Duration(Duration::from_secs(60))),
+/// };
+///
+/// // fetch 100 values before 8 AM with 5 minutes intervals.
+/// Query::Range {
+///     span: Span::Count(100),
+///     end: Span::Time(timestamp_8_am.into()),
+///     skip: Some(Span::Duration(Duration::from_secs(5 * 60))),
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Query {
     /// Get the current value.
     CurrentValue,
-    /// Get all value of a `Peer`.
+    /// Get all value of a peer.
     AllValues,
     /// Get all values selected by `Span`s.
     Range {
@@ -103,13 +182,13 @@ pub enum Query {
     },
 }
 
-/// The `Transaction`s in response to a `GetValue` request of a single data series of a `Peer`.
+/// The `Transaction`s in response to a `GetValue` request of a single data series of a peer.
 pub type ReadTransactionsOfSeries = HashMap<SystemTime, (Vec<u8>, Signature)>;
 
-/// The `Transaction`s in response to a `GetValue` request of a single `Peer`.
+/// The `Transaction`s in response to a `GetValue` request of a single peer.
 pub type ReadTransactionsOfPeer = HashMap<String, ReadTransactionsOfSeries>;
 
-/// The `Transaction`s in response to a `GetValue` request of all `Peer`s.
+/// The `Transaction`s in response to a `GetValue` request of all peers.
 pub type ReadTransactions = HashMap<PeerId, ReadTransactionsOfPeer>;
 
 define_api! {
@@ -127,6 +206,8 @@ define_api! {
         GetValue(Vec<PeerId>, Filter<String>, Query) => ReadTransactions,
 
         /// Get a single account by it's `PeerId`.
+        ///
+        /// Accounts that are not found will be omitted in the return value.
         GetAccount(Vec<PeerId>) => Vec<Account>,
 
         /// Get a `Block` by it's `BlockNumber`.

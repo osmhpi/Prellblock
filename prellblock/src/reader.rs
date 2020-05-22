@@ -71,7 +71,8 @@ impl Reader {
     ) -> Response<message::GetCurrentBlockNumber> {
         let message::GetCurrentBlockNumber() = params;
 
-        let block_number = self.block_storage.block_number()?;
+        let world_state = self.world_state.get();
+        let block_number = world_state.block_number;
 
         Ok(block_number)
     }

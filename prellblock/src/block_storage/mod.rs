@@ -123,17 +123,6 @@ impl BlockStorage {
         Ok(())
     }
 
-    /// Retreive the current `BlockNumber`.
-    pub fn block_number(&self) -> Result<BlockNumber, Error> {
-        match self.blocks.iter().keys().rev().next() {
-            Some(key) => {
-                let block_number = BlockNumber::from_be_bytes(key?).unwrap();
-                Ok(block_number + 1)
-            }
-            None => Ok(BlockNumber::default()),
-        }
-    }
-
     /// Read a range of blocks from the store.
     pub fn read<R>(&self, range: R) -> impl DoubleEndedIterator<Item = Result<Block, Error>>
     where
