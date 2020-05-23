@@ -4,5 +4,6 @@
 //! A Library Crate for external Clients - Malte (TM)
 
 mod client;
+mod ffi;
 
 pub use client::Client;
