@@ -88,6 +88,12 @@ impl Follower {
         };
         drop(state);
 
+        log::trace!(
+            "Trying to synchronize from {} with: {:#?}",
+            peer_address,
+            request
+        );
+
         // send request to peer
         let response = self.send_message(peer_address, request).await?.into_inner();
 
@@ -114,7 +120,12 @@ impl Follower {
 
         // verify received blocks, if not timeouted
         // append correct blocks to own blockstorage
+        log::trace!(
+            "Received {} blocks while synchronizing.",
+            response.blocks.len()
+        );
         for block in response.blocks {
+            log::trace!("Applying synchronized block: {:#?}", block);
             if block.body.height < state.block_number {
                 continue;
             }
@@ -169,7 +180,7 @@ impl Follower {
         peer_id: PeerId,
         message: message::SynchronizationRequest,
     ) -> Result<response::SynchronizationResponse, Error> {
-        println!("Request by {} to synchronize.", peer_id);
+        log::trace!("Request by {} to synchronize.", peer_id);
 
         let (new_view, current_block_number) = {
             let state = self.state.lock().await;
@@ -182,6 +193,12 @@ impl Follower {
 
             (new_view, state.block_number)
         };
+
+        log::trace!(
+            "Synchronizer is at new_view {:?} block_nummer {}.",
+            new_view,
+            current_block_number
+        );
 
         // Only send the block `message.block_number`
         // if the first requested block's hash does not match the sent one.
@@ -200,10 +217,12 @@ impl Follower {
             Some(Err(err)) => Some(Err(err)),
             _ => None,
         };
+        log::trace!("First block being sent to follower: {:#?}", first_block);
         let blocks = first_block
             .into_iter()
             .chain(blocks_iter)
-            .collect::<Result<_, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
+        log::trace!("Sending {} blocks to {}.", blocks.len(), peer_id);
         Ok(response::SynchronizationResponse { new_view, blocks })
     }
 }

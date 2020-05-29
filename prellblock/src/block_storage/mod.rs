@@ -126,8 +126,20 @@ impl BlockStorage {
     /// Read a range of blocks from the store.
     pub fn read<R>(&self, range: R) -> impl DoubleEndedIterator<Item = Result<Block, Error>>
     where
-        R: RangeBounds<BlockNumber>,
+        R: RangeBounds<BlockNumber> + Clone,
     {
+        log::trace!(
+            "{:#?}",
+            self.blocks
+                .range(map_range_bound(range.clone(), |v| v.to_be_bytes()))
+                .values()
+                .map(|result| {
+                    let value = result?;
+                    let block = postcard::from_bytes(&value)?;
+                    Ok(block)
+                })
+                .collect::<Vec<Result<Block, Error>>>()
+        );
         self.blocks
             .range(map_range_bound(range, |v| v.to_be_bytes()))
             .values()
@@ -309,7 +321,7 @@ where
 {
     (
         map_bound(range_bound.start_bound(), |v| f(v)),
-        map_bound(range_bound.start_bound(), |v| f(v)),
+        map_bound(range_bound.end_bound(), |v| f(v)),
     )
 }
 
