@@ -166,8 +166,6 @@ pub struct WorldState {
     pub accounts: HashMap<PeerId, Account>,
     /// Field storing the `Peer`s.
     pub peers: Vector<(PeerId, SocketAddr)>,
-    /// Field storing the Transactiondata.
-    pub data: HashMap<PeerId, HashMap<String, Vec<u8>>>,
     /// The number of `Block`s applied to the `WorldState`.
     pub block_number: BlockNumber,
     /// Hash of the last `Block` in the `BlockStorage`.
@@ -202,17 +200,8 @@ impl WorldState {
 
     /// Apply a transaction to the current world state.
     pub fn apply_transaction(&mut self, transaction: Signed<Transaction>) {
-        let signer = transaction.signer().clone();
         match transaction.unverified() {
-            Transaction::KeyValue(params) => {
-                if let Some(namespace) = self.data.get_mut(&signer) {
-                    namespace.insert(params.key, params.value);
-                } else {
-                    let mut namespace = HashMap::new();
-                    namespace.insert(params.key, params.value);
-                    self.data.insert(signer.clone(), namespace);
-                }
-            }
+            Transaction::KeyValue(_) => {}
             Transaction::UpdateAccount(params) => {
                 if let Some(account) = self.accounts.get_mut(&params.id) {
                     let permissions = params.permissions;
