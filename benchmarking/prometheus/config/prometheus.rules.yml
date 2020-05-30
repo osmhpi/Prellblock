@@ -1,0 +1,60 @@
+# groups:
+# - name: ./rules.conf
+#   rules:
+
+#   # heartbeat alert
+#   - alert: Heartbeat
+#     expr: vector(1)
+#     labels:
+#       severity: major
+
+#   # service availability alert
+#   - alert: service_down
+#     expr: up == 0
+#     labels:
+#       service: Platform
+#       severity: major
+#       correlate: service_up,service_down
+#     annotations:
+#       description: Service {{ $labels.instance }} is unavailable.
+#       value: DOWN ({{ $value }})
+#       runbook: http://wiki.alerta.io/RunBook/{app}/Event/{alertname}
+
+#   - alert: service_up
+#     expr: up == 1
+#     labels:
+#       service: Platform
+#       severity: normal
+#       correlate: service_up,service_down
+#     annotations:
+#       description: Service {{ $labels.instance }} is available.
+#       value: UP ({{ $value }})
+groups:
+- name: Prellblock Alerts
+  rules:
+  # heartbeat alert
+  - alert: Heartbeat
+    expr: vector(1)
+    labels:
+      severity: normal
+
+  # service availability alert
+  - alert: service_down
+    expr: up == 0
+    for: 15s
+    labels:
+      severity: major
+      correlate: service_up,service_down
+    annotations:
+      description: Service {{ $labels.instance }} is unavailable.
+      value: DOWN ({{ $value }})
+      runbook: http://wiki.alerta.io/RunBook/{app}/Event/{alertname}
+
+  - alert: service_up
+    expr: up == 1
+    labels:
+      severity: normal
+      correlate: service_up,service_down
+    annotations:
+      description: Service {{ $labels.instance }} is available.
+      value: UP ({{ $value }})

@@ -23,6 +23,27 @@ pub struct Turi {
     transaction_checker: TransactionChecker,
 }
 
+#[cfg(feature = "monitoring")]
+use lazy_static::lazy_static;
+#[cfg(feature = "monitoring")]
+use prometheus::{labels, opts, register_int_counter, IntCounter};
+#[cfg(feature = "monitoring")]
+lazy_static! {
+    static ref TURI_RECEIVED_TRANSACTIONS: IntCounter = register_int_counter!(opts! {
+        "turi_num_received_txs",
+        "Number of transactions received by the Turi.",
+        labels! {
+            "name" => "emily",
+        }
+    })
+    .unwrap();
+    static ref TURI_RECEIVED_INVALID_TRANSACTIONS: IntCounter = register_int_counter!(
+        "turi_num_received_invalid_txs",
+        "Number of invalid transactions received by the Turi."
+    )
+    .unwrap();
+}
+
 impl Turi {
     /// Create a new receiver instance.
     ///
@@ -48,7 +69,18 @@ impl Turi {
         let server = Server::new(
             handler!(ClientMessage, {
                 Ping(_) => Ok(Pong),
-                Execute(params) => self.handle_execute(params).await,
+                Execute(params) => {
+                    #[cfg(feature = "monitoring")]
+                    TURI_RECEIVED_TRANSACTIONS.inc();
+
+                    let result = self.handle_execute(params).await;
+                    #[cfg(feature = "monitoring")]
+                    if result.is_err() {
+                        TURI_RECEIVED_INVALID_TRANSACTIONS.inc();
+                    }
+
+                    result
+                },
                 GetValue(params) => self.reader.handle_get_value(params).await,
                 GetAccount(params) => self.reader.handle_get_account(params).await,
                 GetBlock(params) => self.reader.handle_get_block(params).await,

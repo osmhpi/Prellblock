@@ -33,6 +33,20 @@ const MAX_TRANSACTIONS_PER_BLOCK: usize = 4000;
 
 type InvalidTransaction = (usize, Signed<Transaction>);
 
+#[cfg(feature = "monitoring")]
+use lazy_static::lazy_static;
+#[cfg(feature = "monitoring")]
+use prometheus::{register_int_gauge, IntGauge};
+#[cfg(feature = "monitoring")]
+lazy_static! {
+    /// Too much backpressure shows overload.
+    static ref QUEUE_BACKLOG: IntGauge = register_int_gauge!(
+        "praftbft_queue_backlog",
+        "Number of transactions being left in the queue."
+    )
+    .unwrap();
+}
+
 /// See the [paper](https://www.scs.stanford.edu/17au-cs244b/labs/projects/clow_jiang.pdf).
 #[derive(Debug)]
 #[must_use]
@@ -80,6 +94,9 @@ impl PRaftBFT {
         let leader = Leader::new(core.clone(), follower.clone(), view_change.clone());
         tokio::spawn(leader.execute());
 
+        #[cfg(feature = "monitoring")]
+        QUEUE_BACKLOG.set(0);
+
         // Setup consensus
         Arc::new(Self {
             core,
@@ -95,6 +112,9 @@ impl PRaftBFT {
             queue.extend(transactions);
             queue.len()
         };
+
+        #[cfg(feature = "monitoring")]
+        QUEUE_BACKLOG.set(queue_len as i64);
 
         if queue_len > MAX_TRANSACTIONS_PER_BLOCK {
             self.core.notify_leader.notify();

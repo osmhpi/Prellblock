@@ -235,6 +235,7 @@ fn create_rpu_cert(ca: &CA, rpu: &Account) -> Result<(X509, PKey<Private>), Erro
     if let AccountType::RPU {
         peer_address,
         turi_address,
+        monitoring_address,
     } = rpu.account_type
     {
         println!("Creating Certificate for RPU {}.", rpu.name);
@@ -278,7 +279,7 @@ fn create_rpu_cert(ca: &CA, rpu: &Account) -> Result<(X509, PKey<Private>), Erro
         // Set all alternative names and extensions.
         let mut alternative_names = SubjectAlternativeName::new();
         alternative_names.dns(&rpu.name);
-        let ips: HashSet<_> = vec![turi_address, peer_address]
+        let ips: HashSet<_> = vec![turi_address, peer_address, monitoring_address]
             .iter()
             .map(|address| address.ip())
             .collect();

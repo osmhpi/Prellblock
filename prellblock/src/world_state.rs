@@ -21,6 +21,24 @@ use std::{
 };
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
+#[cfg(feature = "monitoring")]
+use lazy_static::lazy_static;
+#[cfg(feature = "monitoring")]
+use prometheus::{register_int_gauge, IntGauge};
+#[cfg(feature = "monitoring")]
+lazy_static! {
+    static ref BLOCK_NUMBER: IntGauge = register_int_gauge!(
+        "world_state_block_number",
+        "The number of blocks (=height) of the blockchain."
+    )
+    .unwrap();
+    static ref NUM_TRANSACTIONS: IntGauge = register_int_gauge!(
+        "world_state_num_txs",
+        "The aggregated number of transactions in the WorldState."
+    )
+    .unwrap();
+}
+
 /// Struct holding a `Worldstate` and it's previous `Worldstate`, if any.
 #[derive(Debug, Default)]
 pub struct WorldStateReferences {
@@ -170,9 +188,18 @@ impl WorldState {
         // TODO: validate block (peers, signatures, etc)
         self.last_block_hash = block.body.hash();
         self.block_number = block.body.height + 1;
+
+        #[cfg(feature = "monitoring")]
+        {
+            let new_block_number: u64 = self.block_number.into();
+            BLOCK_NUMBER.set(new_block_number as i64);
+            NUM_TRANSACTIONS.add(block.body.transactions.len() as i64);
+        }
+
         for transaction in block.body.transactions {
             self.apply_transaction(transaction);
         }
+
         Ok(())
     }
 

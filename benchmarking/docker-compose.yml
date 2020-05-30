@@ -1,0 +1,30 @@
+version: '3.1'
+
+services:
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus/config:/prometheus
+      - ./prometheus/data/prometheus:/data
+    command:
+      - '--config.file=/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/data'
+    ports:
+      - 9090:9090
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/config/grafana.ini:/etc/grafana/grafana.ini
+      - ./grafana/config/datasources:/etc/grafana/provisioning/datasources/
+      - ./grafana/config/dashboards:/etc/grafana/provisioning/dashboards/
+      - ./grafana/data/grafana:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=prellblock
+      - GF_USERS_ALLOW_SIGN_UP=false

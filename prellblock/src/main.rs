@@ -94,13 +94,25 @@ async fn main() {
 
     let transaction_checker = TransactionChecker::new(world_state);
 
-    let (turi_address, peer_address) = match rpu_account.account_type {
+    let (turi_address, peer_address, monitoring_address) = match rpu_account.account_type {
         AccountType::RPU {
             turi_address,
             peer_address,
-        } => (turi_address, peer_address),
+            monitoring_address,
+        } => (turi_address, peer_address, monitoring_address),
         _ => panic!("Given account {} is no RPU.", peer_id),
     };
+    #[cfg(feature = "monitoring")]
+    {
+        use prellblock::prometheus;
+
+        // start monitoring exporter server in a new thread.
+        tokio::spawn(async move {
+            // FIXME: use TLS for prometheus
+            // let tls_identity = load_identity_from_env(private_config.tls_id).await.unwrap();
+            prometheus::run_server(monitoring_address).await
+        });
+    }
 
     // execute the turi in a new thread
     let turi_task = {

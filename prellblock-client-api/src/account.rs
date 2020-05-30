@@ -90,6 +90,8 @@ pub enum AccountType {
         turi_address: SocketAddr,
         /// The address on which the `PeerInbox` listens for incoming RPU-RPU communication.
         peer_address: SocketAddr,
+        /// The address on which the Prometheus server should listen.
+        monitoring_address: SocketAddr,
     },
     /// An admin that can manage and edit all other accounts.
     Admin,

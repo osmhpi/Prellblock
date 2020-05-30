@@ -21,6 +21,8 @@ pub mod consensus;
 pub mod data_broadcaster;
 pub mod data_storage;
 pub mod peer;
+#[cfg(feature = "monitoring")]
+pub mod prometheus;
 pub mod reader;
 pub mod transaction_checker;
 pub mod turi;

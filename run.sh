@@ -1,5 +1,8 @@
 #!/bin/bash -e
 
+# Cargo watch ignores
+watch_ignores="{benchmarking,logs}"
+
 # Change to right directory.
 folder="$(dirname "$0")"
 cd "$folder"
@@ -54,7 +57,7 @@ fi
 
 export RUST_LOG="$rust_log"
 
-
+echo $watch_ignores
 if [ "$flame" == "1" ]; then
     if [ "$(uname -s)" == "Darwin" ]; then
         cargo build --release --bin "$bin"
@@ -71,8 +74,7 @@ elif [ "$watch" == "1" ]; then
     for c in "$@"; do
         cmd="$cmd '$c'"
     done
-    mkdir -p logs
-    cargo watch -i logs -x "$cmd"
+    cargo watch -i $watch_ignores -x "$cmd"
 else
     exec cargo run $release --bin "$bin" -- "$@"
 fi

@@ -157,6 +157,9 @@ impl State {
             .await
             .remove_all(block.body.transactions.iter());
 
+        #[cfg(feature = "monitoring")]
+        super::super::QUEUE_BACKLOG.set(self.queue.lock().await.len() as i64);
+
         // Applies block.
         self.transaction_applier.apply_block(block).await;
 

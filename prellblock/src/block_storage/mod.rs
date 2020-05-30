@@ -26,6 +26,24 @@ use std::{
 const BLOCKS_TREE_NAME: &[u8] = b"blocks";
 const ACCOUNTS_TREE_NAME: &[u8] = b"accounts";
 
+#[cfg(feature = "monitoring")]
+use lazy_static::lazy_static;
+#[cfg(feature = "monitoring")]
+use prometheus::{register_int_gauge, IntGauge};
+#[cfg(feature = "monitoring")]
+lazy_static! {
+    static ref BLOCK_NUMBER: IntGauge = register_int_gauge!(
+        "block_storage_block_number",
+        "The number of blocks (=height) of the blockchain."
+    )
+    .unwrap();
+    static ref TRANSACTIONS_IN_BLOCK_STORAGE: IntGauge = register_int_gauge!(
+        "block_storage_num_txs",
+        "The aggregated number of transactions in the Block Storage."
+    )
+    .unwrap();
+}
+
 /// A `BlockStorage` provides persistent storage on disk.
 ///
 /// Data is written to disk every 400ms.
@@ -52,6 +70,10 @@ impl BlockStorage {
 
         let database = config.open()?;
         let blocks = database.open_tree(BLOCKS_TREE_NAME)?;
+        #[cfg(feature = "monitoring")]
+        {
+            BLOCK_NUMBER.add(blocks.len() as i64);
+        }
         let accounts = database.open_tree(ACCOUNTS_TREE_NAME)?;
 
         let block_storage = Self {
@@ -120,6 +142,12 @@ impl BlockStorage {
                 | Transaction::CreateAccount(_)
                 | Transaction::DeleteAccount(_) => {}
             }
+        }
+
+        #[cfg(feature = "monitoring")]
+        {
+            TRANSACTIONS_IN_BLOCK_STORAGE.add(block.body.transactions.len() as i64);
+            BLOCK_NUMBER.inc();
         }
 
         Ok(())
@@ -347,6 +375,12 @@ impl BlockStorage {
                     | Transaction::DeleteAccount(_)
                     | Transaction::CreateAccount(_) => {}
                 }
+            }
+
+            #[cfg(feature = "monitoring")]
+            {
+                TRANSACTIONS_IN_BLOCK_STORAGE.sub(block.body.transactions.len() as i64);
+                BLOCK_NUMBER.dec();
             }
 
             Ok(Some(block))
