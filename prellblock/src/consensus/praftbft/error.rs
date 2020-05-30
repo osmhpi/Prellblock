@@ -152,6 +152,14 @@ pub enum Error {
     /// Could not get supermajority.
     #[error(display = "Could not get supermajority.")]
     CouldNotGetSupermajority,
+
+    /// An error occurred while parsing to json.
+    #[error(display = "{}", 0)]
+    SerdeJson(#[error(from)] serde_json::error::Error),
+
+    /// An error occurred while sending an http request.
+    #[error(display = "{}", 0)]
+    Reqwest(#[error(from)] reqwest::Error),
 }
 
 pub(super) trait ErrorVerify {
