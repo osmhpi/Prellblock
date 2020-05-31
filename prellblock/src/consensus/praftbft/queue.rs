@@ -65,7 +65,7 @@ impl<T> Queue<T> {
     ///
     /// **Note:** This needs to scan the whole queue
     /// and therefore has an `O(n)` runtime.
-    pub fn remove(&mut self, item: &T) -> Option<T>
+    pub fn remove(&mut self, item: &T) -> Option<Entry<T>>
     where
         T: Eq,
     {
@@ -73,20 +73,19 @@ impl<T> Queue<T> {
             .iter()
             .position(|entry| entry.item == *item)
             .and_then(|index| self.entries.remove(index))
-            .map(|entry| entry.item)
     }
 
     /// Remove all items in `iter` from the queue.
     ///
     /// **Note:** This needs to scan the whole queue
     /// and therefore has an `O(n * m)` runtime.
-    pub fn remove_all<'a>(&mut self, iter: impl Iterator<Item = &'a T>)
+    ///
+    /// Returns all found entries.
+    pub fn remove_all<'a>(&mut self, iter: impl Iterator<Item = &'a T>) -> Vec<Entry<T>>
     where
         T: Eq + 'a,
     {
-        for item in iter {
-            self.remove(item);
-        }
+        iter.filter_map(move |item| self.remove(item)).collect()
     }
 }
 

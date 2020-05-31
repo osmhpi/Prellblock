@@ -1,4 +1,6 @@
-use super::{message, Core, Error, InvalidTransaction, NotifyMap};
+use super::{
+    message, Core, Error, InvalidTransaction, NotifyMap, QUEUE_BACKLOG, QUEUE_RESIDENCE_TIME,
+};
 use crate::consensus::{Block, BlockHash, BlockNumber, Body, LeaderTerm, SignatureList};
 use pinxit::{PeerId, Signed};
 use prellblock_client_api::Transaction;
@@ -152,13 +154,20 @@ impl State {
         assert_eq!(block.block_number(), self.block_number);
 
         // Remove committed transactions from our queue.
-        self.queue
+        let removed_txs = self
+            .queue
             .lock()
             .await
             .remove_all(block.body.transactions.iter());
 
         #[cfg(feature = "monitoring")]
-        super::super::QUEUE_BACKLOG.set(self.queue.lock().await.len() as i64);
+        {
+            QUEUE_BACKLOG.set(self.queue.lock().await.len() as i64);
+            for removed_tx in removed_txs {
+                let residence_time = removed_tx.inserted().elapsed().as_secs_f64();
+                QUEUE_RESIDENCE_TIME.observe(residence_time);
+            }
+        }
 
         // Applies block.
         self.transaction_applier.apply_block(block).await;

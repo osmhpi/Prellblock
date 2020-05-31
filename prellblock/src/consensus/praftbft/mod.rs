@@ -36,7 +36,7 @@ type InvalidTransaction = (usize, Signed<Transaction>);
 #[cfg(feature = "monitoring")]
 use lazy_static::lazy_static;
 #[cfg(feature = "monitoring")]
-use prometheus::{register_int_gauge, IntGauge};
+use prometheus::{register_histogram, register_int_gauge, Histogram, IntGauge};
 #[cfg(feature = "monitoring")]
 lazy_static! {
     /// Too much backpressure shows overload.
@@ -45,6 +45,13 @@ lazy_static! {
         "Number of transactions being left in the queue."
     )
     .unwrap();
+
+    /// Measure the time a transactions resides in the queue.
+    static ref QUEUE_RESIDENCE_TIME: Histogram = register_histogram!(
+        "praftbft_queue_residence_time",
+        "The time a transaction is in the consensus algorithm's queue until being committed.",
+        vec![0.1, 0.2, 0.3, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 5.0, 10.0,]
+    ).unwrap();
 }
 
 /// See the [paper](https://www.scs.stanford.edu/17au-cs244b/labs/projects/clow_jiang.pdf).

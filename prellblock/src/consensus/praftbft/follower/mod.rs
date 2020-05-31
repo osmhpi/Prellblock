@@ -6,7 +6,8 @@ pub use state::Phase;
 
 use super::{
     message::{consensus_message as message, consensus_response as response},
-    Core, Error, ErrorVerify, InvalidTransaction, NotifyMap, ViewChange,
+    Core, Error, ErrorVerify, InvalidTransaction, NotifyMap, ViewChange, QUEUE_BACKLOG,
+    QUEUE_RESIDENCE_TIME,
 };
 use crate::consensus::{BlockNumber, LeaderTerm};
 use pinxit::PeerId;
