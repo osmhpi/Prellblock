@@ -3,7 +3,11 @@
 use crate::world_state::{WorldState, WorldStateService};
 use err_derive::Error;
 use pinxit::{verify_signed_batch_iter, PeerId, Signed, VerifiedRef};
-use prellblock_client_api::Transaction;
+use prellblock_client_api::{
+    account::{Account, ReadingPermission},
+    Transaction,
+};
+use std::sync::Arc;
 
 /// An error of the `permission_checker` module.
 #[derive(Debug, Error)]
@@ -41,7 +45,7 @@ pub enum PermissionError {
 }
 
 /// A `TransactionChecker` is used to check whether accounts are allowed to carry out transactions.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TransactionChecker {
     world_state: WorldStateService,
 }
@@ -90,6 +94,66 @@ impl TransactionChecker {
         } else {
             Err(PermissionError::AccountNotFound(peer_id.clone()))
         }
+    }
+
+    /// Get an `AcccountChecker` that can be used to verify permissions of a single account.
+    pub fn account_checker(&self, peer_id: &PeerId) -> Result<AccountChecker, PermissionError> {
+        if let Some(account) = self.world_state.get().accounts.get(peer_id) {
+            Ok(AccountChecker {
+                account: account.clone(),
+            })
+        } else {
+            Err(PermissionError::AccountNotFound(peer_id.clone()))
+        }
+    }
+}
+
+/// Filters the Request for permitted sections.
+pub struct AccountChecker {
+    account: Arc<Account>,
+}
+
+impl AccountChecker {
+    /// This checks whether the account is allowed to read any keys of a given `peer_id`.
+    #[must_use]
+    pub fn is_allowed_to_read_any_key(&self, peer_id: &PeerId) -> bool {
+        for reading_permission in &self.account.reading_rights {
+            match reading_permission {
+                ReadingPermission::Whitelist(rights) => {
+                    if rights.accounts.contains(peer_id) {
+                        return true;
+                    }
+                }
+                ReadingPermission::Blacklist(_) => {}
+            }
+        }
+        false
+    }
+
+    /// This checks whether the account is allowed to read from a given `peer_id`'s `key`.
+    #[must_use]
+    pub fn is_allowed_to_read_key(&self, peer_id: &PeerId, key: &str) -> bool {
+        for reading_permission in &self.account.reading_rights {
+            match reading_permission {
+                ReadingPermission::Whitelist(rights) | ReadingPermission::Blacklist(rights) => {
+                    if !rights.accounts.contains(peer_id)
+                        || !rights
+                            .namespace
+                            .iter()
+                            .any(|permission| permission.scope == key)
+                    {
+                        continue;
+                    }
+                }
+            }
+
+            // At this point we know that the rights match the `peer_id` and `key`
+            return match reading_permission {
+                ReadingPermission::Whitelist(_) => true,
+                ReadingPermission::Blacklist(_) => false,
+            };
+        }
+        false
     }
 }
 

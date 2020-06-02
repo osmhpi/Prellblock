@@ -1,6 +1,9 @@
 //! A server for communicating between RPUs.
 
-use crate::{block_storage::BlockStorage, world_state::WorldStateService, BoxError};
+use crate::{
+    block_storage::BlockStorage, transaction_checker::TransactionChecker,
+    world_state::WorldStateService, BoxError,
+};
 use prellblock_client_api::{message, ClientMessage};
 
 type Response<R> = Result<<R as balise::Request<ClientMessage>>::Response, BoxError>;
@@ -10,15 +13,17 @@ type Response<R> = Result<<R as balise::Request<ClientMessage>>::Response, BoxEr
 pub struct Reader {
     block_storage: BlockStorage,
     world_state: WorldStateService,
+    transaction_checker: TransactionChecker,
 }
 
 impl Reader {
     /// Create a new reader instance.
     #[must_use]
-    pub const fn new(block_storage: BlockStorage, world_state: WorldStateService) -> Self {
+    pub fn new(block_storage: BlockStorage, world_state: WorldStateService) -> Self {
         Self {
             block_storage,
-            world_state,
+            world_state: world_state.clone(),
+            transaction_checker: TransactionChecker::new(world_state),
         }
     }
 
@@ -31,6 +36,7 @@ impl Reader {
         peer_ids
             .into_iter()
             .map(|peer_id| {
+                // TODO: `AccountChecker::is_allowed_to_read_any_key`
                 let transactions =
                     self.block_storage
                         .read_transactions(&peer_id, filter.as_deref(), &query)?;
@@ -48,7 +54,12 @@ impl Reader {
         let world_state = self.world_state.get();
         let acccounts = peer_ids
             .iter()
-            .filter_map(|peer_id| world_state.accounts.get(peer_id).cloned())
+            .filter_map(|peer_id| {
+                world_state
+                    .accounts
+                    .get(peer_id)
+                    .map(|account| (**account).clone())
+            })
             .collect();
 
         Ok(acccounts)

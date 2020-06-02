@@ -1,6 +1,7 @@
 //! This module contains basic structures for `Account`s.
 
 use chrono::prelude::*;
+use pinxit::PeerId;
 use serde::{Deserialize, Serialize};
 
 /// `Account` stores data needed for permission checking.
@@ -30,7 +31,7 @@ pub struct Account {
 
     /// The `Account`'s reading rights. (Default `Vec::new()`).
     #[serde(default)]
-    pub reading_rights: Vec<ReadingRight>,
+    pub reading_rights: Vec<ReadingPermission>,
 }
 
 /// Permission fields for a account.
@@ -46,7 +47,7 @@ pub struct Permissions {
     /// Whether the account shall have permissions to write into its namespace.
     pub has_writing_rights: Option<bool>,
     /// Permissions for reading the namespaces of other accounts.
-    pub reading_rights: Option<Vec<ReadingRight>>,
+    pub reading_rights: Option<Vec<ReadingPermission>>,
 }
 
 /// An accounts permission can either be `never` expiring or expiring at a certain date (`AtDate`).
@@ -91,28 +92,26 @@ impl Default for Expiry {
     }
 }
 
-/// The right to read from specific accounts.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReadingRight {
-    /// A black- or whitelist of accounts.
-    accounts: ReadingPermission,
-
-    /// The tree belonging to a account.
-    namespace: ReadingPermission,
-}
-
 /// A `ReadingPermission` can be either a white- or a blacklist.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReadingPermission {
     /// A `Blacklist` of permissions.
-    Blacklist(PermissionList),
+    Blacklist(ReadingRight),
 
     /// A `Whitelist` of permissions.
-    Whitelist(PermissionList),
+    Whitelist(ReadingRight),
 }
 
-type PermissionList = Vec<Permission>;
+/// The right to read from specific accounts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReadingRight {
+    /// A black- or whitelist of accounts.
+    pub accounts: Vec<PeerId>,
+
+    /// The tree belonging to a account.
+    pub namespace: Vec<Permission>,
+}
 
 /// A filter that can select a given scope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

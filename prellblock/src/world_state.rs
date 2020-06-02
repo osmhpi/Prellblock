@@ -163,7 +163,7 @@ impl DerefMut for WritableWorldState {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct WorldState {
     /// Field storing the `Account` `Permissions`.
-    pub accounts: HashMap<PeerId, Account>,
+    pub accounts: HashMap<PeerId, Arc<Account>>,
     /// Field storing the `Peer`s.
     pub peers: Vector<(PeerId, SocketAddr)>,
     /// The number of `Block`s applied to the `WorldState`.
@@ -180,7 +180,12 @@ impl WorldState {
 
         self.accounts = accounts_strings
             .into_iter()
-            .map(|(key, account)| (key.parse().expect("peer_id in accounts.yaml"), account))
+            .map(|(key, account)| {
+                (
+                    key.parse().expect("peer_id in accounts.yaml"),
+                    account.into(),
+                )
+            })
             .collect();
     }
 
@@ -203,7 +208,7 @@ impl WorldState {
         match transaction.unverified() {
             Transaction::KeyValue(_) => {}
             Transaction::UpdateAccount(params) => {
-                if let Some(account) = self.accounts.get_mut(&params.id) {
+                if let Some(account) = self.accounts.get_mut(&params.id).map(Arc::make_mut) {
                     let permissions = params.permissions;
                     if let Some(is_admin) = permissions.is_admin {
                         account.is_admin = is_admin;

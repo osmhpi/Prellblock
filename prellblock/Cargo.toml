@@ -24,7 +24,7 @@ prellblock-client-api = { path = "../prellblock-client-api" }
 pretty_env_logger = "0.4.0"
 rand = "0.7.3"
 rayon = "1.1"
-serde = { version = "1.0.105", features = ["derive"] }
+serde = { version = "1.0.105", features = ["derive", "rc"] }
 serde_yaml = "0.8.11"
 slab = "0.4.2"
 sled = { version = "0.31.0", features = ["compression"] }

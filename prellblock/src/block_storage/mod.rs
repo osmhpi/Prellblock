@@ -158,6 +158,7 @@ impl BlockStorage {
             .keys()
             .map(|key| {
                 let key = key?;
+                // TODO: `AccountChecker::is_allowed_to_read_key`
                 let time_series_name = [peer_id.as_bytes(), &key].join(&0);
                 let transactions = self.read_transactions_inner(&time_series_name, query)?;
                 let key = str::from_utf8(&key).unwrap().into();
