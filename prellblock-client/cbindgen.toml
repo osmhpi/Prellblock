@@ -3,7 +3,7 @@
 # possible values: "C", "C++"
 #
 # default: "C++"
-language = "C++"
+language = "C"
 
 
 
@@ -38,7 +38,7 @@ include_version = true
 
 # An optional namespace to output around the generated bindings
 # default: doesn't emit a namespace
-namespace = "prellblock"
+# namespace = ""
 
 # An optional list of namespaces to output around the generated bindings
 # default: []
@@ -163,7 +163,7 @@ exclude = []
 
 # A prefix to add before the name of every item
 # default: no prefix is added
-# prefix = "CAPI_"
+prefix = "PB_"
 
 # Types of items that we'll generate. If empty, then all types of item are emitted.
 #
@@ -392,7 +392,7 @@ derive_gte = false
 # * "GeckoCase": apply no renaming
 #
 # default: "None"
-# rename_variants = "None"
+rename_variants = "ScreamingSnakeCase"
 
 # Whether an extra "sentinel" enum variant should be added to all generated enums.
 # Firefox uses this for their IPC serialization library.
