@@ -13,6 +13,7 @@ use sled::{Config, Db, Tree};
 use std::{
     collections::HashMap,
     convert::TryInto,
+    fmt::Debug,
     ops::{Bound, RangeBounds},
     str,
     time::{Duration, SystemTime},
@@ -126,26 +127,20 @@ impl BlockStorage {
     /// Read a range of blocks from the store.
     pub fn read<R>(&self, range: R) -> impl DoubleEndedIterator<Item = Result<Block, Error>>
     where
-        R: RangeBounds<BlockNumber> + Clone,
+        R: RangeBounds<BlockNumber> + Debug + Clone,
     {
-        log::trace!(
-            "{:#?}",
-            self.blocks
-                .range(map_range_bound(range.clone(), |v| v.to_be_bytes()))
-                .values()
-                .map(|result| {
-                    let value = result?;
-                    let block = postcard::from_bytes(&value)?;
-                    Ok(block)
-                })
-                .collect::<Vec<Result<Block, Error>>>()
-        );
+        let range_string = if log::log_enabled!(log::Level::Trace) {
+            format!("{:?}", range)
+        } else {
+            String::new()
+        };
         self.blocks
             .range(map_range_bound(range, |v| v.to_be_bytes()))
             .values()
-            .map(|result| {
+            .map(move |result| {
                 let value = result?;
                 let block = postcard::from_bytes(&value)?;
+                log::trace!("Read block from range {}: {:#?}", range_string, block);
                 Ok(block)
             })
     }
