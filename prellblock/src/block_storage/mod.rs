@@ -4,7 +4,10 @@ mod error;
 
 pub use error::Error;
 
-use crate::consensus::{Block, BlockHash, BlockNumber};
+use crate::{
+    consensus::{Block, BlockHash, BlockNumber},
+    transaction_checker::AccountChecker,
+};
 use pinxit::{PeerId, Signature};
 use prellblock_client_api::{
     Filter, Query, ReadTransactionsOfPeer, ReadTransactionsOfSeries, Span, Transaction,
@@ -148,6 +151,7 @@ impl BlockStorage {
     /// Read transactions filtered by a `Filter` and a `Query` from `Blockstorage`.
     pub fn read_transactions(
         &self,
+        account_checker: &AccountChecker,
         peer_id: &PeerId,
         filter: Filter<&str>,
         query: &Query,
@@ -156,13 +160,19 @@ impl BlockStorage {
             .open_tree(peer_id.as_bytes())?
             .range(filter)
             .keys()
-            .map(|key| {
-                let key = key?;
-                // TODO: `AccountChecker::is_allowed_to_read_key`
-                let time_series_name = [peer_id.as_bytes(), &key].join(&0);
-                let transactions = self.read_transactions_inner(&time_series_name, query)?;
-                let key = str::from_utf8(&key).unwrap().into();
-                Ok((key, transactions))
+            .filter_map(|key| {
+                let inner = || {
+                    let key = key?;
+                    let key = str::from_utf8(&key).unwrap();
+                    if !account_checker.is_allowed_to_read_key(peer_id, key) {
+                        return Ok(None);
+                    }
+                    let time_series_name = [peer_id.as_bytes(), key.as_bytes()].join(&0);
+                    let transactions = self.read_transactions_inner(&time_series_name, query)?;
+                    let key = key.into();
+                    Ok(Some((key, transactions)))
+                };
+                inner().transpose()
             })
             .collect()
     }

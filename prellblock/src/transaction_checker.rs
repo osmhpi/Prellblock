@@ -25,6 +25,10 @@ pub enum PermissionError {
     #[error(display = "The account {} is not an RPU.", 0)]
     NotAnRPU(PeerId),
 
+    /// The account is not an admin.
+    #[error(display = "The account {} is not an admin.", 0)]
+    NotAnAdmin(PeerId),
+
     /// The signature could not be verified.
     #[error(display = "{}", 0)]
     InvalidSignature(#[error(from)] pinxit::Error),
@@ -85,35 +89,43 @@ impl TransactionChecker {
 
     /// Verify whether the given `PeerId` is a known RPU.
     pub fn verify_is_rpu(&self, peer_id: &PeerId) -> Result<(), PermissionError> {
-        if let Some(account) = self.world_state.get().accounts.get(peer_id) {
-            if account.is_rpu {
-                Ok(())
-            } else {
-                Err(PermissionError::NotAnRPU(peer_id.clone()))
-            }
+        let account_checker = self.account_checker(peer_id.clone())?;
+        if account_checker.account.is_rpu {
+            Ok(())
         } else {
-            Err(PermissionError::AccountNotFound(peer_id.clone()))
+            Err(PermissionError::NotAnRPU(account_checker.peer_id))
         }
     }
 
     /// Get an `AcccountChecker` that can be used to verify permissions of a single account.
-    pub fn account_checker(&self, peer_id: &PeerId) -> Result<AccountChecker, PermissionError> {
-        if let Some(account) = self.world_state.get().accounts.get(peer_id) {
-            Ok(AccountChecker {
-                account: account.clone(),
-            })
-        } else {
-            Err(PermissionError::AccountNotFound(peer_id.clone()))
-        }
+    pub fn account_checker(&self, peer_id: PeerId) -> Result<AccountChecker, PermissionError> {
+        AccountChecker::new(&self.world_state.get(), peer_id)
     }
 }
 
 /// Filters the Request for permitted sections.
 pub struct AccountChecker {
+    peer_id: PeerId,
     account: Arc<Account>,
 }
 
 impl AccountChecker {
+    fn new(world_state: &WorldState, peer_id: PeerId) -> Result<Self, PermissionError> {
+        if let Some(account) = world_state.accounts.get(&peer_id) {
+            // Return an error if the account is expired.
+            if account.expire_at.is_expired() {
+                Err(PermissionError::AccountExpired(peer_id))
+            } else {
+                Ok(Self {
+                    peer_id,
+                    account: account.clone(),
+                })
+            }
+        } else {
+            Err(PermissionError::AccountNotFound(peer_id))
+        }
+    }
+
     /// This checks whether the account is allowed to read any keys of a given `peer_id`.
     #[must_use]
     pub fn is_allowed_to_read_any_key(&self, peer_id: &PeerId) -> bool {
@@ -154,6 +166,17 @@ impl AccountChecker {
         }
         false
     }
+
+    /// This checks whether the account is allowed to read with admin priviliges.
+    ///
+    /// This is necessary for reading account information.
+    pub fn verify_is_admin(&self) -> Result<(), PermissionError> {
+        if self.account.is_admin {
+            Ok(())
+        } else {
+            Err(PermissionError::NotAnAdmin(self.peer_id.clone()))
+        }
+    }
 }
 
 /// Helps verifying transactions statefully on a virtual `WorldState`.
@@ -171,36 +194,30 @@ impl TransactionCheck {
         &mut self,
         transaction: VerifiedRef<Transaction>,
     ) -> Result<(), PermissionError> {
-        let signer = transaction.signer();
-        if let Some(account) = self.world_state.accounts.get(signer) {
-            // If a account is expired, *all* transactions will be denied.
-            if account.expire_at.is_expired() {
-                return Err(PermissionError::AccountExpired(signer.clone()));
-            }
+        let account_checker = AccountChecker::new(&self.world_state, transaction.signer().clone())?;
 
-            match &*transaction {
-                Transaction::KeyValue { .. } => {
-                    if account.writing_rights {
-                        Ok(())
-                    } else {
-                        Err(PermissionError::WriteDenied(signer.clone()))
-                    }
-                }
-                Transaction::UpdateAccount(params) => {
-                    if account.is_admin {
-                        if self.world_state.accounts.get(&params.id).is_none() {
-                            return Err(PermissionError::AccountNotFound(params.id.clone()));
-                        }
-                        self.world_state
-                            .apply_transaction(transaction.to_owned().into());
-                        Ok(())
-                    } else {
-                        Err(PermissionError::PermissionChangeDenied(signer.clone()))
-                    }
+        match &*transaction {
+            Transaction::KeyValue { .. } => {
+                if account_checker.account.writing_rights {
+                    Ok(())
+                } else {
+                    Err(PermissionError::WriteDenied(account_checker.peer_id))
                 }
             }
-        } else {
-            Err(PermissionError::AccountNotFound(signer.clone()))
+            Transaction::UpdateAccount(params) => {
+                if account_checker.verify_is_admin().is_ok() {
+                    if self.world_state.accounts.get(&params.id).is_none() {
+                        return Err(PermissionError::AccountNotFound(params.id.clone()));
+                    }
+                    self.world_state
+                        .apply_transaction(transaction.to_owned().into());
+                    Ok(())
+                } else {
+                    Err(PermissionError::PermissionChangeDenied(
+                        account_checker.peer_id,
+                    ))
+                }
+            }
         }
     }
 }

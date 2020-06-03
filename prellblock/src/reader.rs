@@ -31,15 +31,29 @@ impl Reader {
         &self,
         params: message::GetValue,
     ) -> Response<message::GetValue> {
-        let message::GetValue(peer_ids, filter, query) = params;
+        let message::GetValue(message) = params;
+        let message = message.verify()?;
 
-        peer_ids
+        let account_checker = self
+            .transaction_checker
+            .account_checker(message.signer().clone())?;
+
+        let message = message.into_inner();
+        let filter = message.filter;
+        let query = message.query;
+
+        #[allow(clippy::filter_map)]
+        message
+            .peer_ids
             .into_iter()
+            .filter(|peer_id| account_checker.is_allowed_to_read_any_key(peer_id))
             .map(|peer_id| {
-                // TODO: `AccountChecker::is_allowed_to_read_any_key`
-                let transactions =
-                    self.block_storage
-                        .read_transactions(&peer_id, filter.as_deref(), &query)?;
+                let transactions = self.block_storage.read_transactions(
+                    &account_checker,
+                    &peer_id,
+                    filter.as_deref(),
+                    &query,
+                )?;
                 Ok((peer_id, transactions))
             })
             .collect()
@@ -49,10 +63,16 @@ impl Reader {
         &self,
         params: message::GetAccount,
     ) -> Response<message::GetAccount> {
-        let message::GetAccount(peer_ids) = params;
+        let message::GetAccount(message) = params;
+        let message = message.verify()?;
+
+        self.transaction_checker
+            .account_checker(message.signer().clone())?
+            .verify_is_admin()?;
 
         let world_state = self.world_state.get();
-        let accounts = peer_ids
+        let accounts = message
+            .peer_ids
             .iter()
             .filter_map(|peer_id| {
                 world_state
@@ -69,9 +89,13 @@ impl Reader {
         &self,
         params: message::GetBlock,
     ) -> Response<message::GetBlock> {
-        let message::GetBlock(filter) = params;
+        let message::GetBlock(message) = params;
+        let message = message.verify()?;
 
-        let blocks: Result<_, _> = self.block_storage.read(filter).collect();
+        let _ = message.signer();
+
+        let message = message.into_inner();
+        let blocks: Result<_, _> = self.block_storage.read(message.filter).collect();
 
         Ok(blocks?)
     }
@@ -80,7 +104,10 @@ impl Reader {
         &self,
         params: message::GetCurrentBlockNumber,
     ) -> Response<message::GetCurrentBlockNumber> {
-        let message::GetCurrentBlockNumber() = params;
+        let message::GetCurrentBlockNumber(message) = params;
+        let message = message.verify()?;
+
+        let _ = message.signer();
 
         let world_state = self.world_state.get();
         let block_number = world_state.block_number;

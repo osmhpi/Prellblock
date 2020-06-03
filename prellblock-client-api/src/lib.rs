@@ -203,23 +203,83 @@ define_api! {
         Execute(Signed<Transaction>) => (),
 
         /// Get the values of the given peers, filtered by a filter and selected by a query.
-        GetValue(Vec<PeerId>, Filter<String>, Query) => ReadTransactions,
+        GetValue(Signed<crate::GetValue>) => ReadTransactions,
 
         /// Get a single account by it's `PeerId`.
         ///
         /// Accounts that are not found will be omitted in the return value.
-        GetAccount(Vec<PeerId>) => Vec<Account>,
+        GetAccount(Signed<crate::GetAccount>) => Vec<Account>,
 
         /// Get a `Block` by it's `BlockNumber`.
-        GetBlock(Filter<BlockNumber>) => Vec<Block>,
+        GetBlock(Signed<crate::GetBlock>) => Vec<Block>,
 
         /// Get the current number of blocks in the blockchain.
-        GetCurrentBlockNumber() => BlockNumber,
+        GetCurrentBlockNumber(Signed<crate::GetCurrentBlockNumber>) => BlockNumber,
     }
 }
 
+/// Get the values of the given peers, filtered by a filter and selected by a query.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetValue {
+    /// A Vector of `PeerId`'s to select the `Accounts` from which to read.
+    pub peer_ids: Vec<PeerId>,
+    /// The filter to select some keys of the namespace.
+    pub filter: Filter<String>,
+    /// The query to selct some values in the given time range.
+    pub query: Query,
+}
+
+/// Get a single account by it's `PeerId`.
+///
+/// Accounts that are not found will be omitted in the return value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetAccount {
+    /// A Vector of `PeerId`'s to select the `Accounts` from which to read.
+    pub peer_ids: Vec<PeerId>,
+}
+
+/// Get a `Block` by it's `BlockNumber`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetBlock {
+    /// The filter to select some blocks.
+    pub filter: Filter<BlockNumber>,
+}
+
+/// Get the current number of blocks in the blockchain.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetCurrentBlockNumber;
+
+#[derive(Serialize)]
+enum ClientMessageSigningData<'a> {
+    Execute(&'a Transaction),
+    GetValue(&'a GetValue),
+    GetAccount(&'a GetAccount),
+    GetBlock(&'a GetBlock),
+    GetCurrentBlockNumber(&'a GetCurrentBlockNumber),
+}
+
+macro_rules! impl_signable {
+    ($($ident:ident => $ty:ty),*) => {$(
+        impl Signable for $ty {
+            type SignableData = Vec<u8>;
+            type Error = postcard::Error;
+            fn signable_data(&self) -> Result<Self::SignableData, Self::Error> {
+                postcard::to_stdvec(&ClientMessageSigningData::$ident(self))
+            }
+        }
+    )*};
+}
+
+impl_signable!(
+    Execute => Transaction,
+    GetValue => GetValue,
+    GetAccount => GetAccount,
+    GetBlock => GetBlock,
+    GetCurrentBlockNumber => GetCurrentBlockNumber
+);
+
 /// A blockchain transaction for prellblock.
-#[newtype_enum(variants = "pub transaction")]
+#[newtype_enum(variants = "transaction")]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Transaction {
     /// Set a `key` to a `value`.
@@ -238,12 +298,4 @@ pub enum Transaction {
         /// The permission fields to update.
         permissions: Permissions,
     },
-}
-
-impl Signable for Transaction {
-    type SignableData = Vec<u8>;
-    type Error = postcard::Error;
-    fn signable_data(&self) -> Result<Self::SignableData, Self::Error> {
-        postcard::to_stdvec(self)
-    }
 }
