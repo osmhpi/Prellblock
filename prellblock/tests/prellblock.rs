@@ -49,7 +49,6 @@ async fn test_prellblock() {
     let reader = Reader::new(block_storage, world_state.clone());
 
     let transaction_checker = TransactionChecker::new(world_state);
-    let transaction_checker = Arc::new(transaction_checker);
 
     let test_identity =
         TlsIdentity::from_pkcs12(include_bytes!("test-identity.pfx"), "prellblock").unwrap();

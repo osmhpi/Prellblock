@@ -20,7 +20,7 @@ pub struct Turi {
     tls_identity: TlsIdentity,
     batcher: Arc<Batcher>,
     reader: Reader,
-    transaction_checker: Arc<TransactionChecker>,
+    transaction_checker: TransactionChecker,
 }
 
 impl Turi {
@@ -32,7 +32,7 @@ impl Turi {
         tls_identity: TlsIdentity,
         batcher: Arc<Batcher>,
         reader: Reader,
-        transaction_checker: Arc<TransactionChecker>,
+        transaction_checker: TransactionChecker,
     ) -> Self {
         Self {
             tls_identity,

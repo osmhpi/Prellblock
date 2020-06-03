@@ -119,7 +119,6 @@ async fn main() {
     let reader = Reader::new(block_storage, world_state.clone());
 
     let transaction_checker = TransactionChecker::new(world_state);
-    let transaction_checker = Arc::new(transaction_checker);
 
     // execute the turi in a new thread
     let turi_task = {

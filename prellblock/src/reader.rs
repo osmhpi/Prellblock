@@ -52,7 +52,7 @@ impl Reader {
         let message::GetAccount(peer_ids) = params;
 
         let world_state = self.world_state.get();
-        let acccounts = peer_ids
+        let accounts = peer_ids
             .iter()
             .filter_map(|peer_id| {
                 world_state
@@ -62,7 +62,7 @@ impl Reader {
             })
             .collect();
 
-        Ok(acccounts)
+        Ok(accounts)
     }
 
     pub(crate) async fn handle_get_block(

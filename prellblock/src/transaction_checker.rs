@@ -118,19 +118,18 @@ impl AccountChecker {
     #[must_use]
     pub fn is_allowed_to_read_any_key(&self, peer_id: &PeerId) -> bool {
         for reading_permission in &self.account.reading_rights {
-            match reading_permission {
-                ReadingPermission::Whitelist(rights) => {
-                    if rights.accounts.contains(peer_id) {
-                        return true;
-                    }
+            if let ReadingPermission::Whitelist(rights) = reading_permission {
+                if rights.accounts.contains(peer_id) {
+                    return true;
                 }
-                ReadingPermission::Blacklist(_) => {}
             }
         }
         false
     }
 
     /// This checks whether the account is allowed to read from a given `peer_id`'s `key`.
+    ///
+    /// A First-Fit algorithm is used to determine the compliance of transactions to its senders permissions.
     #[must_use]
     pub fn is_allowed_to_read_key(&self, peer_id: &PeerId, key: &str) -> bool {
         for reading_permission in &self.account.reading_rights {
@@ -147,7 +146,7 @@ impl AccountChecker {
                 }
             }
 
-            // At this point we know that the rights match the `peer_id` and `key`
+            // At this point we know that the permissions match the `peer_id` and `key`
             return match reading_permission {
                 ReadingPermission::Whitelist(_) => true,
                 ReadingPermission::Blacklist(_) => false,

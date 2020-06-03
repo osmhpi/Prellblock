@@ -16,7 +16,7 @@ pub struct PeerInbox {
     calculator: ArcMut<Calculator>,
     data_storage: Arc<DataStorage>,
     consensus: Arc<Consensus>,
-    transaction_checker: Arc<TransactionChecker>,
+    transaction_checker: TransactionChecker,
 }
 
 impl PeerInbox {
@@ -26,7 +26,7 @@ impl PeerInbox {
         calculator: ArcMut<Calculator>,
         data_storage: Arc<DataStorage>,
         consensus: Arc<Consensus>,
-        transaction_checker: Arc<TransactionChecker>,
+        transaction_checker: TransactionChecker,
     ) -> Self {
         Self {
             calculator,
