@@ -11,8 +11,7 @@ mod cli;
 
 use cli::prelude::*;
 use pinxit::Identity;
-use prellblock_client::Client;
-use prellblock_client_api::account::Permissions;
+use prellblock_client::{account::Permissions, Client};
 use rand::{
     rngs::{OsRng, StdRng},
     seq::SliceRandom,
