@@ -42,8 +42,21 @@ pub struct Pong;
 ///
 /// // fetch the items identified by the values starting from "temperature" (inclusive)
 /// Filter::RangeFrom("temperature");
+///
+/// // ranges can be constructed via some `Into` implementations:
+/// # use std::fmt::Debug;
+/// fn assert_into<T: Eq + Debug>(a: Filter<T>, b: impl Into<Filter<T>>) {
+///     assert_eq!(a, b.into());
+/// }
+///
+/// assert_into(Filter::Exact(42), 42);
+/// assert_into(Filter::Range(0..42), 0..42);
+/// assert_into(Filter::RangeFrom(42), 42..);
+///
+/// // Querying all values *only works with strings*.
+/// assert_into(Filter::RangeFrom(String::new()), ..);
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Filter<T> {
     /// Select one exactly matching value.
     Exact(T),
@@ -51,6 +64,30 @@ pub enum Filter<T> {
     Range(std::ops::Range<T>),
     /// Select an unbound range of values, starting from a given value.
     RangeFrom(T),
+}
+
+impl<T> From<T> for Filter<T> {
+    fn from(v: T) -> Self {
+        Self::Exact(v)
+    }
+}
+
+impl<T> From<std::ops::Range<T>> for Filter<T> {
+    fn from(v: std::ops::Range<T>) -> Self {
+        Self::Range(v)
+    }
+}
+
+impl From<std::ops::RangeFull> for Filter<String> {
+    fn from(_: std::ops::RangeFull) -> Self {
+        Self::RangeFrom(String::new())
+    }
+}
+
+impl<T> From<std::ops::RangeFrom<T>> for Filter<T> {
+    fn from(v: std::ops::RangeFrom<T>) -> Self {
+        Self::RangeFrom(v.start)
+    }
 }
 
 #[allow(clippy::use_self)]
@@ -101,64 +138,82 @@ pub enum Span {
     Duration(Duration),
 }
 
-/// A `Query` describes what kind of value will be retreived.
+impl From<usize> for Span {
+    fn from(v: usize) -> Self {
+        Self::Count(v)
+    }
+}
+impl From<SystemTime> for Span {
+    fn from(v: SystemTime) -> Self {
+        Self::Time(v)
+    }
+}
+impl From<Duration> for Span {
+    fn from(v: Duration) -> Self {
+        Self::Duration(v)
+    }
+}
+
 ///
 /// # Examples
 /// ```
-/// use chrono::{DateTime, Utc};
 /// use prellblock_client_api::{Query, Span};
-/// use std::time::Duration;
+/// use std::time::{Duration, SystemTime};
 ///
-/// let timestamp_8_am = DateTime::parse_from_rfc3339("2020-05-22T08:00:00Z").unwrap();
-/// let timestamp_10_am = DateTime::parse_from_rfc3339("2020-05-22T10:00:00Z").unwrap();
+/// fn timestamp(s: &str) -> SystemTime {
+///     chrono::DateTime::parse_from_rfc3339(s).unwrap().into()
+/// }
+///
+/// let timestamp_8_am = timestamp("2020-05-22T08:00:00Z");
+/// let timestamp_10_am = timestamp("2020-05-22T10:00:00Z");
 ///
 /// // fetch the last 1000 values
 /// Query::Range {
-///     span: Span::Count(1000),
-///     end: Span::Count(0),
+///     span: 1000.into(),
+///     end: 0.into(),
 ///     skip: None,
 /// };
 ///
 /// // fetch every other value 1000 times going backward from the current value.
 /// Query::Range {
-///     span: Span::Count(1000),
-///     end: Span::Count(0),
-///     skip: Some(Span::Count(1)),
+///     span: 1000.into(),
+///     end: 0.into(),
+///     skip: Some(1.into()),
 /// };
 ///
 /// // fetch all values between T-60 and T-20.
 /// Query::Range {
-///     span: Span::Duration(Duration::from_secs(40 * 60)),
-///     end: Span::Duration(Duration::from_secs(20 * 60)),
+///     span: Duration::from_secs(40 * 60).into(),
+///     end: Duration::from_secs(20 * 60).into(),
 ///     skip: None,
 /// };
 ///
 /// // fetch all new values after 10 AM.
 /// Query::Range {
-///     span: Span::Time(timestamp_10_am.into()),
-///     end: Span::Count(0),
+///     span: timestamp_10_am.into(),
+///     end: 0.into(),
 ///     skip: None,
 /// };
 ///
 /// // fetch all values between 8 AM and 10 AM.
 /// Query::Range {
-///     span: Span::Time(timestamp_8_am.into()),
-///     end: Span::Time(timestamp_10_am.into()),
+///     span: timestamp_8_am.into(),
+///     end: timestamp_10_am.into(),
 ///     skip: None,
 /// };
 ///
 /// // fetch a value every minute between 8 AM and 10 AM.
 /// Query::Range {
-///     span: Span::Time(timestamp_8_am.into()),
-///     end: Span::Time(timestamp_10_am.into()),
-///     skip: Some(Span::Duration(Duration::from_secs(60))),
+///     span: timestamp_8_am.into(),
+///     end: timestamp_10_am.into(),
+///     skip: Some(Duration::from_secs(60).into()),
 /// };
 ///
 /// // fetch 100 values before 8 AM with 5 minutes intervals.
 /// Query::Range {
-///     span: Span::Count(100),
-///     end: Span::Time(timestamp_8_am.into()),
-///     skip: Some(Span::Duration(Duration::from_secs(5 * 60))),
+///     span: 100.into(),
+///     end: timestamp_8_am.into(),
+///     skip: Some(Duration::from_secs(5 * 60).into()),
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -183,13 +238,13 @@ pub enum Query {
 }
 
 /// The `Transaction`s in response to a `GetValue` request of a single data series of a peer.
-pub type ReadTransactionsOfSeries = HashMap<SystemTime, (Vec<u8>, Signature)>;
+pub type ReadValuesOfSeries = HashMap<SystemTime, (Vec<u8>, Signature)>;
 
 /// The `Transaction`s in response to a `GetValue` request of a single peer.
-pub type ReadTransactionsOfPeer = HashMap<String, ReadTransactionsOfSeries>;
+pub type ReadValuesOfPeer = HashMap<String, ReadValuesOfSeries>;
 
 /// The `Transaction`s in response to a `GetValue` request of all peers.
-pub type ReadTransactions = HashMap<PeerId, ReadTransactionsOfPeer>;
+pub type ReadValues = HashMap<PeerId, ReadValuesOfPeer>;
 
 define_api! {
     /// The message API module for communication between RPUs.
@@ -203,7 +258,7 @@ define_api! {
         Execute(Signed<Transaction>) => (),
 
         /// Get the values of the given peers, filtered by a filter and selected by a query.
-        GetValue(Signed<crate::GetValue>) => ReadTransactions,
+        GetValue(Signed<crate::GetValue>) => ReadValues,
 
         /// Get a single account by it's `PeerId`.
         ///

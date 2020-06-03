@@ -11,6 +11,12 @@ use std::{
 pub struct BlockNumber(u64);
 
 impl BlockNumber {
+    /// Create a new block number.
+    #[must_use]
+    pub const fn new(v: u64) -> Self {
+        Self(v)
+    }
+
     /// Return the stored integer as a byte array.
     #[must_use]
     pub fn to_be_bytes(self) -> impl AsRef<[u8]> {

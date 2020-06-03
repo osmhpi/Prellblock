@@ -10,7 +10,7 @@ use crate::{
 };
 use pinxit::{PeerId, Signature};
 use prellblock_client_api::{
-    Filter, Query, ReadTransactionsOfPeer, ReadTransactionsOfSeries, Span, Transaction,
+    Filter, Query, ReadValuesOfPeer, ReadValuesOfSeries, Span, Transaction,
 };
 use sled::{Config, Db, Tree};
 use std::{
@@ -155,7 +155,7 @@ impl BlockStorage {
         peer_id: &PeerId,
         filter: Filter<&str>,
         query: &Query,
-    ) -> Result<ReadTransactionsOfPeer, Error> {
+    ) -> Result<ReadValuesOfPeer, Error> {
         self.database
             .open_tree(peer_id.as_bytes())?
             .range(filter)
@@ -182,7 +182,7 @@ impl BlockStorage {
         &self,
         time_series_name: &[u8],
         query: &Query,
-    ) -> Result<ReadTransactionsOfSeries, Error> {
+    ) -> Result<ReadValuesOfSeries, Error> {
         let mut transactions = HashMap::new();
 
         match query {
