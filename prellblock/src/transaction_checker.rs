@@ -46,6 +46,10 @@ pub enum PermissionError {
         0
     )]
     AccountExpired(PeerId),
+
+    /// The account does not have the right 'can_read_blocks'.
+    #[error(display = "The account {} is not an allowed to read the block.", 0)]
+    CannotReadBlocks(PeerId),
 }
 
 /// A `TransactionChecker` is used to check whether accounts are allowed to carry out transactions.
@@ -85,16 +89,6 @@ impl TransactionChecker {
             check.verify_permissions_and_apply(tx)?;
         }
         Ok(())
-    }
-
-    /// Verify whether the given `PeerId` is a known RPU.
-    pub fn verify_is_rpu(&self, peer_id: &PeerId) -> Result<(), PermissionError> {
-        let account_checker = self.account_checker(peer_id.clone())?;
-        if account_checker.account.is_rpu {
-            Ok(())
-        } else {
-            Err(PermissionError::NotAnRPU(account_checker.peer_id))
-        }
     }
 
     /// Get an `AcccountChecker` that can be used to verify permissions of a single account.
@@ -175,6 +169,23 @@ impl AccountChecker {
             Ok(())
         } else {
             Err(PermissionError::NotAnAdmin(self.peer_id.clone()))
+        }
+    }
+    /// Verify whether the accoount is a known RPU.
+    pub fn verify_is_rpu(&self) -> Result<(), PermissionError> {
+        if self.account.is_rpu {
+            Ok(())
+        } else {
+            Err(PermissionError::NotAnRPU(self.peer_id.clone()))
+        }
+    }
+
+    /// Verify whether the accoount is allowed to read blocks.
+    pub fn verify_can_read_blocks(&self) -> Result<(), PermissionError> {
+        if self.account.can_read_blocks {
+            Ok(())
+        } else {
+            Err(PermissionError::CannotReadBlocks(self.peer_id.clone()))
         }
     }
 }

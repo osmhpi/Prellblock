@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 /// `Account` stores data needed for permission checking.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Account {
     /// The `Account`'s name.
     pub name: String,
@@ -19,6 +20,10 @@ pub struct Account {
     /// Whether the `Account`'s is an rpu. (Default `false`).
     #[serde(default)]
     pub is_rpu: bool,
+
+    /// Whether the `Account`'s can read entire blocks. (Default `false`).
+    #[serde(default)]
+    pub can_read_blocks: bool,
 
     /// The `Account`'s expiring date. (Default `Expiry::Never`).
     #[serde(default)]
@@ -42,6 +47,8 @@ pub struct Permissions {
     pub is_admin: Option<bool>,
     /// Whether the account shall be a RPU.
     pub is_rpu: Option<bool>,
+    /// Whether the account can read entire Blocks.
+    pub can_read_blocks: Option<bool>,
     /// Expiry of the account.
     pub expire_at: Option<Expiry>,
     /// Whether the account shall have permissions to write into its namespace.

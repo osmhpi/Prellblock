@@ -216,6 +216,9 @@ impl WorldState {
                     if let Some(is_rpu) = permissions.is_rpu {
                         account.is_rpu = is_rpu;
                     }
+                    if let Some(can_read_blocks) = permissions.can_read_blocks {
+                        account.can_read_blocks = can_read_blocks;
+                    }
                     if let Some(expire_at) = permissions.expire_at {
                         account.expire_at = expire_at;
                     }

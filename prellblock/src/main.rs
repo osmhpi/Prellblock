@@ -94,6 +94,7 @@ async fn main() {
                 name: rpu_config.name.clone(),
                 is_rpu: true,
                 is_admin: false,
+                can_read_blocks: false,
                 expire_at: Expiry::Never,
                 writing_rights: false,
                 reading_rights: Vec::new(),

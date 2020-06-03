@@ -109,7 +109,10 @@ impl PRaftBFT {
         let peer_id = message.signer().clone();
 
         // Only RPUs are allowed.
-        self.core.transaction_checker.verify_is_rpu(&peer_id)?;
+        self.core
+            .transaction_checker
+            .account_checker(peer_id.clone())?
+            .verify_is_rpu()?;
 
         let signature = message.signature().clone();
         let message = message.verify()?;

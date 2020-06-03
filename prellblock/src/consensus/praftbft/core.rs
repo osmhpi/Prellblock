@@ -74,7 +74,9 @@ impl Core {
             peer_id.verify(&message, signature)?;
 
             // Also check whether the signer is a known RPU
-            self.transaction_checker.verify_is_rpu(peer_id)?;
+            self.transaction_checker
+                .account_checker(peer_id.clone())?
+                .verify_is_rpu()?;
         }
 
         Ok(())

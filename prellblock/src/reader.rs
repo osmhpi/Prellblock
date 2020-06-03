@@ -92,7 +92,9 @@ impl Reader {
         let message::GetBlock(message) = params;
         let message = message.verify()?;
 
-        let _ = message.signer();
+        self.transaction_checker
+            .account_checker(message.signer().clone())?
+            .verify_can_read_blocks()?;
 
         let message = message.into_inner();
         let blocks: Result<_, _> = self.block_storage.read(message.filter).collect();
@@ -100,6 +102,8 @@ impl Reader {
         Ok(blocks?)
     }
 
+    /// The function will return the current blocknumber,
+    /// as long as the issuer has a valid account.
     pub(crate) async fn handle_get_current_block_number(
         &self,
         params: message::GetCurrentBlockNumber,
@@ -107,7 +111,9 @@ impl Reader {
         let message::GetCurrentBlockNumber(message) = params;
         let message = message.verify()?;
 
-        let _ = message.signer();
+        // The sender needs to have a valid account.
+        self.transaction_checker
+            .account_checker(message.signer().clone())?;
 
         let world_state = self.world_state.get();
         let block_number = world_state.block_number;
