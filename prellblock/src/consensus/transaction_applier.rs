@@ -5,6 +5,7 @@ use crate::{block_storage::BlockStorage, world_state::WorldStateService};
 use http::StatusCode;
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize)]
 struct KeyValue {
@@ -37,7 +38,7 @@ impl TransactionApplier {
         self.apply_to_worldstate(block.clone()).await;
         // export Block using HTTP POST request
         // #[cfg(thingsboard)]
-        self.post_block(block).await;
+        let _ = self.post_block(block).await;
     }
 
     /// Applies a given block to the `BlockStorage`.
@@ -65,20 +66,19 @@ impl TransactionApplier {
         //     .collect();
         let mut values = Vec::new();
         for transaction in &block.body.transactions {
-            let (key, value): (String, String) = match transaction.unverified_ref() {
+            match transaction.unverified_ref() {
                 Transaction::KeyValue(params) => {
-                    let bacon: [u8; 4] = params.value.as_slice();
-                    u32::from_be_bytes(bacon).to_string();
-                    (
-                    params.key.clone(),
-                    ,foo
-                )},
-                Transaction::UpdateAccount(params) => (
-                    stringify!(params.id).into(),
-                    stringify!(params.permissions).into(),
-                ),
-            };
-            values.push(KeyValue { key, value });
+                    let key = format!("{}-{}", transaction.signer(), params.key);
+                    // let mut value = [0; 4];
+                    // value.copy_from_slice(&params.value[0..4]);
+                    let value: String = postcard::from_bytes(&params.value).unwrap();
+                    // let value = u32::from_le_bytes(value);
+                    let mut key_value = HashMap::new();
+                    key_value.insert(key, value);
+                    values.push(key_value);
+                }
+                Transaction::UpdateAccount(params) => {}
+            }
         }
         let values = serde_json::to_string(&values)?;
 
