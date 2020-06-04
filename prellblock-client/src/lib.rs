@@ -6,4 +6,4 @@
 mod client;
 
 pub use client::Client;
-pub use prellblock_client_api::{account, consensus, Filter, Query};
+pub use prellblock_client_api::{account, consensus, Filter, Query, Span};

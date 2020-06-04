@@ -11,8 +11,8 @@ edition = "2018"
 
 [dependencies]
 balise = { path= "../balise", features = ["client", "tls"] }
-chrono = { version = "0.4.11", features = ["serde"] }
 hex = "0.4.2"
+humantime = "2.0.0"
 log = "0.4.8"
 newtype-enum = "0.1.0"
 pinxit = { path = "../pinxit" }

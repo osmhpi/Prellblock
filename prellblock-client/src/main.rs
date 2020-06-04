@@ -10,14 +10,13 @@
 mod cli;
 
 use cli::prelude::*;
-use pinxit::Identity;
-use prellblock_client::{account::Permissions, Client};
+use prellblock_client::{account::Permissions, Client, Query};
 use rand::{
     rngs::{OsRng, StdRng},
     seq::SliceRandom,
     thread_rng, RngCore, SeedableRng,
 };
-use std::{fs, str, time::Instant};
+use std::{fs, net::SocketAddr, str, time::Instant};
 use structopt::StructOpt;
 
 #[tokio::main]
@@ -32,7 +31,34 @@ async fn main() {
         Cmd::Set(cmd) => main_set(cmd).await,
         Cmd::Benchmark(cmd) => main_benchmark(cmd).await,
         Cmd::UpdateAccount(cmd) => main_update_account(cmd).await,
+        Cmd::GetValue(cmd) => main_get_value(cmd).await,
+        Cmd::GetAccount(cmd) => main_get_account(cmd).await,
+        Cmd::GetBlock(cmd) => main_get_block(cmd).await,
+        Cmd::CurrentBlockNumber => main_current_block_number().await,
     }
+}
+
+fn create_client(turi_address: SocketAddr, identity: &str) -> Client {
+    let identity = identity.parse().unwrap();
+    Client::new(turi_address, identity)
+}
+
+fn writer_client(turi_address: SocketAddr) -> Client {
+    create_client(
+        turi_address,
+        "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc",
+    )
+}
+
+fn reader_client() -> Client {
+    let mut rng = thread_rng();
+    let turi_address = Config::load().rpu.choose(&mut rng).unwrap().turi_address;
+
+    // matching peerid is: cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc
+    create_client(
+        turi_address,
+        "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256",
+    )
 }
 
 async fn main_set(cmd: cmd::Set) {
@@ -40,13 +66,9 @@ async fn main_set(cmd: cmd::Set) {
 
     let mut rng = thread_rng();
     let turi_address = Config::load().rpu.choose(&mut rng).unwrap().turi_address;
-    // execute the test client
-    let identity = "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc"
-        .parse()
-        .unwrap();
-    let mut client = Client::new(turi_address, identity);
 
-    match client.send_key_value(key, value).await {
+    // execute the test client
+    match writer_client(turi_address).send_key_value(key, value).await {
         Err(err) => log::error!("Failed to send transaction: {}", err),
         Ok(()) => log::debug!("Transaction ok!"),
     }
@@ -73,10 +95,7 @@ async fn main_benchmark(cmd: cmd::Benchmark) {
         let key = key.clone();
         worker_handles.push(tokio::spawn(async move {
             let mut rng = StdRng::from_rng(OsRng {}).unwrap();
-            let identity = "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc"
-                .parse()
-                .unwrap();
-            let mut client = Client::new(turi_address, identity);
+            let mut client = writer_client(turi_address);
 
             let start = Instant::now();
             let half_size = (size + 1) / 2;
@@ -126,16 +145,6 @@ async fn main_update_account(cmd: cmd::UpdateAccount) {
         permission_file,
     } = cmd;
 
-    let mut rng = thread_rng();
-    let turi_address = Config::load().rpu.choose(&mut rng).unwrap().turi_address;
-
-    // matching peerid is: cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc
-    let identity: Identity = "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256"
-        .parse()
-        .unwrap();
-
-    let mut client = Client::new(turi_address, identity);
-
     // TestCLI: 256cdb0197402705f96d39eab7dd3d47a39cb75673a58852d83f666973d80e01
     let id = id.parse().expect("Invalid account id given");
 
@@ -145,8 +154,93 @@ async fn main_update_account(cmd: cmd::UpdateAccount) {
     let permissions: Permissions =
         serde_yaml::from_str(&permission_file_content).expect("Invalid permission file content");
 
-    match client.update_account(id, permissions).await {
+    match reader_client().update_account(id, permissions).await {
         Err(err) => log::error!("Failed to send transaction: {}", err),
         Ok(()) => log::debug!("Transaction ok!"),
+    }
+}
+
+async fn main_get_value(cmd: cmd::GetValue) {
+    let cmd::GetValue {
+        peer_id,
+        filter,
+        span,
+        end,
+        skip,
+    } = cmd;
+
+    let query = Query::Range {
+        span: span.0,
+        end: end.0,
+        skip: skip.map(|skip| skip.0),
+    };
+
+    match reader_client()
+        .query_values(vec![peer_id], filter.0, query)
+        .await
+    {
+        Ok(values) => {
+            if values.is_empty() {
+                log::warn!("No values retreived.");
+            }
+
+            for (peer_id, values_of_peer) in values {
+                if values_of_peer.is_empty() {
+                    log::warn!("No values for peer {} retreived.", peer_id);
+                } else {
+                    log::info!("The retrieved values of peer {} are:", peer_id);
+                }
+                for (key, values_by_key) in values_of_peer {
+                    if values_by_key.is_empty() {
+                        log::warn!("No values for key {:?} retreived.", key);
+                    } else {
+                        log::info!("  Key {:?}:", key);
+                    }
+                    for (timestamp, value) in values_by_key {
+                        log::info!(
+                            "    {}: {:?}",
+                            humantime::format_rfc3339_millis(timestamp),
+                            value
+                        );
+                    }
+                }
+            }
+        }
+        Err(err) => log::error!("Failed to retrieve values: {}", err),
+    }
+}
+
+async fn main_get_account(cmd: cmd::GetAccount) {
+    let cmd::GetAccount { peer_ids } = cmd;
+
+    match reader_client().query_account(peer_ids).await {
+        Ok(accounts) => {
+            log::info!("The retrieved accounts are:");
+            for account in accounts {
+                log::info!("{:#?}", account);
+            }
+        }
+        Err(err) => log::error!("Failed to retrieve accounts: {}", err),
+    }
+}
+
+async fn main_get_block(cmd: cmd::GetBlock) {
+    let cmd::GetBlock { filter } = cmd;
+
+    match reader_client().query_block(filter.0).await {
+        Ok(block_vec) => {
+            log::info!("The retrieved blocks are:");
+            for block in block_vec {
+                log::info!("{:#?}", block);
+            }
+        }
+        Err(err) => log::error!("Failed to retrieve blocks: {}", err),
+    }
+}
+
+async fn main_current_block_number() {
+    match reader_client().current_block_number().await {
+        Err(err) => log::error!("Failed to retrieve current block number: {}", err),
+        Ok(block_number) => log::info!("The current block number is: {:?}.", block_number),
     }
 }
