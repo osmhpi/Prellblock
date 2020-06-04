@@ -1,5 +1,4 @@
-is_admin: true
-is_rpu: false
+type: admin
 expire_at: #never
   at_date: 2020-06-15T10:04:59.300878700Z
 has_writing_rights: false

@@ -23,7 +23,7 @@ use prellblock::{
     turi::Turi,
     world_state::{Account, WorldStateService},
 };
-use prellblock_client_api::account::Expiry;
+use prellblock_client_api::account::{AccountType, Expiry};
 use serde::Deserialize;
 use std::{env, fs, io, net::SocketAddr, sync::Arc};
 use structopt::StructOpt;
@@ -92,9 +92,7 @@ async fn main() {
             peer_id,
             Account {
                 name: rpu_config.name.clone(),
-                is_rpu: true,
-                is_admin: false,
-                can_read_blocks: false,
+                account_type: AccountType::RPU,
                 expire_at: Expiry::Never,
                 writing_rights: false,
                 reading_rights: Vec::new(),

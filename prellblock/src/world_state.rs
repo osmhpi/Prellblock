@@ -210,14 +210,8 @@ impl WorldState {
             Transaction::UpdateAccount(params) => {
                 if let Some(account) = self.accounts.get_mut(&params.id).map(Arc::make_mut) {
                     let permissions = params.permissions;
-                    if let Some(is_admin) = permissions.is_admin {
-                        account.is_admin = is_admin;
-                    }
-                    if let Some(is_rpu) = permissions.is_rpu {
-                        account.is_rpu = is_rpu;
-                    }
-                    if let Some(can_read_blocks) = permissions.can_read_blocks {
-                        account.can_read_blocks = can_read_blocks;
+                    if let Some(account_type) = permissions.account_type {
+                        account.account_type = account_type;
                     }
                     if let Some(expire_at) = permissions.expire_at {
                         account.expire_at = expire_at;

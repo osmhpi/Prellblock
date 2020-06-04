@@ -6,24 +6,13 @@ use serde::{Deserialize, Serialize};
 
 /// `Account` stores data needed for permission checking.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct Account {
     /// The `Account`'s name.
     pub name: String,
 
-    /// Determines whether the account is an admin. (Default `false`).
-    ///
-    /// Being admin enables to add / remove other accounts and modify permissions.
-    #[serde(default)]
-    pub is_admin: bool,
-
-    /// Whether the `Account`'s is an rpu. (Default `false`).
-    #[serde(default)]
-    pub is_rpu: bool,
-
-    /// Whether the `Account`'s can read entire blocks. (Default `false`).
-    #[serde(default)]
-    pub can_read_blocks: bool,
+    /// The account type. (Default `AccountType::Normal`)
+    #[serde(default, rename = "type")]
+    pub account_type: AccountType,
 
     /// The `Account`'s expiring date. (Default `Expiry::Never`).
     #[serde(default)]
@@ -43,18 +32,37 @@ pub struct Account {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Permissions {
-    /// Whether the account shall be an admin.
-    pub is_admin: Option<bool>,
-    /// Whether the account shall be a RPU.
-    pub is_rpu: Option<bool>,
-    /// Whether the account can read entire Blocks.
-    pub can_read_blocks: Option<bool>,
+    /// The account type.
+    #[serde(rename = "type")]
+    pub account_type: Option<AccountType>,
     /// Expiry of the account.
     pub expire_at: Option<Expiry>,
     /// Whether the account shall have permissions to write into its namespace.
     pub has_writing_rights: Option<bool>,
     /// Permissions for reading the namespaces of other accounts.
     pub reading_rights: Option<Vec<ReadingPermission>>,
+}
+
+/// The type of an account.
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[allow(clippy::module_name_repetitions)]
+#[serde(rename_all = "snake_case")]
+pub enum AccountType {
+    /// A normal accoount with no special privileges.
+    Normal,
+    /// An acccount that can read whole blocks and therefore read all values.
+    BlockReader,
+    /// A RPU that can participate in the consesus.
+    #[serde(rename = "rpu")]
+    RPU,
+    /// An admin that can manage and edit all other accounts.
+    Admin,
+}
+
+impl Default for AccountType {
+    fn default() -> Self {
+        Self::Normal
+    }
 }
 
 /// An accounts permission can either be `never` expiring or expiring at a certain date (`AtDate`).

@@ -4,7 +4,7 @@ use crate::world_state::{WorldState, WorldStateService};
 use err_derive::Error;
 use pinxit::{verify_signed_batch_iter, PeerId, Signed, VerifiedRef};
 use prellblock_client_api::{
-    account::{Account, ReadingPermission},
+    account::{Account, AccountType, ReadingPermission},
     Transaction,
 };
 use std::sync::Arc;
@@ -33,22 +33,12 @@ pub enum PermissionError {
     #[error(display = "{}", 0)]
     InvalidSignature(#[error(from)] pinxit::Error),
 
-    /// The account *setting* the permissions is not permitted to do so.
-    #[error(
-        display = "The account {} is no permitted to change permissions of other accounts.",
-        0
-    )]
-    PermissionChangeDenied(PeerId),
-
     /// The account's expiry date has passed.
-    #[error(
-        display = "The account {} has expired. All transaction from this account will be denied.",
-        0
-    )]
+    #[error(display = "The account {} has expired.", 0)]
     AccountExpired(PeerId),
 
-    /// The account does not have the right 'can_read_blocks'.
-    #[error(display = "The account {} is not an allowed to read the block.", 0)]
+    /// The account does not have the right read blocks.
+    #[error(display = "The account {} is not an allowed to read blocks.", 0)]
     CannotReadBlocks(PeerId),
 }
 
@@ -97,7 +87,7 @@ impl TransactionChecker {
     }
 }
 
-/// Filters the Request for permitted sections.
+/// Checks account for data access permissions.
 pub struct AccountChecker {
     peer_id: PeerId,
     account: Arc<Account>,
@@ -165,27 +155,27 @@ impl AccountChecker {
     ///
     /// This is necessary for reading account information.
     pub fn verify_is_admin(&self) -> Result<(), PermissionError> {
-        if self.account.is_admin {
+        if self.account.account_type == AccountType::Admin {
             Ok(())
         } else {
             Err(PermissionError::NotAnAdmin(self.peer_id.clone()))
         }
     }
+
     /// Verify whether the accoount is a known RPU.
     pub fn verify_is_rpu(&self) -> Result<(), PermissionError> {
-        if self.account.is_rpu {
+        if self.account.account_type == AccountType::RPU {
             Ok(())
         } else {
             Err(PermissionError::NotAnRPU(self.peer_id.clone()))
         }
     }
 
-    /// Verify whether the accoount is allowed to read blocks.
+    /// Verify whether the account is allowed to read blocks.
     pub fn verify_can_read_blocks(&self) -> Result<(), PermissionError> {
-        if self.account.can_read_blocks {
-            Ok(())
-        } else {
-            Err(PermissionError::CannotReadBlocks(self.peer_id.clone()))
+        match self.account.account_type {
+            AccountType::BlockReader | AccountType::RPU | AccountType::Admin => Ok(()),
+            AccountType::Normal => Err(PermissionError::CannotReadBlocks(self.peer_id.clone())),
         }
     }
 }
@@ -216,18 +206,13 @@ impl TransactionCheck {
                 }
             }
             Transaction::UpdateAccount(params) => {
-                if account_checker.verify_is_admin().is_ok() {
-                    if self.world_state.accounts.get(&params.id).is_none() {
-                        return Err(PermissionError::AccountNotFound(params.id.clone()));
-                    }
-                    self.world_state
-                        .apply_transaction(transaction.to_owned().into());
-                    Ok(())
-                } else {
-                    Err(PermissionError::PermissionChangeDenied(
-                        account_checker.peer_id,
-                    ))
+                account_checker.verify_is_admin()?;
+                if self.world_state.accounts.get(&params.id).is_none() {
+                    return Err(PermissionError::AccountNotFound(params.id.clone()));
                 }
+                self.world_state
+                    .apply_transaction(transaction.to_owned().into());
+                Ok(())
             }
         }
     }
