@@ -342,8 +342,8 @@ fn map_bound<T, U>(bound: Bound<T>, f: impl FnOnce(T) -> U) -> Bound<U> {
 #[allow(clippy::cast_possible_truncation)]
 fn system_time_to_bytes(time: SystemTime) -> impl AsRef<[u8]> {
     match time.duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(duration) => duration.as_millis() as i64,
-        Err(err) => -(err.duration().as_millis() as i64),
+        Ok(duration) => duration.as_nanos() as i64,
+        Err(err) => -(err.duration().as_nanos() as i64),
     }
     .to_be_bytes()
 }
@@ -352,10 +352,10 @@ fn system_time_to_bytes(time: SystemTime) -> impl AsRef<[u8]> {
 fn system_time_from_bytes(bytes: &[u8]) -> SystemTime {
     let time = i64::from_be_bytes(bytes.try_into().unwrap());
     if time >= 0 {
-        let duration = Duration::from_millis(time as u64);
+        let duration = Duration::from_nanos(time as u64);
         SystemTime::UNIX_EPOCH + duration
     } else {
-        let duration = Duration::from_millis((-(time + 1)) as u64 + 1);
+        let duration = Duration::from_nanos((-(time + 1)) as u64 + 1);
         SystemTime::UNIX_EPOCH - duration
     }
 }

@@ -18,6 +18,8 @@ pub enum Cmd {
     #[structopt(name = "update")]
     UpdateAccount(cmd::UpdateAccount),
     /// Get values from the blockchain.
+    ///
+    /// Specifying only a filter returns the last recorded value.
     #[structopt(name = "get_value")]
     GetValue(cmd::GetValue),
     /// Get accounts from the blockchain.
@@ -26,7 +28,7 @@ pub enum Cmd {
     /// Get blocks from the blockchain.
     #[structopt(name = "get_block")]
     GetBlock(cmd::GetBlock),
-    /// Get the current block number.
+    /// Get the current block number (that is going to be committed).
     #[structopt(name = "current_block_number")]
     CurrentBlockNumber,
 }
@@ -80,19 +82,28 @@ pub mod cmd {
         /// A filter to select keys.
         pub filter: ParseFilter<String>,
         /// The span of values to fetch.
+        ///
+        /// Valid examples are: 10 (fetch 10 values), 200ms (200ms worth of data), 200s (200s worth of data),
+        /// 2020-01-01T00:00:00 (all values after this date).
         #[structopt(default_value = "1")]
         pub span: ParseSpan,
-        /// The last value to fatch.
+        /// The last value to fetch.
+        ///
+        /// Valid examples are: 2 (skip the last 2 values), 200s (skip the last 200s),
+        /// 2020-01-01T00:00:00 (only values before 2020-01-01).
         #[structopt(default_value = "0")]
         pub end: ParseSpan,
         /// The span of elements to skip between each fetched value.
+        ///
+        /// Valid examples are: 1 (skip every second value), 200ms (always skip 200ms).
+        /// Dates won't be accepted.
         pub skip: Option<ParseSpan>,
     }
 
     /// Update the permissions for a given account.
     #[derive(StructOpt, Debug)]
     pub struct GetAccount {
-        /// The ids of the accounts to fetch.
+        /// The IDs of the accounts to fetch.
         pub peer_ids: Vec<PeerId>,
     }
 
@@ -100,6 +111,9 @@ pub mod cmd {
     #[derive(StructOpt, Debug)]
     pub struct GetBlock {
         /// A filter to select some blocks.
+        ///
+        /// Valid examples are: 42 (block 42), .. (get all blocks), ..42 (blocks 0 to 41),
+        /// 42.. (blocks 42 to current), 200..220 (blocks 200 to 219).
         pub filter: ParseFilter<BlockNumber>,
     }
 
@@ -149,6 +163,7 @@ pub mod cmd {
             Ok(Self(filter))
         }
     }
+
     #[derive(Debug)]
     pub struct ParseSpan(pub Span);
 

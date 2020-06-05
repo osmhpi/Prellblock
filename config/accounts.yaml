@@ -5,13 +5,6 @@
   #  at_date: 2020-04-15T10:04:59.300878700Z # or see below
   # expire_at: never
   writing_rights: true
-  # reading_rights:
-  #   - accounts:
-  #       whitelist:
-  #         - scope: Emily
-  #     namespace:
-  #       blacklist:
-  #         - scope: speed
 
 cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc:
   name: TestAdminCLI

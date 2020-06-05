@@ -181,18 +181,18 @@ async fn main_get_value(cmd: cmd::GetValue) {
     {
         Ok(values) => {
             if values.is_empty() {
-                log::warn!("No values retreived.");
+                log::warn!("No values retrieved.");
             }
 
             for (peer_id, values_of_peer) in values {
                 if values_of_peer.is_empty() {
-                    log::warn!("No values for peer {} retreived.", peer_id);
+                    log::warn!("No values retrieved for peer {}.", peer_id);
                 } else {
                     log::info!("The retrieved values of peer {} are:", peer_id);
                 }
                 for (key, values_by_key) in values_of_peer {
                     if values_by_key.is_empty() {
-                        log::warn!("No values for key {:?} retreived.", key);
+                        log::warn!("No values retrieved for key {:?}.", key);
                     } else {
                         log::info!("  Key {:?}:", key);
                     }
@@ -215,7 +215,11 @@ async fn main_get_account(cmd: cmd::GetAccount) {
 
     match reader_client().query_account(peer_ids).await {
         Ok(accounts) => {
-            log::info!("The retrieved accounts are:");
+            if accounts.is_empty() {
+                log::warn!("No accounts retrieved.");
+            } else {
+                log::info!("The retrieved accounts are:");
+            }
             for account in accounts {
                 log::info!("{:#?}", account);
             }
@@ -229,7 +233,11 @@ async fn main_get_block(cmd: cmd::GetBlock) {
 
     match reader_client().query_block(filter.0).await {
         Ok(block_vec) => {
-            log::info!("The retrieved blocks are:");
+            if block_vec.is_empty() {
+                log::warn!("No blocks retrieved for the given range.");
+            } else {
+                log::info!("The retrieved blocks are:");
+            }
             for block in block_vec {
                 log::info!("{:#?}", block);
             }
@@ -241,6 +249,10 @@ async fn main_get_block(cmd: cmd::GetBlock) {
 async fn main_current_block_number() {
     match reader_client().current_block_number().await {
         Err(err) => log::error!("Failed to retrieve current block number: {}", err),
-        Ok(block_number) => log::info!("The current block number is: {:?}.", block_number),
+        Ok(block_number) => log::info!(
+            "The current block number is: {:?}. The last committed block number is: {:?}.",
+            block_number,
+            block_number - 1
+        ),
     }
 }
