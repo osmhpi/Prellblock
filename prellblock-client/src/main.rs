@@ -11,13 +11,23 @@ mod cli;
 
 use cli::prelude::*;
 use prellblock_client::{account::Permissions, Client, Query};
+use noise::{NoiseFn, Perlin};
+use pinxit::Identity;
 use rand::{
     rngs::{OsRng, StdRng},
     seq::SliceRandom,
     thread_rng, RngCore, SeedableRng,
 };
-use std::{fs, net::SocketAddr, str, time::Instant};
+use serde::Deserialize;
+use std::{
+    fmt, fs,
+    net::SocketAddr,
+    str,
+    str::FromStr,
+    time::{Duration, Instant},
+};
 use structopt::StructOpt;
+use tokio::time::{delay_until, timeout};
 
 #[tokio::main]
 async fn main() {
@@ -48,6 +58,86 @@ fn writer_client(turi_address: SocketAddr) -> Client {
         turi_address,
         "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc",
     )
+#[derive(StructOpt, Debug)]
+enum Command {
+    /// Transaction to set a key to a value.
+    Set {
+        /// The key of this transaction.
+        key: String,
+        /// The value of the corresponding key.
+        value: String,
+    },
+    /// Benchmark the blockchain.
+    #[structopt(name = "bench")]
+    Benchmark {
+        /// The name of the RPU to benchmark.
+        rpu_name: String,
+        /// The key to use for saving benchmark generated data.
+        key: String,
+        /// The number of transactions to send
+        transactions: u32,
+        /// The number of bytes each transaction's payload should have.
+        #[structopt(short, long, default_value = "8")]
+        size: usize,
+        /// The number of workers (clients) to use simultaneously.
+        #[structopt(short, long, default_value = "1")]
+        workers: usize,
+    },
+    /// Generate and write values to the blockchain.
+    #[structopt(name = "gen")]
+    Generate {
+        /// The duration to generate data for. (in ms)
+        #[structopt(short, long, default_value = "60000")]
+        duration: u64,
+        /// The interval to generate and write a new value. (in ms)
+        #[structopt(short, long, default_value = "100")]
+        interval: u64,
+        /// The number of bytes each transaction's payload should have.       
+        gen_type: GeneratorType,
+    },
+    /// Listen to timeseries and push updates via POST.
+    Listen {
+        /// The interval to poll values from timeseries. (in ms)
+        #[structopt(short, long, default_value = "100")]
+        polling_interval: u64,
+    },
+    /// Update the permissions for a given account.
+    #[structopt(name = "update")]
+    UpdateAccount {
+        /// The id of the account to update.
+        id: String,
+        /// The filepath to a yaml-file cotaining the accounts permissions.
+        permission_file: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+enum GeneratorType {
+    Temperature,
+}
+
+#[derive(Debug, Clone)]
+struct GeneratorParseError;
+
+impl fmt::Display for GeneratorParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "invalid GeneratorType")
+    }
+}
+
+impl FromStr for GeneratorType {
+    type Err = GeneratorParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Temperature" => Ok(Self::Temperature),
+            _ => Err(GeneratorParseError),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct Config {
+    rpu: Vec<RpuConfig>,
 }
 
 fn reader_client() -> Client {
@@ -206,6 +296,7 @@ async fn main_get_value(cmd: cmd::GetValue) {
                 }
             }
         }
+<<<<<<< HEAD
         Err(err) => log::error!("Failed to retrieve values: {}", err),
     }
 }
@@ -256,3 +347,91 @@ async fn main_current_block_number() {
         ),
     }
 }
+//         Command::Generate {
+//             duration,
+//             interval,
+//             gen_type,
+//         } => {
+//             let mut rng = thread_rng();
+//             let turi_address = config.rpu.choose(&mut rng).unwrap().turi_address;
+
+//             // matching peerid is: cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc
+//             let identity: Identity =
+//                 "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256"
+//                     .parse()
+//                     .unwrap();
+
+//             let mut client = Client::new(turi_address, identity);
+//             let res = timeout(
+//                 Duration::from_millis(duration),
+//                 generate_data(&mut client, gen_type.clone(), interval),
+//             )
+//             .await;
+
+//             if res.is_err() {
+//                 println!("Done generating.");
+//             }
+//         }
+//         Command::UpdateAccount {
+//             id,
+//             permission_file,
+//         } => {
+//             let mut rng = thread_rng();
+//             let turi_address = config.rpu.choose(&mut rng).unwrap().turi_address;
+
+//             // matching peerid is: cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc
+//             let identity: Identity =
+//                 "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256"
+//                     .parse()
+//                     .unwrap();
+
+//             let mut client = Client::new(turi_address, identity);
+
+//             // TestCLI: 256cdb0197402705f96d39eab7dd3d47a39cb75673a58852d83f666973d80e01
+//             let id = id.parse().expect("Invalid account id given");
+
+//             // Read `Permissions` from the given file.
+//             let permission_file_content =
+//                 fs::read_to_string(permission_file).expect("Could not read permission file");
+//             let permissions: Permissions = serde_yaml::from_str(&permission_file_content)
+//                 .expect("Invalid permission file content");
+
+//             match client.update_account(id, permissions).await {
+//                 Err(err) => log::error!("Failed to send transaction: {}", err),
+//                 Ok(()) => log::debug!("Transaction ok!"),
+//             }
+//         }
+//         Command::Listen { polling_interval } => {
+//             // load timeseries from config
+//         }
+//     }
+// }
+
+// async fn generate_data(client: &mut Client, gen_type: GeneratorType, interval: u64) {
+//     let start = Instant::now();
+//     let perlin = Perlin::new();
+
+//     loop {
+//         let deadline = tokio::time::Instant::now() + Duration::from_millis(interval);
+//         // println!("deadline: {:?}", deadline);
+//         match gen_type {
+//             GeneratorType::Temperature => {
+//                 let time = Instant::now() - start;
+//                 let time = 1.01 * time.as_millis() as f64;
+//                 let mut value = 20 as f64 + 10.0 * perlin.get([time, time, time]);
+//                 value = (value * 100.0).round() / 100.0;
+//                 // println!("time: {}", time);
+//                 // println!("temp: {}", value);
+//                 match client
+//                     .send_key_value("temperature".to_string(), value)
+//                     .await
+//                 {
+//                     Err(err) => log::error!("Failed to send transaction: {}", err),
+//                     Ok(()) => log::debug!("Transaction ok!"),
+//                 }
+//             }
+//         }
+//         let _ = delay_until(deadline).await;
+// >>>>>>> Add data generation feature to CLI
+//     }
+// }
