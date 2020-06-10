@@ -27,9 +27,7 @@ use std::{net::SocketAddr, time::SystemTime};
 /// # async fn test() -> Result<(), Box<dyn std::error::Error>> {
 /// let identity = "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256".parse()?;
 /// let mut client = Client::new("10.10.10.10:2480".parse().unwrap(), identity);
-/// client
-///     .send_key_value("key".to_string(), "value", SystemTime::now())
-///     .await?;
+/// client.send_key_value("key".to_string(), "value").await?;
 /// # Ok(())
 /// # }
 /// ```

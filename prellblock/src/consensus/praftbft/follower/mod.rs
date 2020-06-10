@@ -120,7 +120,7 @@ impl Follower {
             .request_view_change_on_error(async {
                 // Validate the Block Hash.
                 let block_hash = message.block_hash;
-                let body = state.body_with(message.valid_transactions);
+                let body = state.body_with(message.valid_transactions, message.timestamp);
                 if body.hash() != block_hash {
                     return Err(Error::BlockNotMatchingHash);
                 }

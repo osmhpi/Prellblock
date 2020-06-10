@@ -8,7 +8,11 @@ use crate::{
 };
 use pinxit::{verify_signed_batch, Signed};
 use prellblock_client_api::Transaction;
-use std::{ops::Deref, sync::Arc, time::Duration};
+use std::{
+    ops::Deref,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 use tokio::time;
 
 const BLOCK_GENERATION_TIMEOUT: Duration = Duration::from_millis(400);
@@ -181,6 +185,7 @@ impl Leader {
             leader_term: self.leader_term,
             height: self.block_number,
             prev_block_hash: self.last_block_hash,
+            timestamp: SystemTime::now(),
             transactions: valid_transactions,
         };
 
@@ -199,6 +204,7 @@ impl Leader {
                 body.transactions,
                 invalid_transactions,
                 ackprepare_signatures,
+                body.timestamp,
             )
             .await?;
         log::trace!(
@@ -234,6 +240,7 @@ impl Leader {
         valid_transactions: Vec<Signed<Transaction>>,
         invalid_transactions: Vec<(usize, Signed<Transaction>)>,
         ackprepare_signatures: SignatureList,
+        timestamp: SystemTime,
     ) -> Result<SignatureList, Error> {
         self.phase = Phase::Append;
 
@@ -243,6 +250,7 @@ impl Leader {
             valid_transactions,
             invalid_transactions,
             ackprepare_signatures,
+            timestamp,
         };
 
         self.broadcast_until_majority(message, move |ack| ack.metadata.verify(&metadata))

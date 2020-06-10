@@ -116,9 +116,9 @@ impl DataStorage {
 
 // We do not expect a system time that far off:
 #[allow(clippy::cast_possible_truncation)]
-fn timestamp_nanos() -> i128 {
+fn timestamp_nanos() -> i64 {
     match std::time::SystemTime::UNIX_EPOCH.elapsed() {
-        Ok(duration) => duration.as_nanos() as i128,
-        Err(err) => -(err.duration().as_nanos() as i128),
+        Ok(duration) => duration.as_nanos() as i64,
+        Err(err) => -(err.duration().as_nanos() as i64),
     }
 }

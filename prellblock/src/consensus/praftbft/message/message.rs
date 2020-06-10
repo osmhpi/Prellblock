@@ -4,7 +4,7 @@ use newtype_enum::newtype_enum;
 use pinxit::Signed;
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
-use std::ops::Deref;
+use std::{ops::Deref, time::SystemTime};
 
 /// Messages used for finding a consensus.
 #[newtype_enum(variants = "consensus_message")]
@@ -29,6 +29,8 @@ pub enum ConsensusMessage {
         /// Invalid transactions to remove from the follower's queue.
         /// The indices point to the position at which they whould be applied.
         invalid_transactions: Vec<InvalidTransaction>,
+        /// The timestamp of when the proposed Block was created by the leader.
+        timestamp: SystemTime,
     },
 
     /// A `ConsensusMessage` signalizing the Followers to Store the Block in the `BlockStorage` together with the `ACKAPPEND`-Signatures.

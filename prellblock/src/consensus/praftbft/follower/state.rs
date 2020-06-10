@@ -2,7 +2,7 @@ use super::{message, Core, Error, InvalidTransaction, NotifyMap};
 use crate::consensus::{Block, BlockHash, BlockNumber, Body, LeaderTerm, SignatureList};
 use pinxit::{PeerId, Signed};
 use prellblock_client_api::Transaction;
-use std::{ops::Deref, sync::Arc};
+use std::{ops::Deref, sync::Arc, time::SystemTime};
 
 #[derive(Debug)]
 pub struct State {
@@ -81,11 +81,12 @@ impl State {
     }
 
     /// Create a body with the given `transactions`.
-    pub fn body_with(&self, transactions: Vec<Signed<Transaction>>) -> Body {
+    pub fn body_with(&self, transactions: Vec<Signed<Transaction>>, timestamp: SystemTime) -> Body {
         Body {
             leader_term: self.leader_term,
             height: self.block_number,
             prev_block_hash: self.last_block_hash,
+            timestamp,
             transactions,
         }
     }
