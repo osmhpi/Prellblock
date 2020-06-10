@@ -296,7 +296,6 @@ async fn main_get_value(cmd: cmd::GetValue) {
                 }
             }
         }
-<<<<<<< HEAD
         Err(err) => log::error!("Failed to retrieve values: {}", err),
     }
 }
@@ -316,6 +315,14 @@ async fn main_get_account(cmd: cmd::GetAccount) {
             }
         }
         Err(err) => log::error!("Failed to retrieve accounts: {}", err),
+        // Command::Listen { polling_interval } => {
+        //     loop {
+        //         let deadline = tokio::time::Instant::now() + Duration::from_millis(polling_interval);
+        //         // load timeseries from config
+                
+        //         let _ = delay_until(deadline).await;
+        //     }
+        // }
     }
 }
 
