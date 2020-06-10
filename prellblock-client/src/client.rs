@@ -12,7 +12,7 @@ use prellblock_client_api::{
     GetValue, Query, ReadValues, Transaction,
 };
 use serde::Serialize;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::SystemTime};
 
 /// A Client Instance.
 ///
@@ -22,11 +22,14 @@ use std::net::SocketAddr;
 ///
 /// ```no_run
 /// use prellblock_client::Client;
+/// use std::time::SystemTime;
 ///
 /// # async fn test() -> Result<(), Box<dyn std::error::Error>> {
 /// let identity = "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256".parse()?;
 /// let mut client = Client::new("10.10.10.10:2480".parse().unwrap(), identity);
-/// client.send_key_value("key".to_string(), "value").await?;
+/// client
+///     .send_key_value("key".to_string(), "value", SystemTime::now())
+///     .await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -74,7 +77,12 @@ impl Client {
         V: Serialize + Send,
     {
         let value = postcard::to_stdvec(&value)?;
-        self.execute(transaction::KeyValue { key, value }).await
+        self.execute(transaction::KeyValue {
+            key,
+            value,
+            timestamp: SystemTime::now(),
+        })
+        .await
     }
 
     /// Update a `target` account's `permissions`.
@@ -86,6 +94,7 @@ impl Client {
         self.execute(transaction::UpdateAccount {
             id: target,
             permissions,
+            timestamp: SystemTime::now(),
         })
         .await
     }

@@ -56,6 +56,7 @@ impl PeerInbox {
                     transaction.signer(),
                     &params.key,
                     &params.value,
+                    &params.timestamp,
                 )?;
             }
             Transaction::UpdateAccount(params) => {

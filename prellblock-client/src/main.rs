@@ -196,11 +196,12 @@ async fn main_get_value(cmd: cmd::GetValue) {
                     } else {
                         log::info!("  Key {:?}:", key);
                     }
-                    for (timestamp, value) in values_by_key {
+                    for (timestamp, (value, client_time, signature)) in values_by_key {
                         log::info!(
-                            "    {}: {:?}",
+                            "    {} (Client Timestamp: {}): {:?}",
                             humantime::format_rfc3339_millis(timestamp),
-                            value
+                            humantime::format_rfc3339_millis(client_time),
+                            (value, signature)
                         );
                     }
                 }

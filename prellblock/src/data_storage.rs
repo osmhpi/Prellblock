@@ -4,6 +4,7 @@ use hexutil::ToHex;
 use pinxit::PeerId;
 use prellblock_client_api::transaction::UpdateAccount;
 use sled::{Config, Db, IVec, Tree};
+use std::time::SystemTime;
 
 use crate::BoxError;
 
@@ -44,7 +45,14 @@ impl DataStorage {
     /// Write a value to the data storage.
     ///
     /// The data will be associated with the peer via its `PeerId`.
-    pub fn write_key_value<K>(&self, peer: &PeerId, key: K, value: &[u8]) -> Result<(), BoxError>
+    /// The
+    pub fn write_key_value<K>(
+        &self,
+        peer: &PeerId,
+        key: K,
+        value: &[u8],
+        timestamp: &SystemTime,
+    ) -> Result<(), BoxError>
     where
         K: AsRef<[u8]>,
     {
@@ -55,8 +63,8 @@ impl DataStorage {
         let key_tree = self.tree_for_name(&peer_tree, key)?;
 
         // insert value with timestamp
-        let time = timestamp_millis().to_be_bytes();
-        let value = postcard::to_stdvec(&value)?;
+        let time = timestamp_nanos().to_be_bytes();
+        let value = postcard::to_stdvec(&(value, timestamp))?;
         key_tree.insert(&time, value)?;
 
         Ok(())
@@ -98,7 +106,7 @@ impl DataStorage {
         let peer_tree = self.tree_for_name(&self.accounts, peer.to_hex())?;
 
         // insert update transaction with timestamp
-        let time = timestamp_millis().to_be_bytes();
+        let time = timestamp_nanos().to_be_bytes();
         let transaction = postcard::to_stdvec(transaction)?;
         peer_tree.insert(time, transaction)?;
 
@@ -108,9 +116,9 @@ impl DataStorage {
 
 // We do not expect a system time that far off:
 #[allow(clippy::cast_possible_truncation)]
-fn timestamp_millis() -> i64 {
+fn timestamp_nanos() -> i128 {
     match std::time::SystemTime::UNIX_EPOCH.elapsed() {
-        Ok(duration) => duration.as_millis() as i64,
-        Err(err) => -(err.duration().as_millis() as i64),
+        Ok(duration) => duration.as_nanos() as i128,
+        Err(err) => -(err.duration().as_nanos() as i128),
     }
 }

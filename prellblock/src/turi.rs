@@ -75,18 +75,20 @@ impl Turi {
             Transaction::KeyValue(params) => {
                 // TODO: Deserialize value.
                 log::debug!(
-                    "Client {} set {} to {:?}.",
+                    "Client {} set {} to {:?} (difference of {:?}).",
                     peer_id,
                     params.key,
                     params.value,
+                    std::time::SystemTime::now().duration_since(params.timestamp),
                 );
             }
             Transaction::UpdateAccount(params) => {
                 log::debug!(
-                    "Client {} updates account {}: {:#?}",
+                    "Client {} updates account {}: {:#?} (difference of {:?}).",
                     &transaction.signer(),
                     params.id,
                     params.permissions,
+                    std::time::SystemTime::now().duration_since(params.timestamp),
                 );
             }
         }

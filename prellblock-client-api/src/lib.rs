@@ -238,7 +238,7 @@ pub enum Query {
 }
 
 /// The `Transaction`s in response to a `GetValue` request of a single data series of a peer.
-pub type ReadValuesOfSeries = HashMap<SystemTime, (Vec<u8>, Signature)>;
+pub type ReadValuesOfSeries = HashMap<SystemTime, (Vec<u8>, SystemTime, Signature)>;
 
 /// The `Transaction`s in response to a `GetValue` request of a single peer.
 pub type ReadValuesOfPeer = HashMap<String, ReadValuesOfSeries>;
@@ -341,9 +341,10 @@ pub enum Transaction {
     KeyValue {
         /// The key.
         key: String,
-
         /// The value.
         value: Vec<u8>,
+        /// The Timestamp.
+        timestamp: SystemTime,
     },
 
     /// Update an account.
@@ -352,5 +353,7 @@ pub enum Transaction {
         id: PeerId,
         /// The permission fields to update.
         permissions: Permissions,
+        /// The Timestamp.
+        timestamp: SystemTime,
     },
 }

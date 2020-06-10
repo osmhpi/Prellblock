@@ -17,6 +17,7 @@ use std::{
     collections::HashMap,
     convert::TryInto,
     fmt::Debug,
+    mem,
     ops::{Bound, RangeBounds},
     str,
     time::{Duration, SystemTime},
@@ -87,6 +88,7 @@ impl BlockStorage {
                         transaction.signer(),
                         &params.key,
                         &params.value,
+                        &params.timestamp,
                         transaction.signature(),
                     )?;
                 }
@@ -106,6 +108,7 @@ impl BlockStorage {
         peer_id: &PeerId,
         key: &str,
         value: &[u8],
+        timestamp: &SystemTime,
         signature: &Signature,
     ) -> Result<(), Error> {
         // Add the peer to the account db.
@@ -116,9 +119,12 @@ impl BlockStorage {
             .open_tree(peer_id.as_bytes())?
             .insert(key, &[])?;
 
-        // Insert value with timestamp into the time_series tree.
+        // Insert value with timestamp of receival and the client's timestamp into the time_series tree.
         let time_series_name = [peer_id.as_bytes(), key.as_bytes()].join(&0);
-        let time = system_time_to_bytes(SystemTime::now());
+        let write_time = SystemTime::now();
+
+        // Write time has to be the first one because it is used when reading.
+        let time = system_times_to_bytes(write_time, *timestamp);
         let data = postcard::to_stdvec(&(value, signature))?;
         self.database
             .open_tree(time_series_name)?
@@ -271,13 +277,15 @@ impl BlockStorage {
         Ok(transactions)
     }
 
-    // Read a timeseries from `Blockstorage` and transform the raw data into a `Transaction` tuple.
+    // Read a timeseries from `BlockStorage` and transform the raw data into a `Transaction` tuple.
+    // The first timestamp is the time, the value was stored on the RPU.
+    // The second one is the timestamp given by the client.
     fn read_time_series<R>(
         &self,
         time_series_name: &[u8],
         range: R,
     ) -> Result<
-        impl DoubleEndedIterator<Item = Result<(SystemTime, (Vec<u8>, Signature)), Error>>,
+        impl DoubleEndedIterator<Item = Result<(SystemTime, (Vec<u8>, SystemTime, Signature)), Error>>,
         Error,
     >
     where
@@ -286,12 +294,14 @@ impl BlockStorage {
         let iter = self
             .database
             .open_tree(time_series_name)?
-            .range(map_range_bound(range, |v| system_time_to_bytes(*v)))
+            .range(map_range_bound(range, |v| {
+                system_times_to_bytes(*v, SystemTime::UNIX_EPOCH)
+            })) // RPU write time
             .map(|result| {
                 let (key, value) = result?;
-                let key = system_time_from_bytes(&key);
+                let key = system_times_from_bytes(&key);
                 let value: (Vec<u8>, Signature) = postcard::from_bytes(&value)?;
-                Ok((key, value))
+                Ok((key.0, (value.0, key.1, value.1)))
             });
         Ok(iter)
     }
@@ -340,22 +350,44 @@ fn map_bound<T, U>(bound: Bound<T>, f: impl FnOnce(T) -> U) -> Bound<U> {
 }
 
 #[allow(clippy::cast_possible_truncation)]
-fn system_time_to_bytes(time: SystemTime) -> impl AsRef<[u8]> {
-    match time.duration_since(SystemTime::UNIX_EPOCH) {
+fn system_times_to_bytes(first: SystemTime, second: SystemTime) -> impl AsRef<[u8]> {
+    let first = match first.duration_since(SystemTime::UNIX_EPOCH) {
         Ok(duration) => duration.as_nanos() as i64,
         Err(err) => -(err.duration().as_nanos() as i64),
     }
-    .to_be_bytes()
+    .to_be_bytes();
+    let second = match second.duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(duration) => duration.as_nanos() as i64,
+        Err(err) => -(err.duration().as_nanos() as i64),
+    }
+    .to_be_bytes();
+    [first, second].concat()
 }
 
 #[allow(clippy::cast_sign_loss)]
-fn system_time_from_bytes(bytes: &[u8]) -> SystemTime {
-    let time = i64::from_be_bytes(bytes.try_into().unwrap());
-    if time >= 0 {
-        let duration = Duration::from_nanos(time as u64);
+fn system_times_from_bytes(bytes: &[u8]) -> (SystemTime, SystemTime) {
+    if bytes.len() != 2 * mem::size_of::<i64>() {
+        panic!("Invalid timestamp key length. Could not read two timestamps.");
+    }
+
+    let (first, second) = bytes.split_at(mem::size_of::<i64>());
+    let first = i64::from_be_bytes(first.try_into().unwrap());
+    let first = if first >= 0 {
+        let duration = Duration::from_nanos(first as u64);
         SystemTime::UNIX_EPOCH + duration
     } else {
-        let duration = Duration::from_nanos((-(time + 1)) as u64 + 1);
+        let duration = Duration::from_nanos((-(first + 1)) as u64 + 1);
         SystemTime::UNIX_EPOCH - duration
-    }
+    };
+
+    let second = i64::from_be_bytes(second.try_into().unwrap());
+    let second = if second >= 0 {
+        let duration = Duration::from_nanos(second as u64);
+        SystemTime::UNIX_EPOCH + duration
+    } else {
+        let duration = Duration::from_nanos((-(second + 1)) as u64 + 1);
+        SystemTime::UNIX_EPOCH - duration
+    };
+
+    (first, second)
 }

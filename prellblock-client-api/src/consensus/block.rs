@@ -6,7 +6,7 @@ use blake2::{
 };
 use pinxit::Signed;
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{fmt, time::SystemTime};
 
 /// A `Block` stores transactions verified by the blockchain.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -43,6 +43,9 @@ pub struct Body {
 
     /// The `BlockHash` of the previous `Block`.
     pub prev_block_hash: BlockHash,
+
+    /// The time, the leader proposed this block.
+    pub timestamp: SystemTime,
 
     /// The actual data (`Signed<Transactions>`).
     pub transactions: Vec<Signed<Transaction>>,
