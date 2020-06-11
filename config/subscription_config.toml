@@ -1,0 +1,9 @@
+[[subscription]]
+peer_id = "256cdb0197402705f96d39eab7dd3d47a39cb75673a58852d83f666973d80e01"
+access_token = "dtcisBXItTT4cEkg5EpM"
+namespace = "temperature"
+
+[[subscription]]
+peer_id = "cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc"
+access_token = "dtcisBXItTT4cEkg5EpM"
+namespace = "temperature"
