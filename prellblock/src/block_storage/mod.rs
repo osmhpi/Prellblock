@@ -63,6 +63,7 @@ impl BlockStorage {
     pub fn write_block(&self, block: &Block) -> Result<(), Error> {
         let (last_block_hash, block_number) = if let Some(last_block) = self.read(..).next_back() {
             let last_block = last_block?;
+            println!("{:?}", last_block.hash());
             (last_block.hash(), last_block.body.height + 1)
         } else {
             (BlockHash::default(), BlockNumber::default())

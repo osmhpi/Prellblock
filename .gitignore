@@ -12,6 +12,8 @@
 /config/*/*.key
 /config/*/*.pub
 
+/config/subscription_config.toml
+
 # Data storage
 /data/
 

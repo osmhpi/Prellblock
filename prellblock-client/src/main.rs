@@ -10,9 +10,12 @@
 mod cli;
 
 use cli::prelude::*;
-use prellblock_client::{account::Permissions, Client, Query};
+use cmd::{GeneratorType, ParseFilter, ParseSpan};
+use http::StatusCode;
 use noise::{NoiseFn, Perlin};
 use pinxit::Identity;
+use prellblock_client::{account::Permissions, Client, Query};
+use prellblock_client_api::{Filter, ReadValues, Span};
 use rand::{
     rngs::{OsRng, StdRng},
     seq::SliceRandom,
@@ -45,6 +48,8 @@ async fn main() {
         Cmd::GetAccount(cmd) => main_get_account(cmd).await,
         Cmd::GetBlock(cmd) => main_get_block(cmd).await,
         Cmd::CurrentBlockNumber => main_current_block_number().await,
+        Cmd::Generate(cmd) => main_generate(cmd).await,
+        Cmd::Listen(cmd) => main_listen(cmd).await,
     }
 }
 
@@ -58,6 +63,7 @@ fn writer_client(turi_address: SocketAddr) -> Client {
         turi_address,
         "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc",
     )
+}
 #[derive(StructOpt, Debug)]
 enum Command {
     /// Transaction to set a key to a value.
@@ -109,35 +115,6 @@ enum Command {
         /// The filepath to a yaml-file cotaining the accounts permissions.
         permission_file: String,
     },
-}
-
-#[derive(Debug, Clone)]
-enum GeneratorType {
-    Temperature,
-}
-
-#[derive(Debug, Clone)]
-struct GeneratorParseError;
-
-impl fmt::Display for GeneratorParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "invalid GeneratorType")
-    }
-}
-
-impl FromStr for GeneratorType {
-    type Err = GeneratorParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Temperature" => Ok(Self::Temperature),
-            _ => Err(GeneratorParseError),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct Config {
-    rpu: Vec<RpuConfig>,
 }
 
 fn reader_client() -> Client {
@@ -315,14 +292,6 @@ async fn main_get_account(cmd: cmd::GetAccount) {
             }
         }
         Err(err) => log::error!("Failed to retrieve accounts: {}", err),
-        // Command::Listen { polling_interval } => {
-        //     loop {
-        //         let deadline = tokio::time::Instant::now() + Duration::from_millis(polling_interval);
-        //         // load timeseries from config
-                
-        //         let _ = delay_until(deadline).await;
-        //     }
-        // }
     }
 }
 
@@ -354,91 +323,137 @@ async fn main_current_block_number() {
         ),
     }
 }
-//         Command::Generate {
-//             duration,
-//             interval,
-//             gen_type,
-//         } => {
-//             let mut rng = thread_rng();
-//             let turi_address = config.rpu.choose(&mut rng).unwrap().turi_address;
 
-//             // matching peerid is: cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc
-//             let identity: Identity =
-//                 "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256"
-//                     .parse()
-//                     .unwrap();
+async fn main_generate(cmd: cmd::Generate) {
+    let cmd::Generate {
+        duration,
+        interval,
+        gen_type,
+    } = cmd;
 
-//             let mut client = Client::new(turi_address, identity);
-//             let res = timeout(
-//                 Duration::from_millis(duration),
-//                 generate_data(&mut client, gen_type.clone(), interval),
-//             )
-//             .await;
+    let mut rng = thread_rng();
+    let turi_address = Config::load().rpu.choose(&mut rng).unwrap().turi_address;
 
-//             if res.is_err() {
-//                 println!("Done generating.");
-//             }
-//         }
-//         Command::UpdateAccount {
-//             id,
-//             permission_file,
-//         } => {
-//             let mut rng = thread_rng();
-//             let turi_address = config.rpu.choose(&mut rng).unwrap().turi_address;
+    // matching peerid is: cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc
+    let identity: Identity = "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256"
+        .parse()
+        .unwrap();
 
-//             // matching peerid is: cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc
-//             let identity: Identity =
-//                 "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256"
-//                     .parse()
-//                     .unwrap();
+    // let mut client = Client::new(turi_address, identity);
+    let mut client = writer_client(turi_address);
+    let res = timeout(
+        Duration::from_millis(duration),
+        generate_data(&mut client, gen_type.clone(), interval),
+    )
+    .await;
 
-//             let mut client = Client::new(turi_address, identity);
+    if res.is_err() {
+        println!("Done generating.");
+    }
+}
 
-//             // TestCLI: 256cdb0197402705f96d39eab7dd3d47a39cb75673a58852d83f666973d80e01
-//             let id = id.parse().expect("Invalid account id given");
+async fn main_listen(cmd: cmd::Listen) {
+    let cmd::Listen { polling_interval } = cmd;
+    let mut client = reader_client();
+    let config = SubscriptionConfig::load();
+    log::info!("Polling in an interval of {} ms.", polling_interval);
+    loop {
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(polling_interval);
+        // load timeseries from config
+        for subscription in &config.subscription {
+            // println!("{:?}", subscription.peer_id);
+            let query = Query::Range {
+                span: 20.into(),
+                end: 0.into(),
+                skip: None,
+            };
+            match client
+                .query_values(
+                    vec![subscription.peer_id.parse().unwrap()],
+                    Filter::Exact(subscription.namespace.clone()),
+                    query,
+                )
+                .await
+            {
+                Ok(values) => {
+                    // println!("{:?}", values);
+                    post_values(values, &subscription.access_token).await;
+                }
+                Err(err) => {}
+            }
+        }
 
-//             // Read `Permissions` from the given file.
-//             let permission_file_content =
-//                 fs::read_to_string(permission_file).expect("Could not read permission file");
-//             let permissions: Permissions = serde_yaml::from_str(&permission_file_content)
-//                 .expect("Invalid permission file content");
+        let _ = delay_until(deadline).await;
+    }
+}
 
-//             match client.update_account(id, permissions).await {
-//                 Err(err) => log::error!("Failed to send transaction: {}", err),
-//                 Ok(()) => log::debug!("Transaction ok!"),
-//             }
-//         }
-//         Command::Listen { polling_interval } => {
-//             // load timeseries from config
-//         }
-//     }
-// }
+async fn generate_data(client: &mut Client, gen_type: GeneratorType, interval: u64) {
+    let start = Instant::now();
+    let perlin = Perlin::new();
 
-// async fn generate_data(client: &mut Client, gen_type: GeneratorType, interval: u64) {
-//     let start = Instant::now();
-//     let perlin = Perlin::new();
+    loop {
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(interval);
+        // println!("deadline: {:?}", deadline);
+        match gen_type {
+            GeneratorType::Temperature => {
+                let time = Instant::now() - start;
+                let time = 1.01 * time.as_millis() as f64;
+                let mut value = 20 as f64 + 10.0 * perlin.get([time, time, time]);
+                value = (value * 100.0).round() / 100.0;
+                // println!("time: {}", time);
+                println!("temperatue: {}", value);
 
-//     loop {
-//         let deadline = tokio::time::Instant::now() + Duration::from_millis(interval);
-//         // println!("deadline: {:?}", deadline);
-//         match gen_type {
-//             GeneratorType::Temperature => {
-//                 let time = Instant::now() - start;
-//                 let time = 1.01 * time.as_millis() as f64;
-//                 let mut value = 20 as f64 + 10.0 * perlin.get([time, time, time]);
-//                 value = (value * 100.0).round() / 100.0;
-//                 // println!("time: {}", time);
-//                 // println!("temp: {}", value);
-//                 match client
-//                     .send_key_value("temperature".to_string(), value)
-//                     .await
-//                 {
-//                     Err(err) => log::error!("Failed to send transaction: {}", err),
-//                     Ok(()) => log::debug!("Transaction ok!"),
-//                 }
-//             }
-//         }
-//         let _ = delay_until(deadline).await;
-// >>>>>>> Add data generation feature to CLI
-//     }
-// }
+                match client
+                    .send_key_value("temperature".to_string(), value)
+                    .await
+                {
+                    Err(err) => log::error!("Failed to send transaction: {}", err),
+                    Ok(()) => log::debug!("Transaction ok!"),
+                }
+            }
+        }
+        let _ = delay_until(deadline).await;
+    }
+}
+async fn post_values(values: ReadValues, access_token: &str) {
+    // only one peer
+    for (peer_id, values_of_peer) in values {
+        // only one timeseries
+        for (key, values_by_key) in values_of_peer {
+            //only one value
+            for (timestamp, value) in values_by_key {
+                // TODO: use timestamp
+                // post key:value
+                let url = thingsboard_url(access_token);
+                let value: f64 = postcard::from_bytes(&value.0).unwrap();
+                let key_value_json = format!("{{{}:{}}}", key, value);
+                let client = reqwest::Client::new();
+                println!("Sending POST w/ json body: {}", key_value_json);
+                let body = client
+                    .post(&url)
+                    .header("Content-Type", "application/json")
+                    .body(key_value_json);
+                //send request
+                let res = body.send().await;
+                match res {
+                    Ok(res) => match res.status() {
+                        StatusCode::OK => log::trace!("Send POST successfully."),
+                        StatusCode::BAD_REQUEST => log::warn!("BAD_REQUEST response from {}.", url),
+                        _ => {
+                            log::trace!("Statuscode: {:?}", res.status());
+                        }
+                    },
+                    Err(err) => {
+                        log::error!("{}", err);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn thingsboard_url(access_token: &str) -> String {
+    let host = "localhost";
+    let port = "8080";
+    format!("http://{}:{}/api/v1/{}/telemetry", host, port, access_token)
+}

@@ -71,7 +71,7 @@ impl TransactionApplier {
                     let key = format!("{}-{}", transaction.signer(), params.key);
                     // let mut value = [0; 4];
                     // value.copy_from_slice(&params.value[0..4]);
-                    let value: String = postcard::from_bytes(&params.value).unwrap();
+                    let value: f64 = postcard::from_bytes(&params.value).unwrap();
                     // let value = u32::from_le_bytes(value);
                     let mut key_value = HashMap::new();
                     key_value.insert(key, value);

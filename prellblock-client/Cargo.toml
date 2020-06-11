@@ -13,6 +13,7 @@ edition = "2018"
 balise = { path= "../balise", features = ["client", "tls"] }
 hex = "0.4.2"
 humantime = "2.0.0"
+http = "0.2.1"
 log = "0.4.8"
 noise = "0.6.0"
 newtype-enum = "0.1.0"
@@ -21,6 +22,7 @@ postcard = { version = "0.5.0", git = "https://github.com/felix-gohla/postcard.g
 prellblock-client-api = { path = "../prellblock-client-api" }
 pretty_env_logger = "0.4.0"
 rand = "0.7.3"
+reqwest = "0.10.6"
 serde = { version = "1.0.105", features = ["derive"] }
 serde_yaml = "0.8.11"
 structopt = "0.3.12"
