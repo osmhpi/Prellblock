@@ -6,6 +6,7 @@ pub use error::Error;
 
 use crate::{
     consensus::{Block, BlockHash, BlockNumber, Body},
+    if_monitoring, time,
     transaction_checker::AccountChecker,
 };
 use pinxit::{PeerId, Signature};
@@ -16,32 +17,45 @@ use prellblock_client_api::{
 use sled::{Config, Db, Tree};
 use std::{
     collections::HashMap,
-    convert::TryInto,
     fmt::Debug,
     ops::{Bound, RangeBounds},
     str,
-    time::{Duration, SystemTime},
+    time::SystemTime,
 };
 
 const BLOCKS_TREE_NAME: &[u8] = b"blocks";
 const ACCOUNTS_TREE_NAME: &[u8] = b"accounts";
 
-#[cfg(feature = "monitoring")]
-use lazy_static::lazy_static;
-#[cfg(feature = "monitoring")]
-use prometheus::{register_int_gauge, IntGauge};
-#[cfg(feature = "monitoring")]
-lazy_static! {
-    static ref BLOCK_NUMBER: IntGauge = register_int_gauge!(
-        "block_storage_block_number",
-        "The number of blocks (=height) of the blockchain."
-    )
-    .unwrap();
-    static ref TRANSACTIONS_IN_BLOCK_STORAGE: IntGauge = register_int_gauge!(
-        "block_storage_num_txs",
-        "The aggregated number of transactions in the Block Storage."
-    )
-    .unwrap();
+if_monitoring! {
+    use lazy_static::lazy_static;
+    use prometheus::{register_int_gauge, register_histogram, IntGauge, Histogram};
+    lazy_static! {
+        static ref BLOCK_NUMBER: IntGauge = register_int_gauge!(
+            "block_storage_block_number",
+            "The number of blocks (=height) of the blockchain."
+        )
+        .unwrap();
+        static ref TRANSACTIONS_IN_BLOCK_STORAGE: IntGauge = register_int_gauge!(
+            "block_storage_num_txs",
+            "The aggregated number of transactions in the Block Storage."
+        )
+        .unwrap();
+
+        /// Measure the time a transaction takes from being created on the client until it reaches the DataStorage.
+        static ref BLOCKSTORAGE_ARRIVAL_TIME: Histogram = register_histogram!(
+            "blockstorage_arrival_time",
+            "The time a transaction takes from being created by the client until it reaches the BlockStorage.",
+            prometheus::exponential_buckets(0.3, 1.2, 25).unwrap()
+        ).unwrap();
+
+        /// Measure the size of the BlockStorage on the disk.
+        static ref BLOCKSTORAGE_SIZE: IntGauge = register_int_gauge!(
+            "blockstorage_size",
+            "Size of the BlockStorage on the disk."
+        )
+        .unwrap();
+
+    }
 }
 
 /// A `BlockStorage` provides persistent storage on disk.
@@ -70,10 +84,9 @@ impl BlockStorage {
 
         let database = config.open()?;
         let blocks = database.open_tree(BLOCKS_TREE_NAME)?;
-        #[cfg(feature = "monitoring")]
-        {
+        if_monitoring!({
             BLOCK_NUMBER.add(blocks.len() as i64);
-        }
+        });
         let accounts = database.open_tree(ACCOUNTS_TREE_NAME)?;
 
         let block_storage = Self {
@@ -120,15 +133,26 @@ impl BlockStorage {
         if block.body.height != block_number {
             return Err(Error::BlockHeightDoesNotFit);
         }
-
         let value = postcard::to_stdvec(&block)?;
         self.blocks
             .insert(block.block_number().to_be_bytes(), value)?;
         log::trace!("Writing block #{}: {:#?}", block.block_number(), block);
 
+        // FIXME: only when cfg feature monitoring
+        let time = SystemTime::now();
         for transaction in &block.body.transactions {
             match transaction.unverified_ref() {
                 Transaction::KeyValue(params) => {
+                    if_monitoring! {{
+                        match time.duration_since(params.timestamp) {
+                            Ok(duration) => {
+                                BLOCKSTORAGE_ARRIVAL_TIME.observe(duration.as_secs_f64())
+                            }
+                            Err(err) => {
+                                log::warn!("Error calculating duration in blockstorage: {}", err)
+                            }
+                        }
+                    }}
                     self.write_value(
                         transaction.signer(),
                         &params.key,
@@ -144,11 +168,15 @@ impl BlockStorage {
             }
         }
 
-        #[cfg(feature = "monitoring")]
-        {
+        if_monitoring!({
             TRANSACTIONS_IN_BLOCK_STORAGE.add(block.body.transactions.len() as i64);
             BLOCK_NUMBER.inc();
-        }
+            #[allow(clippy::cast_possible_wrap)]
+            match self.database.size_on_disk() {
+                Ok(size) => BLOCKSTORAGE_SIZE.set(size as i64),
+                Err(err) => log::warn!("Error calculating size of blockstorage on disk: {}", err),
+            }
+        });
 
         Ok(())
     }
@@ -177,7 +205,7 @@ impl BlockStorage {
         let write_time = SystemTime::now();
 
         // Write time has to be the first one because it is used when reading.
-        let time = system_time_to_bytes(write_time);
+        let time = time::system_time_to_bytes(write_time);
         let data = postcard::to_stdvec(&(value, timestamp, signature))?;
         self.database
             .open_tree(time_series_name)?
@@ -347,10 +375,10 @@ impl BlockStorage {
         let iter = self
             .database
             .open_tree(time_series_name)?
-            .range(map_range_bound(range, |v| system_time_to_bytes(*v))) // RPU write time
+            .range(map_range_bound(range, |v| time::system_time_to_bytes(*v))) // RPU write time
             .map(|result| {
                 let (key, value) = result?;
-                let key = system_time_from_bytes(&key);
+                let key = time::system_time_from_bytes(&key);
                 let value: (Vec<u8>, SystemTime, Signature) = postcard::from_bytes(&value)?;
                 Ok((key, value))
             });
@@ -377,11 +405,10 @@ impl BlockStorage {
                 }
             }
 
-            #[cfg(feature = "monitoring")]
-            {
+            if_monitoring!({
                 TRANSACTIONS_IN_BLOCK_STORAGE.sub(block.body.transactions.len() as i64);
                 BLOCK_NUMBER.dec();
-            }
+            });
 
             Ok(Some(block))
         } else {
@@ -405,26 +432,5 @@ fn map_bound<T, U>(bound: Bound<T>, f: impl FnOnce(T) -> U) -> Bound<U> {
         Bound::Included(v) => Bound::Included(f(v)),
         Bound::Excluded(v) => Bound::Excluded(f(v)),
         Bound::Unbounded => Bound::Unbounded,
-    }
-}
-
-#[allow(clippy::cast_possible_truncation)]
-fn system_time_to_bytes(time: SystemTime) -> impl AsRef<[u8]> {
-    match time.duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(duration) => duration.as_nanos() as i64,
-        Err(err) => -(err.duration().as_nanos() as i64),
-    }
-    .to_be_bytes()
-}
-
-#[allow(clippy::cast_sign_loss)]
-fn system_time_from_bytes(bytes: &[u8]) -> SystemTime {
-    let time = i64::from_be_bytes(bytes.try_into().unwrap());
-    if time >= 0 {
-        let duration = Duration::from_nanos(time as u64);
-        SystemTime::UNIX_EPOCH + duration
-    } else {
-        let duration = Duration::from_nanos((-(time + 1)) as u64 + 1);
-        SystemTime::UNIX_EPOCH - duration
     }
 }

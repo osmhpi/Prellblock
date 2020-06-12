@@ -7,7 +7,7 @@ pub use prellblock_client_api::account::{Account, Permissions};
 use crate::{
     block_storage::BlockStorage,
     consensus::{Block, BlockHash, BlockNumber},
-    BoxError,
+    if_monitoring, BoxError,
 };
 use im::{HashMap, Vector};
 use pinxit::{PeerId, Signed};
@@ -21,11 +21,9 @@ use std::{
 };
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
-#[cfg(feature = "monitoring")]
-use lazy_static::lazy_static;
-#[cfg(feature = "monitoring")]
+if_monitoring! {
+    use lazy_static::lazy_static;
 use prometheus::{register_int_gauge, IntGauge};
-#[cfg(feature = "monitoring")]
 lazy_static! {
     static ref BLOCK_NUMBER: IntGauge = register_int_gauge!(
         "world_state_block_number",
@@ -37,6 +35,7 @@ lazy_static! {
         "The aggregated number of transactions in the WorldState."
     )
     .unwrap();
+}
 }
 
 /// Struct holding a `Worldstate` and it's previous `Worldstate`, if any.
@@ -189,12 +188,12 @@ impl WorldState {
         self.last_block_hash = block.body.hash();
         self.block_number = block.body.height + 1;
 
-        #[cfg(feature = "monitoring")]
-        {
+        if_monitoring!({
             let new_block_number: u64 = self.block_number.into();
+            #[allow(clippy::cast_possible_wrap)]
             BLOCK_NUMBER.set(new_block_number as i64);
             NUM_TRANSACTIONS.add(block.body.transactions.len() as i64);
-        }
+        });
 
         for transaction in block.body.transactions {
             self.apply_transaction(transaction);

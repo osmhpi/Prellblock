@@ -73,11 +73,11 @@ impl Turi {
                     });
 
                     let result = self.handle_execute(params).await;
-                    if_monitoring!({
+                    if_monitoring! {{
                         if result.is_err() {
                             TURI_RECEIVED_INVALID_TRANSACTIONS.inc();
                         }
-                    });
+                    }}
 
                     result
                 },

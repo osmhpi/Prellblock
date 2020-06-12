@@ -7,10 +7,37 @@ use serde::Serialize;
 use sled::{Config, Db, IVec, Tree};
 use std::time::SystemTime;
 
-use crate::BoxError;
+use crate::{if_monitoring, time, BoxError};
 
 const KEY_VALUE_ROOT_TREE_NAME: &[u8] = b"root";
 const ACCOUNTS_TREE_NAME: &[u8] = b"accounts";
+
+if_monitoring! {
+    use lazy_static::lazy_static;
+use prometheus::{register_histogram, register_int_gauge, Histogram, IntGauge};
+lazy_static! {
+    /// Measure the number of transactions in the DataStorage.
+    static ref TRANSACTIONS_IN_DATA_STORAGE: IntGauge = register_int_gauge!(
+        "data_storage_num_txs",
+        "The aggregated number of transactions in the DataStorage."
+    )
+    .unwrap();
+
+    /// Measure the time a transaction takes from being created on the client until it reaches the DataStorage.
+    static ref DATASTORAGE_ARRIVAL_TIME: Histogram = register_histogram!(
+        "datastorage_arrival_time",
+        "The time a transaction takes from being created by the client until it reaches the DataStorage.",
+        vec![0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7,]
+    ).unwrap();
+
+    /// Measure the size of the DataStorage on the disk.
+    static ref DATASTORAGE_SIZE: IntGauge = register_int_gauge!(
+        "datastorage_size",
+        "Size of the DataStorage on the disk."
+    )
+    .unwrap();
+}
+}
 
 /// A `DataStorage` provides persistent storage on disk.
 ///
@@ -36,11 +63,47 @@ impl DataStorage {
         let key_value_root = database.open_tree(KEY_VALUE_ROOT_TREE_NAME)?;
         let accounts = database.open_tree(ACCOUNTS_TREE_NAME)?;
 
-        Ok(Self {
+        let data_storage = Self {
             database,
             key_value_root,
             accounts,
-        })
+        };
+        if_monitoring!({
+            #[allow(clippy::cast_possible_wrap)]
+            match data_storage.database.size_on_disk() {
+                Ok(size) => DATASTORAGE_SIZE.set(size as i64),
+                Err(err) => log::warn!("Error calculating size of datastorage on disk: {}", err),
+            }
+            TRANSACTIONS_IN_DATA_STORAGE.set(data_storage.count_transactions())
+        });
+
+        Ok(data_storage)
+    }
+
+    /// Count all transactions in the store.
+    fn count_transactions(&self) -> i64 {
+        let mut size = 0;
+
+        // Count all `Account` transactions.
+        for peer_tree_tuple in self.accounts.iter() {
+            if let Ok((_, peer_account_tree_id)) = peer_tree_tuple {
+                size += self.database.open_tree(peer_account_tree_id).unwrap().len();
+            }
+        }
+
+        // Count all key-value transactions.
+        for peer_tree_tuple in self.key_value_root.iter() {
+            if let Ok((_, peer_key_tree_id)) = peer_tree_tuple {
+                let key_tree = self.database.open_tree(peer_key_tree_id).unwrap();
+                for key_tuple in key_tree.iter() {
+                    if let Ok((_, series_id)) = key_tuple {
+                        size += self.database.open_tree(series_id).unwrap().len();
+                    }
+                }
+            }
+        }
+
+        size as i64
     }
 
     /// Write a value to the data storage.
@@ -63,9 +126,23 @@ impl DataStorage {
         let key_tree = self.tree_for_name(&peer_tree, key)?;
 
         // insert value with timestamp
-        let time = timestamp_nanos().to_be_bytes();
+        let time = SystemTime::now();
         let value = postcard::to_stdvec(&(value, timestamp))?;
-        key_tree.insert(&time, value)?;
+
+        if_monitoring!({
+            match time.duration_since(timestamp) {
+                Ok(duration) => DATASTORAGE_ARRIVAL_TIME.observe(duration.as_secs_f64()),
+                Err(err) => log::warn!("Error calculating duration in datastorage: {}", err),
+            }
+            #[allow(clippy::cast_possible_wrap)]
+            match self.database.size_on_disk() {
+                Ok(size) => DATASTORAGE_SIZE.set(size as i64),
+                Err(err) => log::warn!("Error calculating size of datastorage on disk: {}", err),
+            }
+            TRANSACTIONS_IN_DATA_STORAGE.inc();
+        });
+
+        key_tree.insert(time::system_time_to_bytes(time), value)?;
 
         Ok(())
     }
@@ -108,20 +185,27 @@ impl DataStorage {
         // find tree for sender account
         let peer_tree = self.tree_for_name(&self.accounts, peer.to_hex())?;
 
+        let time = SystemTime::now();
+        if_monitoring!({
+            match time.duration_since(transaction.timestamp()) {
+                Ok(duration) => DATASTORAGE_ARRIVAL_TIME.observe(duration.as_secs_f64()),
+                Err(err) => log::warn!(
+                    "Error calculating duration in datastorage for monitoring: {}",
+                    err
+                ),
+            }
+            #[allow(clippy::cast_possible_wrap)]
+            match self.database.size_on_disk() {
+                Ok(size) => DATASTORAGE_SIZE.set(size as i64),
+                Err(err) => log::warn!("Error calculating size of datastorage on disk: {}", err),
+            }
+            TRANSACTIONS_IN_DATA_STORAGE.inc();
+        });
+
         // insert update transaction with timestamp
-        let time = timestamp_nanos().to_be_bytes();
         let transaction = postcard::to_stdvec(transaction)?;
-        peer_tree.insert(time, transaction)?;
+        peer_tree.insert(time::system_time_to_bytes(time), transaction)?;
 
         Ok(())
-    }
-}
-
-// We do not expect a system time that far off:
-#[allow(clippy::cast_possible_truncation)]
-fn timestamp_nanos() -> i64 {
-    match std::time::SystemTime::UNIX_EPOCH.elapsed() {
-        Ok(duration) => duration.as_nanos() as i64,
-        Err(err) => -(err.duration().as_nanos() as i64),
     }
 }

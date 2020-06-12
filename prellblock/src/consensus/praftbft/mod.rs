@@ -16,7 +16,7 @@ pub use ring_buffer::RingBuffer;
 
 use self::core::Core;
 use super::TransactionApplier;
-use crate::{block_storage::BlockStorage, world_state::WorldStateService};
+use crate::{block_storage::BlockStorage, if_monitoring, world_state::WorldStateService};
 use censorship_checker::CensorshipChecker;
 use error::ErrorVerify;
 use follower::Follower;
@@ -33,11 +33,9 @@ const MAX_TRANSACTIONS_PER_BLOCK: usize = 4000;
 
 type InvalidTransaction = (usize, Signed<Transaction>);
 
-#[cfg(feature = "monitoring")]
-use lazy_static::lazy_static;
-#[cfg(feature = "monitoring")]
+if_monitoring! {
+    use lazy_static::lazy_static;
 use prometheus::{register_histogram, register_int_gauge, Histogram, IntGauge};
-#[cfg(feature = "monitoring")]
 lazy_static! {
     /// Too much backpressure shows overload.
     static ref QUEUE_BACKLOG: IntGauge = register_int_gauge!(
@@ -52,6 +50,7 @@ lazy_static! {
         "The time a transaction is in the consensus algorithm's queue until being committed.",
         vec![0.1, 0.2, 0.3, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 5.0, 10.0,]
     ).unwrap();
+}
 }
 
 /// See the [paper](https://www.scs.stanford.edu/17au-cs244b/labs/projects/clow_jiang.pdf).
@@ -101,8 +100,9 @@ impl PRaftBFT {
         let leader = Leader::new(core.clone(), follower.clone(), view_change.clone());
         tokio::spawn(leader.execute());
 
-        #[cfg(feature = "monitoring")]
-        QUEUE_BACKLOG.set(0);
+        if_monitoring!({
+            QUEUE_BACKLOG.set(0);
+        });
 
         // Setup consensus
         Arc::new(Self {
@@ -120,8 +120,9 @@ impl PRaftBFT {
             queue.len()
         };
 
-        #[cfg(feature = "monitoring")]
-        QUEUE_BACKLOG.set(queue_len as i64);
+        if_monitoring!({
+            QUEUE_BACKLOG.set(queue_len as i64);
+        });
 
         if queue_len > MAX_TRANSACTIONS_PER_BLOCK {
             self.core.notify_leader.notify();

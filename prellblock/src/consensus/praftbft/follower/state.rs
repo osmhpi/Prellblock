@@ -1,10 +1,16 @@
-use super::{
-    message, Core, Error, InvalidTransaction, NotifyMap, QUEUE_BACKLOG, QUEUE_RESIDENCE_TIME,
+use super::{message, Core, Error, InvalidTransaction, NotifyMap};
+use crate::{
+    consensus::{Block, BlockHash, BlockNumber, Body, LeaderTerm, SignatureList},
+    if_monitoring,
 };
-use crate::consensus::{Block, BlockHash, BlockNumber, Body, LeaderTerm, SignatureList};
 use pinxit::{PeerId, Signed};
 use prellblock_client_api::Transaction;
 use std::{ops::Deref, sync::Arc, time::SystemTime};
+if_monitoring! {
+    use super::{
+        QUEUE_BACKLOG, QUEUE_RESIDENCE_TIME,
+    };
+}
 
 #[derive(Debug)]
 pub struct State {
@@ -160,14 +166,13 @@ impl State {
             .await
             .remove_all(block.body.transactions.iter());
 
-        #[cfg(feature = "monitoring")]
-        {
+        if_monitoring!({
             QUEUE_BACKLOG.set(self.queue.lock().await.len() as i64);
             for removed_tx in removed_txs {
                 let residence_time = removed_tx.inserted().elapsed().as_secs_f64();
                 QUEUE_RESIDENCE_TIME.observe(residence_time);
             }
-        }
+        });
 
         // Applies block.
         self.transaction_applier.apply_block(block).await;

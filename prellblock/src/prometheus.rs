@@ -1,20 +1,20 @@
 //! Provide a server for gathering metrics with Prometheus.
 //!
 //! The following metrics will be gathered:
-//! - number of (valid and invalid) transactions in Turi
-//! - time to data storage (based on client transaction timestamps)
-//! - time in consensus queue (based on client transaction timestamps)
-//! - time to block storage (based on client transaction timestamps)
-//! - number of (valid and invalid) transactions in peer inbox / data storage
-//! - size of data storage
-//! - number of blocks in block storage
-//! - number of transactions in block storage
-//! - size of block storage (https://docs.rs/sled/0.32.0-rc1/sled/struct.Db.html#method.size_on_disk)
-//! - leader term
-//! - time of last leader change
-//! - time of last prepare message
-//! - time of last append message
-//! - time of last commit message
+//! - [x] number of (valid and invalid) transactions in Turi
+//! - [x] time in consensus queue
+//! - [x] time to data storage (based on client transaction timestamps)
+//! - [x] time to block storage (based on client transaction timestamps)
+//! - [x] number of (valid and invalid) transactions in peer inbox / data storage
+//! - [x] size of data storage
+//! - [x] number of blocks in block storage
+//! - [x] number of transactions in block storage
+//! - [x] size of block storage (<https://docs.rs/sled/0.32.0-rc1/sled/struct.Db.html#method.size_on_disk>)
+//! - [x] leader term
+//! - [x] time of last leader change
+//! - [x] time of last prepare message
+//! - [x] time of last append message
+//! - [x] time of last commit message
 
 use hyper::{
     header::CONTENT_TYPE,

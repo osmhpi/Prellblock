@@ -377,8 +377,23 @@ pub enum Transaction {
 }
 
 /// A trait signifying that a transaction can be written into the Account-tree in the `DataStorage`.
-pub trait AccountTransaction {}
+pub trait AccountTransaction {
+    /// The timestamp of transaction creation.
+    fn timestamp(&self) -> SystemTime;
+}
 
-impl AccountTransaction for transaction::UpdateAccount {}
-impl AccountTransaction for transaction::CreateAccount {}
-impl AccountTransaction for transaction::DeleteAccount {}
+impl AccountTransaction for transaction::UpdateAccount {
+    fn timestamp(&self) -> SystemTime {
+        self.timestamp
+    }
+}
+impl AccountTransaction for transaction::CreateAccount {
+    fn timestamp(&self) -> SystemTime {
+        self.timestamp
+    }
+}
+impl AccountTransaction for transaction::DeleteAccount {
+    fn timestamp(&self) -> SystemTime {
+        self.timestamp
+    }
+}
