@@ -1,3 +1,4 @@
+use pinxit::PeerId;
 use serde::Deserialize;
 use std::fs;
 
@@ -8,7 +9,7 @@ pub struct SubscriptionConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Subscription {
-    pub peer_id: String,
+    pub peer_id: PeerId,
     pub access_token: String,
     pub namespace: String,
 }

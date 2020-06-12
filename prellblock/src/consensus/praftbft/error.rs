@@ -153,6 +153,13 @@ pub enum Error {
     #[error(display = "Could not get supermajority.")]
     CouldNotGetSupermajority,
 
+    /// Could not get supermajority.
+    #[error(display = "The environment variable for the thingsboard username was not set.")]
+    ThingsboardUserNameNotSet,
+    /// Could not get supermajority.
+    #[error(display = "The environment variable for the thingsboard password was not set.")]
+    ThingsboardPasswordNotSet,
+
     /// An error occurred while parsing to json.
     #[error(display = "{}", 0)]
     SerdeJson(#[error(from)] serde_json::error::Error),

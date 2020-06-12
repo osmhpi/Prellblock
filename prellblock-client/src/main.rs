@@ -10,23 +10,20 @@
 mod cli;
 
 use cli::prelude::*;
-use cmd::{GeneratorType, ParseFilter, ParseSpan};
+use cmd::GeneratorType;
 use http::StatusCode;
 use noise::{NoiseFn, Perlin};
-use pinxit::Identity;
 use prellblock_client::{account::Permissions, Client, Query};
-use prellblock_client_api::{Filter, ReadValues, Span};
+use prellblock_client_api::{Filter, ReadValues};
 use rand::{
     rngs::{OsRng, StdRng},
     seq::SliceRandom,
     thread_rng, RngCore, SeedableRng,
 };
-use serde::Deserialize;
 use std::{
-    fmt, fs,
+    fs,
     net::SocketAddr,
     str,
-    str::FromStr,
     time::{Duration, Instant},
 };
 use structopt::StructOpt;
@@ -104,7 +101,7 @@ enum Command {
     /// Listen to timeseries and push updates via POST.
     Listen {
         /// The interval to poll values from timeseries. (in ms)
-        #[structopt(short, long, default_value = "100")]
+        #[structopt(short, long, default_value = "1000")]
         polling_interval: u64,
     },
     /// Update the permissions for a given account.
@@ -334,12 +331,6 @@ async fn main_generate(cmd: cmd::Generate) {
     let mut rng = thread_rng();
     let turi_address = Config::load().rpu.choose(&mut rng).unwrap().turi_address;
 
-    // matching peerid is: cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc
-    let identity: Identity = "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256"
-        .parse()
-        .unwrap();
-
-    // let mut client = Client::new(turi_address, identity);
     let mut client = writer_client(turi_address);
     let res = timeout(
         Duration::from_millis(duration),
@@ -348,7 +339,7 @@ async fn main_generate(cmd: cmd::Generate) {
     .await;
 
     if res.is_err() {
-        println!("Done generating.");
+        log::info!("Done generating.");
     }
 }
 
@@ -361,9 +352,8 @@ async fn main_listen(cmd: cmd::Listen) {
         let deadline = tokio::time::Instant::now() + Duration::from_millis(polling_interval);
         // load timeseries from config
         for subscription in &config.subscription {
-            // println!("{:?}", subscription.peer_id);
             let query = Query::Range {
-                span: 20.into(),
+                span: 1.into(),
                 end: 0.into(),
                 skip: None,
             };
@@ -376,14 +366,15 @@ async fn main_listen(cmd: cmd::Listen) {
                 .await
             {
                 Ok(values) => {
-                    // println!("{:?}", values);
                     post_values(values, &subscription.access_token).await;
                 }
-                Err(err) => {}
+                Err(err) => {
+                    log::warn!("Error while querying {}", err);
+                }
             }
         }
 
-        let _ = delay_until(deadline).await;
+        delay_until(deadline).await;
     }
 }
 
@@ -393,15 +384,13 @@ async fn generate_data(client: &mut Client, gen_type: GeneratorType, interval: u
 
     loop {
         let deadline = tokio::time::Instant::now() + Duration::from_millis(interval);
-        // println!("deadline: {:?}", deadline);
         match gen_type {
             GeneratorType::Temperature => {
                 let time = Instant::now() - start;
-                let time = 1.01 * time.as_millis() as f64;
-                let mut value = 20 as f64 + 10.0 * perlin.get([time, time, time]);
+                let time = time.as_secs_f64();
+                let mut value = 10_f64.mul_add(perlin.get([time, time, time]), 20_f64);
                 value = (value * 100.0).round() / 100.0;
-                // println!("time: {}", time);
-                println!("temperatue: {}", value);
+                log::trace!("temperatue: {}", value);
 
                 match client
                     .send_key_value("temperature".to_string(), value)
@@ -412,23 +401,23 @@ async fn generate_data(client: &mut Client, gen_type: GeneratorType, interval: u
                 }
             }
         }
-        let _ = delay_until(deadline).await;
+        delay_until(deadline).await;
     }
 }
 async fn post_values(values: ReadValues, access_token: &str) {
     // only one peer
-    for (peer_id, values_of_peer) in values {
+    for (_, values_of_peer) in values {
         // only one timeseries
         for (key, values_by_key) in values_of_peer {
             //only one value
-            for (timestamp, value) in values_by_key {
+            for (_, value) in values_by_key {
                 // TODO: use timestamp
                 // post key:value
                 let url = thingsboard_url(access_token);
                 let value: f64 = postcard::from_bytes(&value.0).unwrap();
                 let key_value_json = format!("{{{}:{}}}", key, value);
                 let client = reqwest::Client::new();
-                println!("Sending POST w/ json body: {}", key_value_json);
+                log::trace!("Sending POST w/ json body: {}", key_value_json);
                 let body = client
                     .post(&url)
                     .header("Content-Type", "application/json")

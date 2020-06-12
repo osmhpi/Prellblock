@@ -9,6 +9,10 @@ authors = [
 ]
 edition = "2018"
 
+[features]
+default = ["thingsboard"]
+thingsboard = []
+
 [dependencies]
 balise = { path = "../balise", features = ["server", "client", "tls"] }
 err-derive = "0.2.3"

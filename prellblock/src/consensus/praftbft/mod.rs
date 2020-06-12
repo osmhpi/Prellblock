@@ -16,7 +16,9 @@ pub use ring_buffer::RingBuffer;
 
 use self::core::Core;
 use super::TransactionApplier;
-use crate::{block_storage::BlockStorage, world_state::WorldStateService};
+use crate::{
+    block_storage::BlockStorage, thingsboard::SubscriptionManager, world_state::WorldStateService,
+};
 use censorship_checker::CensorshipChecker;
 use error::ErrorVerify;
 use follower::Follower;
@@ -51,11 +53,15 @@ impl PRaftBFT {
         identity: Identity,
         block_storage: BlockStorage,
         world_state: WorldStateService,
+        subscription_manager: SubscriptionManager,
     ) -> Arc<Self> {
         log::debug!("Started consensus.");
 
-        let transaction_applier =
-            TransactionApplier::new(block_storage.clone(), world_state.clone());
+        let transaction_applier = TransactionApplier::new(
+            block_storage.clone(),
+            world_state.clone(),
+            subscription_manager,
+        );
 
         // Setup core
         let core = Arc::new(Core::new(

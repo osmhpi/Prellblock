@@ -19,6 +19,7 @@ use prellblock::{
     data_storage::DataStorage,
     peer::{Calculator, PeerInbox, Receiver},
     reader::Reader,
+    thingsboard::SubscriptionManager,
     transaction_checker::TransactionChecker,
     turi::Turi,
     world_state::{Account, WorldStateService},
@@ -105,10 +106,18 @@ async fn main() {
     let identity = hex_identity.parse().expect("Identity could not be loaded.");
 
     let block_storage = BlockStorage::new(&format!("./blocks/{}", opt.name)).unwrap();
+    let subscription_manager = SubscriptionManager::new(block_storage.clone()).await;
+
     let world_state =
         WorldStateService::from_block_storage(&block_storage, peer_accounts, peers).unwrap();
 
-    let consensus = Consensus::new(identity, block_storage.clone(), world_state.clone()).await;
+    let consensus = Consensus::new(
+        identity,
+        block_storage.clone(),
+        world_state.clone(),
+        subscription_manager,
+    )
+    .await;
 
     let broadcaster = Broadcaster::new(world_state.clone());
     let broadcaster = Arc::new(broadcaster);

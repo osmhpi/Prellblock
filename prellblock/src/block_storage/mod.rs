@@ -178,6 +178,17 @@ impl BlockStorage {
             .collect()
     }
 
+    /// Get only the latest transaction of a `Peer` and a namespace.
+    pub fn read_transaction(
+        &self,
+        peer_id: &PeerId,
+        namespace: &str,
+    ) -> Result<ReadValuesOfSeries, Error> {
+        let time_series_name = [peer_id.as_bytes(), namespace.as_bytes()].join(&0);
+        let query = Query::CurrentValue;
+        self.read_transactions_inner(&time_series_name, &query)
+    }
+
     /// Get a all transactions of a `time_series`, filtered by a `Query`, in a `HashMap`.
     fn read_transactions_inner(
         &self,

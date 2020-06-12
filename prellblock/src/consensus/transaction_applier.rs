@@ -1,7 +1,9 @@
 //! Can be used by any consensus algorithm to apply blocks.
 
 use super::{Block, Error};
-use crate::{block_storage::BlockStorage, world_state::WorldStateService};
+use crate::{
+    block_storage::BlockStorage, thingsboard::SubscriptionManager, world_state::WorldStateService,
+};
 use http::StatusCode;
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
@@ -18,15 +20,21 @@ struct KeyValue {
 pub struct TransactionApplier {
     block_storage: BlockStorage,
     world_state: WorldStateService,
+    subscription_manager: SubscriptionManager,
 }
 
 impl TransactionApplier {
     /// Create a new `TransactionApplier` instance.
     #[must_use]
-    pub const fn new(block_storage: BlockStorage, world_state: WorldStateService) -> Self {
+    pub const fn new(
+        block_storage: BlockStorage,
+        world_state: WorldStateService,
+        subscription_manager: SubscriptionManager,
+    ) -> Self {
         Self {
             block_storage,
             world_state,
+            subscription_manager,
         }
     }
 
@@ -36,9 +44,9 @@ impl TransactionApplier {
         self.apply_to_block_storage(&block);
         // Write Block to WorldState
         self.apply_to_worldstate(block.clone()).await;
-        // export Block using HTTP POST request
-        // #[cfg(thingsboard)]
-        let _ = self.post_block(block).await;
+        // export data using HTTP POST request
+        #[cfg(feature = "thingsboard")]
+        self.notify_block_update(block).await;
     }
 
     /// Applies a given block to the `BlockStorage`.
@@ -55,55 +63,20 @@ impl TransactionApplier {
         world_state.save();
     }
 
-    /// Sends a `Block` via a HTTP POST request to an address specified in the config.
-    pub async fn post_block(&self, block: Block) -> Result<(), Error> {
-        // serialize block
-        // let values: Vec<_> = block
-        //     .body
-        //     .transactions
-        //     .iter()
-        //     .map(|signed| (signed.signer(), signed.unverified_ref()))
-        //     .collect();
+    #[cfg(feature = "thingsboard")]
+    async fn notify_block_update(&self, block: Block) {
         let mut values = Vec::new();
         for transaction in &block.body.transactions {
             match transaction.unverified_ref() {
                 Transaction::KeyValue(params) => {
-                    let key = format!("{}-{}", transaction.signer(), params.key);
-                    // let mut value = [0; 4];
-                    // value.copy_from_slice(&params.value[0..4]);
-                    let value: f64 = postcard::from_bytes(&params.value).unwrap();
-                    // let value = u32::from_le_bytes(value);
-                    let mut key_value = HashMap::new();
-                    key_value.insert(key, value);
-                    values.push(key_value);
+                    values.push((transaction.signer().clone(), params.key.clone()));
                 }
-                Transaction::UpdateAccount(params) => {}
+                Transaction::UpdateAccount(_) => {}
             }
         }
-        let values = serde_json::to_string(&values)?;
-
-        // setup request
-        let client = reqwest::Client::new();
-        let host = "localhost";
-        let port = "8080";
-        let access_token = "dtcisBXItTT4cEkg5EpM";
-        let url = format!("http://{}:{}/api/v1/{}/telemetry", host, port, access_token);
-        let values = values.replace("\"", "");
-        log::trace!("POST: {:?}", values);
-        let body = client
-            .post(&url)
-            .header("Content-Type", "application/json")
-            .body(values);
-
-        //send request
-        let res = body.send().await?;
-        match res.status() {
-            StatusCode::OK => log::trace!("Send POST successfully."),
-            StatusCode::BAD_REQUEST => log::warn!("BAD_REQUEST response from {}.", host),
-            _ => {
-                log::trace!("Statuscode: {:?}", res.status());
-            }
-        }
-        Ok(())
+        self.subscription_manager
+            .notify_block_update(values)
+            .await
+            .unwrap();
     }
 }
