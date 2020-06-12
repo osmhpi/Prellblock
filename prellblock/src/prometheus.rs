@@ -1,4 +1,20 @@
 //! Provide a server for gathering metrics with Prometheus.
+//!
+//! The following metrics will be gathered:
+//! - number of (valid and invalid) transactions in Turi
+//! - time to data storage (based on client transaction timestamps)
+//! - time in consensus queue (based on client transaction timestamps)
+//! - time to block storage (based on client transaction timestamps)
+//! - number of (valid and invalid) transactions in peer inbox / data storage
+//! - size of data storage
+//! - number of blocks in block storage
+//! - number of transactions in block storage
+//! - size of block storage (https://docs.rs/sled/0.32.0-rc1/sled/struct.Db.html#method.size_on_disk)
+//! - leader term
+//! - time of last leader change
+//! - time of last prepare message
+//! - time of last append message
+//! - time of last commit message
 
 use hyper::{
     header::CONTENT_TYPE,
@@ -10,7 +26,7 @@ use std::net::SocketAddr;
 
 /// Start a HTTP-Server.
 ///
-/// The server will listen on `address` and serve metrics.
+/// The server will listen on `address` and serve metrics under `/metrics`.
 pub async fn run_server(address: SocketAddr) -> Result<(), Error> {
     let serve_future = Server::bind(&address).serve(make_service_fn(|_| async {
         Ok::<_, hyper::Error>(service_fn(serve_request))
@@ -19,7 +35,7 @@ pub async fn run_server(address: SocketAddr) -> Result<(), Error> {
     serve_future.await
 }
 
-async fn serve_request(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+async fn serve_request(req: Request<Body>) -> Result<Response<Body>, hyper::http::Error> {
     if req.uri() != "/metrics" {
         return Ok(Response::builder()
             .status(404)
@@ -31,13 +47,17 @@ async fn serve_request(req: Request<Body>) -> Result<Response<Body>, hyper::Erro
 
     let metric_families = prometheus::gather();
     let mut buffer = vec![];
-    encoder.encode(&metric_families, &mut buffer).unwrap();
+    if let Err(err) = encoder.encode(&metric_families, &mut buffer) {
+        let response = Response::builder()
+            .status(500)
+            .body(Body::from(err.to_string()))?;
+        return Ok(response);
+    }
 
     let response = Response::builder()
         .status(200)
         .header(CONTENT_TYPE, encoder.format_type())
-        .body(Body::from(buffer))
-        .unwrap();
+        .body(buffer.into())?;
 
     Ok(response)
 }

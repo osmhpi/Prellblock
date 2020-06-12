@@ -21,12 +21,14 @@ pub mod consensus;
 pub mod data_broadcaster;
 pub mod data_storage;
 pub mod peer;
-#[cfg(feature = "monitoring")]
-pub mod prometheus;
 pub mod reader;
 pub mod transaction_checker;
 pub mod turi;
 pub mod world_state;
+
+if_monitoring! {
+    pub mod prometheus;
+}
 
 // TODO: remove this sh** lmao yeet
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -42,4 +44,27 @@ pub struct RpuPrivateConfig {
     pub block_path: String,
     /// The path to the directory for the `DataStorage`.
     pub data_path: String,
+}
+/// Only compile this code when the `monitoring` feature is enabled.
+/// ```
+/// if_monitoring! {
+///     pub use some::module;
+/// }
+/// // or
+/// if_monitoring!({
+///     println!("Monitoring enabled!");
+/// });
+/// ```
+#[macro_export]
+macro_rules! if_monitoring {
+	($block:block) => {
+        #[cfg(feature = "monitoring")]
+        $block
+	};
+    ($($item:item)*) => {
+        $(
+            #[cfg(feature = "monitoring")]
+            $item
+        )*
+    };
 }

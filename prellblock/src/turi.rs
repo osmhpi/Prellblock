@@ -1,6 +1,9 @@
 //! A server for communicating between RPUs.
 
-use crate::{batcher::Batcher, reader::Reader, transaction_checker::TransactionChecker, BoxError};
+use crate::{
+    batcher::Batcher, if_monitoring, reader::Reader, transaction_checker::TransactionChecker,
+    BoxError,
+};
 use balise::{
     handler,
     server::{Server, TlsIdentity},
@@ -23,27 +26,22 @@ pub struct Turi {
     transaction_checker: TransactionChecker,
 }
 
-#[cfg(feature = "monitoring")]
-use lazy_static::lazy_static;
-#[cfg(feature = "monitoring")]
-use prometheus::{labels, opts, register_int_counter, IntCounter};
-#[cfg(feature = "monitoring")]
-lazy_static! {
-    static ref TURI_RECEIVED_TRANSACTIONS: IntCounter = register_int_counter!(opts! {
-        "turi_num_received_txs",
-        "Number of transactions received by the Turi.",
-        labels! {
-            "name" => "emily",
-        }
-    })
-    .unwrap();
-    static ref TURI_RECEIVED_INVALID_TRANSACTIONS: IntCounter = register_int_counter!(
-        "turi_num_received_invalid_txs",
-        "Number of invalid transactions received by the Turi."
-    )
-    .unwrap();
+if_monitoring! {
+    use lazy_static::lazy_static;
+    use prometheus::{opts, register_int_counter, IntCounter};
+    lazy_static! {
+        static ref TURI_RECEIVED_TRANSACTIONS: IntCounter = register_int_counter!(opts! {
+            "turi_num_received_txs",
+            "Number of transactions received by the Turi."
+        })
+        .unwrap();
+        static ref TURI_RECEIVED_INVALID_TRANSACTIONS: IntCounter = register_int_counter!(
+            "turi_num_received_invalid_txs",
+            "Number of invalid transactions received by the Turi."
+        )
+        .unwrap();
+    }
 }
-
 impl Turi {
     /// Create a new receiver instance.
     ///
@@ -70,14 +68,16 @@ impl Turi {
             handler!(ClientMessage, {
                 Ping(_) => Ok(Pong),
                 Execute(params) => {
-                    #[cfg(feature = "monitoring")]
-                    TURI_RECEIVED_TRANSACTIONS.inc();
+                    if_monitoring!({
+                        TURI_RECEIVED_TRANSACTIONS.inc();
+                    });
 
                     let result = self.handle_execute(params).await;
-                    #[cfg(feature = "monitoring")]
-                    if result.is_err() {
-                        TURI_RECEIVED_INVALID_TRANSACTIONS.inc();
-                    }
+                    if_monitoring!({
+                        if result.is_err() {
+                            TURI_RECEIVED_INVALID_TRANSACTIONS.inc();
+                        }
+                    });
 
                     result
                 },

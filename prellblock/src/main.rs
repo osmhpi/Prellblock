@@ -22,6 +22,7 @@ use prellblock::{
     consensus::Consensus,
     data_broadcaster::Broadcaster,
     data_storage::DataStorage,
+    if_monitoring,
     peer::{Calculator, PeerInbox, Receiver},
     reader::Reader,
     transaction_checker::TransactionChecker,
@@ -102,8 +103,8 @@ async fn main() {
         } => (turi_address, peer_address, monitoring_address),
         _ => panic!("Given account {} is no RPU.", peer_id),
     };
-    #[cfg(feature = "monitoring")]
-    {
+
+    if_monitoring!({
         use prellblock::prometheus;
 
         // start monitoring exporter server in a new thread.
@@ -112,7 +113,7 @@ async fn main() {
             // let tls_identity = load_identity_from_env(private_config.tls_id).await.unwrap();
             prometheus::run_server(monitoring_address).await
         });
-    }
+    });
 
     // execute the turi in a new thread
     let turi_task = {
