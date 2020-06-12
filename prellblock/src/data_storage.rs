@@ -45,7 +45,6 @@ impl DataStorage {
     /// Write a value to the data storage.
     ///
     /// The data will be associated with the peer via its `PeerId`.
-    /// The
     pub fn write_key_value<K>(
         &self,
         peer: &PeerId,
