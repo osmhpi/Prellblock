@@ -153,12 +153,15 @@ pub enum Error {
     #[error(display = "Could not get supermajority.")]
     CouldNotGetSupermajority,
 
-    /// Could not get supermajority.
+    /// The environment variable for the thingsboard username was not set.
     #[error(display = "The environment variable for the thingsboard username was not set.")]
     ThingsboardUserNameNotSet,
-    /// Could not get supermajority.
+    /// The environment variable for the thingsboard password was not set.
     #[error(display = "The environment variable for the thingsboard password was not set.")]
     ThingsboardPasswordNotSet,
+    /// The environment variable for the thingsboard tenant id was not set.
+    #[error(display = "The environment variable for the thingsboard tenant id was not set.")]
+    ThingsboardTenantIdNotSet,
 
     /// An error occurred while parsing to json.
     #[error(display = "{}", 0)]

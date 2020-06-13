@@ -10,7 +10,7 @@ authors = [
 edition = "2018"
 
 [features]
-default = ["thingsboard"]
+default = []
 thingsboard = []
 
 [dependencies]

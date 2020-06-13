@@ -12,7 +12,7 @@ mod cli;
 use cli::prelude::*;
 use cmd::GeneratorType;
 use http::StatusCode;
-use noise::{NoiseFn, Perlin};
+use noise::{Fbm, NoiseFn};
 use prellblock_client::{account::Permissions, Client, Query};
 use prellblock_client_api::{Filter, ReadValues};
 use rand::{
@@ -380,7 +380,7 @@ async fn main_listen(cmd: cmd::Listen) {
 
 async fn generate_data(client: &mut Client, gen_type: GeneratorType, interval: u64) {
     let start = Instant::now();
-    let perlin = Perlin::new();
+    let noise = Fbm::new();
 
     loop {
         let deadline = tokio::time::Instant::now() + Duration::from_millis(interval);
@@ -388,7 +388,7 @@ async fn generate_data(client: &mut Client, gen_type: GeneratorType, interval: u
             GeneratorType::Temperature => {
                 let time = Instant::now() - start;
                 let time = time.as_secs_f64();
-                let mut value = 10_f64.mul_add(perlin.get([time, time, time]), 20_f64);
+                let mut value = 10_f64.mul_add(noise.get([time, time, time]), 20_f64);
                 value = (value * 100.0).round() / 100.0;
                 log::trace!("temperatue: {}", value);
 

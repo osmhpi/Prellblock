@@ -1,13 +1,11 @@
 //! Can be used by any consensus algorithm to apply blocks.
 
-use super::{Block, Error};
+use super::Block;
 use crate::{
     block_storage::BlockStorage, thingsboard::SubscriptionManager, world_state::WorldStateService,
 };
-use http::StatusCode;
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize)]
 struct KeyValue {

@@ -10,7 +10,7 @@ pub struct SubscriptionConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Subscription {
     pub peer_id: PeerId,
-    pub access_token: String,
+    pub device_type: String,
     pub namespace: String,
 }
 
