@@ -54,10 +54,11 @@
           "calcs": [
             "lastNotNull"
           ],
+          "fields": "",
           "values": false
         }
       },
-      "pluginVersion": "7.0.1",
+      "pluginVersion": "7.0.3",
       "targets": [
         {
           "expr": "world_state_block_number",
@@ -105,10 +106,11 @@
           "calcs": [
             "lastNotNull"
           ],
+          "fields": "",
           "values": false
         }
       },
-      "pluginVersion": "7.0.1",
+      "pluginVersion": "7.0.3",
       "targets": [
         {
           "expr": "turi_num_received_txs",
@@ -156,10 +158,11 @@
           "calcs": [
             "lastNotNull"
           ],
+          "fields": "",
           "values": false
         }
       },
-      "pluginVersion": "7.0.1",
+      "pluginVersion": "7.0.3",
       "targets": [
         {
           "expr": "turi_num_received_invalid_txs",
@@ -214,12 +217,13 @@
           "calcs": [
             "lastNotNull"
           ],
+          "fields": "",
           "values": false
         },
         "showThresholdLabels": false,
         "showThresholdMarkers": true
       },
-      "pluginVersion": "7.0.1",
+      "pluginVersion": "7.0.3",
       "targets": [
         {
           "expr": "praftbft_queue_backlog",
@@ -385,13 +389,14 @@
           "calcs": [
             "lastNotNull"
           ],
+          "fields": "",
           "values": false
         }
       },
-      "pluginVersion": "7.0.1",
+      "pluginVersion": "7.0.3",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(blockstorage_arrival_time_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(blockstorage_arrival_time_bucket[1m])) by (le))",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -445,10 +450,11 @@
           "calcs": [
             "lastNotNull"
           ],
+          "fields": "",
           "values": false
         }
       },
-      "pluginVersion": "7.0.1",
+      "pluginVersion": "7.0.3",
       "targets": [
         {
           "expr": "histogram_quantile(0.99, sum(rate(blockstorage_arrival_time_bucket[1m])) by (le))",
@@ -460,6 +466,161 @@
       "timeFrom": null,
       "timeShift": null,
       "title": "Time To Block Storage (99th percentile)",
+      "type": "stat"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 0,
+        "y": 23
+      },
+      "hiddenSeries": false,
+      "id": 34,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "rate(block_storage_num_txs[5s])",
+          "interval": "",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Block Storage TPS",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 0.9
+              },
+              {
+                "color": "red",
+                "value": 1.5
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 23
+      },
+      "id": 32,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "pluginVersion": "7.0.3",
+      "targets": [
+        {
+          "expr": "blockstorage_arrival_time_sum/blockstorage_arrival_time_count",
+          "interval": "",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Average Time to BlockStorage",
       "type": "stat"
     },
     {
@@ -492,9 +653,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
-        "w": 9,
+        "w": 12,
         "x": 0,
-        "y": 23
+        "y": 31
       },
       "hiddenSeries": false,
       "id": 19,
@@ -601,9 +762,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
-        "w": 9,
-        "x": 9,
-        "y": 23
+        "w": 12,
+        "x": 12,
+        "y": 31
       },
       "hiddenSeries": false,
       "id": 20,
@@ -704,7 +865,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 31
+        "y": 39
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -771,7 +932,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 48
       },
       "id": 30,
       "options": {
@@ -781,11 +942,12 @@
           "calcs": [
             "lastNotNull"
           ],
+          "fields": "",
           "values": false
         },
         "showUnfilled": true
       },
-      "pluginVersion": "7.0.1",
+      "pluginVersion": "7.0.3",
       "targets": [
         {
           "expr": "sum(rate(blockstorage_arrival_time_bucket[10s])) by (le)",
@@ -824,7 +986,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 57
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -893,7 +1055,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 58
+        "y": 66
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -961,7 +1123,7 @@
         "h": 8,
         "w": 7,
         "x": 0,
-        "y": 67
+        "y": 75
       },
       "id": 22,
       "options": {
@@ -973,10 +1135,11 @@
           "calcs": [
             "lastNotNull"
           ],
+          "fields": "",
           "values": false
         }
       },
-      "pluginVersion": "7.0.1",
+      "pluginVersion": "7.0.3",
       "targets": [
         {
           "expr": "praftbft_leader_term",
@@ -1013,7 +1176,7 @@
         "h": 8,
         "w": 12,
         "x": 7,
-        "y": 67
+        "y": 75
       },
       "id": 24,
       "options": {
@@ -1025,10 +1188,11 @@
           "calcs": [
             "lastNotNull"
           ],
+          "fields": "",
           "values": false
         }
       },
-      "pluginVersion": "7.0.1",
+      "pluginVersion": "7.0.3",
       "targets": [
         {
           "expr": "praftbft_leader_term_change * 1000\n",
@@ -1067,7 +1231,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 75
+        "y": 83
       },
       "id": 25,
       "options": {
@@ -1079,10 +1243,11 @@
           "calcs": [
             "lastNotNull"
           ],
+          "fields": "",
           "values": false
         }
       },
-      "pluginVersion": "7.0.1",
+      "pluginVersion": "7.0.3",
       "targets": [
         {
           "expr": "praftbft_last_prepare_message * 1000\n",
@@ -1121,7 +1286,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 75
+        "y": 83
       },
       "id": 26,
       "options": {
@@ -1133,10 +1298,11 @@
           "calcs": [
             "lastNotNull"
           ],
+          "fields": "",
           "values": false
         }
       },
-      "pluginVersion": "7.0.1",
+      "pluginVersion": "7.0.3",
       "targets": [
         {
           "expr": "praftbft_last_append_message * 1000\n",
@@ -1175,7 +1341,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 75
+        "y": 83
       },
       "id": 27,
       "options": {
@@ -1187,10 +1353,11 @@
           "calcs": [
             "lastNotNull"
           ],
+          "fields": "",
           "values": false
         }
       },
-      "pluginVersion": "7.0.1",
+      "pluginVersion": "7.0.3",
       "targets": [
         {
           "expr": "praftbft_last_commit_message * 1000\n",
@@ -1230,5 +1397,5 @@
   "timezone": "Europe/Berlin",
   "title": "Prellblock",
   "uid": "hW0U9LkGk",
-  "version": 31
+  "version": 2
 }
