@@ -1,0 +1,2 @@
+identity = "./config/bob/bob.key"
+tls_id = "./certificates/bob/bob.pfx"

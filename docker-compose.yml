@@ -1,0 +1,49 @@
+version: "3.3"
+
+services:
+    alice:
+        command: alice
+        build: .
+        volumes:
+            - "./certificates:/prellblock/certificates"
+            - "./config:/prellblock/config"
+            - "./blocks:/prellblock/blocks"
+        networks:
+            prellblock_net:
+                ipv4_address: 172.28.0.10
+    bob:
+        command: bob
+        build: .
+        volumes:
+            - "./certificates:/prellblock/certificates"
+            - "./config:/prellblock/config"
+            - "./blocks:/prellblock/blocks"
+        networks:
+            prellblock_net:
+                ipv4_address: 172.28.0.11
+    carol:
+        command: carol
+        build: .
+        volumes:
+            - "./certificates:/prellblock/certificates"
+            - "./config:/prellblock/config"
+            - "./blocks:/prellblock/blocks"
+        networks:
+            prellblock_net:
+                ipv4_address: 172.28.0.12
+    dave:
+        command: dave
+        build: .
+        volumes:
+            - "./certificates:/prellblock/certificates"
+            - "./config:/prellblock/config"
+            - "./blocks:/prellblock/blocks"
+        networks:
+            prellblock_net:
+                ipv4_address: 172.28.0.13
+networks:
+    prellblock_net:
+        ipam:
+            driver: default
+            config:
+                - subnet: 172.28.0.0/16

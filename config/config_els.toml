@@ -1,0 +1,27 @@
+[[rpu]]
+name = "emily"
+peer_id = "./config/emily/emily.pub"
+peer_address = "172.20.5.50:2480"
+turi_address = "172.20.5.50:3130"
+monitoring_address = "172.20.5.50:9091"
+
+[[rpu]]
+name = "james"
+peer_id = "./config/james/james.pub"
+peer_address = "172.20.5.51:2481"
+turi_address = "172.20.5.51:3131"
+monitoring_address = "172.20.5.51:9092"
+
+[[rpu]]
+name = "percy"
+peer_id = "./config/percy/percy.pub"
+peer_address = "172.20.5.52:2482"
+turi_address = "172.20.5.52:3132"
+monitoring_address = "172.20.5.52:9093"
+
+[[rpu]]
+name = "thomas"
+peer_id = "./config/thomas/thomas.pub"
+peer_address = "172.20.5.53:2483"
+turi_address = "172.20.5.53:3133"
+monitoring_address = "172.20.5.53:9094"

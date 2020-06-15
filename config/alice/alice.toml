@@ -1,0 +1,2 @@
+identity = "./config/alice/alice.key"
+tls_id = "./certificates/alice/alice.pfx"

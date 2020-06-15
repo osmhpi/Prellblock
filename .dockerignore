@@ -1,0 +1,10 @@
+Dockerfile
+docker-compose.yml
+benchmarking/
+# rust compilation files
+target/
+# blockchain data
+blocks/
+data/
+# flamegraph data
+perf.data*
