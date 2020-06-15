@@ -84,7 +84,7 @@ impl SubscriptionManager {
         let mut counter = 0;
         for (peer_id, (_, device_type)) in &self.subscriptions {
             // create a new device via POST
-            let url = format!("http://localhost:8080/api/device?accessToken={}", peer_id);
+            let url = device_url(&peer_id.to_string());
 
             let body = build_thingsboard_device(
                 format!("Sensor{}", counter).to_string(),
@@ -110,6 +110,7 @@ impl SubscriptionManager {
         Ok(())
     }
 
+    /// This will retreive the token needed to authenticate device creation query.
     async fn user_token() -> Result<String, Error> {
         #[derive(Deserialize, Debug)]
         struct Tokens {
@@ -136,10 +137,10 @@ impl SubscriptionManager {
 
         let body = serde_json::json!({ "username": thingsboard_username, "password":thingsboard_password });
 
-        let url = "http://localhost:8080/api/auth/login";
+        let url = login_url();
 
         let request = reqwest::Client::new()
-            .post(url)
+            .post(&url)
             .header("Content-Type", "application/json")
             .body(body.to_string());
 
@@ -148,7 +149,7 @@ impl SubscriptionManager {
         Ok(response.token)
     }
 
-    /// This will be called on an Applay-`Block` event.
+    /// This will be called on an Apply-`Block` event.
     pub async fn notify_block_update(
         &self,
         data: Vec<(PeerId, String)>,
@@ -169,7 +170,7 @@ impl SubscriptionManager {
         Ok(())
     }
     async fn post_value(&self, value: &[u8], namespace: &str, access_token: &str) {
-        let url = thingsboard_url(access_token);
+        let url = telemetry_url(access_token);
         let value: f64 = postcard::from_bytes(value).unwrap();
         let key_value_json = format!("{{{}:{}}}", namespace, value);
         log::trace!("Sending POST w/ json body: {}", key_value_json);
@@ -195,23 +196,30 @@ impl SubscriptionManager {
     }
 }
 
-fn thingsboard_url(access_token: &str) -> String {
+/// This builds the right url to send telemetry data.
+fn telemetry_url(access_token: &str) -> String {
     let host = "localhost";
     let port = "8080";
     format!("http://{}:{}/api/v1/{}/telemetry", host, port, access_token)
 }
 
+/// This builds the right url to retrieve login credentials.
+fn login_url() -> String {
+    "http://localhost:8080/api/auth/login".to_string()
+}
+
+/// This builds the right url to create a new device.
+fn device_url(access_token: &str) -> String {
+    let host = "localhost";
+    let port = "8080";
+    format!(
+        "http://localhost:8080/api/device?accessToken={}",
+        access_token
+    )
+}
+
 /// This creates a thingsboard device json configuration.
 fn build_thingsboard_device(device_name: String, device_type: String, tenant_id: String) -> String {
-    // {
-    //     "name":"TestSensorA",
-    //     "tenantId": {
-    //         "entityType": "TENANT",
-    //         "id": "bacon"
-    //     },
-    //     "entityType": "DEVICE",
-    //     "type": "prellblock-sensor"
-    // }
     #[derive(Serialize, Deserialize)]
     struct Tenant {
         #[allow(non_snake_case)]
