@@ -66,6 +66,7 @@ async fn main_benchmark(identity: String, turi_address: SocketAddr, cmd: cmd::Be
         transactions,
         size,
         workers,
+        print_tps,
     } = cmd;
 
     let mut worker_handles = Vec::new();
@@ -112,6 +113,9 @@ async fn main_benchmark(identity: String, turi_address: SocketAddr, cmd: cmd::Be
             log::info!("Duration:               {:?}", time_diff);
             log::info!("Transaction time:       {:?}", avg_time_per_tx);
             log::info!("TPS (averaged):         {}", avg_tps);
+            if print_tps {
+                println!("{}", avg_tps);
+            }
         } else {
             log::error!("Failed to benchmark with worker {}", n);
         }

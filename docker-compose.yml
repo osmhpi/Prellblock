@@ -41,6 +41,39 @@ services:
         networks:
             prellblock_net:
                 ipv4_address: 172.28.0.13
+
+    prometheus:
+        image: prom/prometheus
+        volumes:
+            - ./benchmarking/prometheus/config:/prometheus
+            - ./benchmarking/prometheus/data/prometheus:/data
+        command:
+            - '--config.file=/prometheus/prometheus.yml'
+            - '--storage.tsdb.path=/tmp/data'
+        ports:
+            - 9090:9090
+        restart: unless-stopped
+        networks: 
+            prellblock_net:
+
+    grafana:
+        image: grafana/grafana:latest
+        restart: unless-stopped
+        depends_on:
+            - prometheus
+        ports:
+            - "3000:3000"
+        volumes:
+            - ./benchmarking/grafana/config/grafana.ini:/etc/grafana/grafana.ini
+            - ./benchmarking/grafana/config/datasources:/etc/grafana/provisioning/datasources/
+            - ./benchmarking/grafana/config/dashboards:/etc/grafana/provisioning/dashboards/
+            - ./benchmarking/grafana/data/grafana:/var/lib/grafana
+        environment:
+            - GF_SECURITY_ADMIN_PASSWORD=prellblock
+            - GF_USERS_ALLOW_SIGN_UP=false
+        networks: 
+            prellblock_net:
+
 networks:
     prellblock_net:
         ipam:

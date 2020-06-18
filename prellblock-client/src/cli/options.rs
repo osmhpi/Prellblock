@@ -72,6 +72,9 @@ pub mod cmd {
         /// The number of workers (clients) to use simultaneously.
         #[structopt(short, long, default_value = "1")]
         pub workers: usize,
+        /// Print the TPS number to stdout.
+        #[structopt(short, long)]
+        pub print_tps: bool,
     }
 
     /// Update the permissions for a given account.
