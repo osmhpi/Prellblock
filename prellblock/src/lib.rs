@@ -48,13 +48,15 @@ pub struct RpuPrivateConfig {
 }
 /// Only compile this code when the `monitoring` feature is enabled.
 /// ```
+/// use prellblock::if_monitoring;
+///
 /// if_monitoring! {
-///     pub use some::module;
+///     pub use std::collections::HashMap;
 /// }
 /// // or
-/// if_monitoring!({
+/// if_monitoring! {{
 ///     println!("Monitoring enabled!");
-/// });
+/// }};
 /// ```
 #[macro_export]
 macro_rules! if_monitoring {
