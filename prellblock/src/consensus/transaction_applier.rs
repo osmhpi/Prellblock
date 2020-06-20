@@ -1,10 +1,9 @@
 //! Can be used by any consensus algorithm to apply blocks.
 
 use super::Block;
-use crate::{
-    block_storage::BlockStorage, thingsboard::SubscriptionManager, world_state::WorldStateService,
-};
-use prellblock_client_api::Transaction;
+#[cfg(feature = "thingsboard")]
+use crate::thingsboard::SubscriptionManager;
+use crate::{block_storage::BlockStorage, world_state::WorldStateService};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -18,6 +17,7 @@ struct KeyValue {
 pub struct TransactionApplier {
     block_storage: BlockStorage,
     world_state: WorldStateService,
+    #[cfg(feature = "thingsboard")]
     subscription_manager: SubscriptionManager,
 }
 
@@ -27,11 +27,12 @@ impl TransactionApplier {
     pub const fn new(
         block_storage: BlockStorage,
         world_state: WorldStateService,
-        subscription_manager: SubscriptionManager,
+        #[cfg(feature = "thingsboard")] subscription_manager: SubscriptionManager,
     ) -> Self {
         Self {
             block_storage,
             world_state,
+            #[cfg(feature = "thingsboard")]
             subscription_manager,
         }
     }

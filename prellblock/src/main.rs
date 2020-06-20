@@ -11,6 +11,8 @@
 
 use balise::server::TlsIdentity;
 use futures::future;
+#[cfg(feature = "thingsboard")]
+use prellblock::thingsboard::SubscriptionManager;
 use prellblock::{
     batcher::Batcher,
     block_storage::BlockStorage,
@@ -19,7 +21,6 @@ use prellblock::{
     data_storage::DataStorage,
     peer::{Calculator, PeerInbox, Receiver},
     reader::Reader,
-    thingsboard::SubscriptionManager,
     transaction_checker::TransactionChecker,
     turi::Turi,
     world_state::{Account, WorldStateService},
@@ -106,6 +107,8 @@ async fn main() {
     let identity = hex_identity.parse().expect("Identity could not be loaded.");
 
     let block_storage = BlockStorage::new(&format!("./blocks/{}", opt.name)).unwrap();
+
+    #[cfg(feature = "thingsboard")]
     let subscription_manager = SubscriptionManager::new(block_storage.clone()).await;
 
     let world_state =
@@ -115,6 +118,7 @@ async fn main() {
         identity,
         block_storage.clone(),
         world_state.clone(),
+        #[cfg(feature = "thingsboard")]
         subscription_manager,
     )
     .await;

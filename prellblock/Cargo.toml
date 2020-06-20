@@ -17,8 +17,8 @@ thingsboard = []
 balise = { path = "../balise", features = ["server", "client", "tls"] }
 err-derive = "0.2.3"
 futures = "0.3.4"
-http = "0.2.1"
 hexutil = "0.1.0"
+http = "0.2.1"
 im = { version = "14.3.0", features = ["serde"] }
 lazy_static = "1.4.0"
 log = "0.4.8"

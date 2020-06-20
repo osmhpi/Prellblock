@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use super::subscriptions::SubscriptionConfig;
 use crate::{block_storage, block_storage::BlockStorage, consensus::Error};
 use http::StatusCode;
@@ -210,8 +212,6 @@ fn login_url() -> String {
 
 /// This builds the right url to create a new device.
 fn device_url(access_token: &str) -> String {
-    let host = "localhost";
-    let port = "8080";
     format!(
         "http://localhost:8080/api/device?accessToken={}",
         access_token
