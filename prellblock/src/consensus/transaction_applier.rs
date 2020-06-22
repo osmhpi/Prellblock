@@ -4,6 +4,8 @@ use super::Block;
 #[cfg(feature = "thingsboard")]
 use crate::thingsboard::SubscriptionManager;
 use crate::{block_storage::BlockStorage, world_state::WorldStateService};
+#[cfg(feature = "thingsboard")]
+use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
