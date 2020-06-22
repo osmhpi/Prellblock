@@ -25,4 +25,14 @@ You'll need to set some environment variables to connect to thingboard:
 >"THINGSBOARD_TENANT_ID"  
 *(this ist your (tenant) account's id)*
 
+To retreive this your account's id, you first have to an access token for an admin's account. You can do this by posting to the authentication url with an admin's account name and password. This is the default admin account and should be changed:
+```sh
+curl -v -X POST -d "{\"username\": \"sysadmin@thingsboard.org\",\"password\":\"sysadmin\"}" http://localhost:8080/api/auth/login --header "Content-Type:application/json"
+```
+Using the gained `token` you have access to API request like the following:
+```sh
+curl -X GET --header 'Accept: application/json' --header 'X-Authorization: Bearer:$ACCESS_TOKEN' 'https://host:port/api/tenants?pageSize=1&page=1'
+```
+Which will accounts and their ids.
+
 After that, the setup should be automatic.  There won't happen anything, if you do not subscribe to a timeseries in the `../config/subscription_config.toml`.  
