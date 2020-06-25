@@ -1,0 +1,2 @@
+identity = "./config/heidi/heidi.key"
+tls_id = "./certificates/heidi/heidi.pfx"

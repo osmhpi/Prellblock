@@ -1,0 +1,2 @@
+identity = "./config/rebecca/rebecca.key"
+tls_id = "./certificates/rebecca/rebecca.pfx"

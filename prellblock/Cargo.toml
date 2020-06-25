@@ -28,7 +28,7 @@ pinxit = { path = "../pinxit" }
 postcard = { version = "0.5.0", git = "https://github.com/felix-gohla/postcard.git#master", features = ["use-std"] }
 prellblock-client-api = { path = "../prellblock-client-api" }
 pretty_env_logger = "0.4.0"
-prometheus = { version = "0.9.0", features = ["nightly"], optional = true }
+prometheus = { version = "0.9.0", git = "https://github.com/felix-gohla/rust-prometheus.git#master", features = ["nightly"], optional = true }
 rand = "0.7.3"
 rayon = "1.1"
 serde = { version = "1.0.105", features = ["derive", "rc"] }

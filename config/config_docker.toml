@@ -25,3 +25,24 @@ peer_id = "./config/dave/dave.pub"
 peer_address = "172.28.0.13:2483"
 turi_address = "172.28.0.13:3133"
 monitoring_address = "172.28.0.13:9094"
+
+[[rpu]]
+name = "frank"
+peer_id = "./config/frank/frank.pub"
+peer_address = "172.28.0.14:2484"
+turi_address = "172.28.0.14:3134"
+monitoring_address = "172.28.0.14:9095"
+
+[[rpu]]
+name = "heidi"
+peer_id = "./config/heidi/heidi.pub"
+peer_address = "172.28.0.15:2485"
+turi_address = "172.28.0.15:3135"
+monitoring_address = "172.28.0.15:9096"
+
+[[rpu]]
+name = "ivan"
+peer_id = "./config/ivan/ivan.pub"
+peer_address = "172.28.0.16:2486"
+turi_address = "172.28.0.16:3136"
+monitoring_address = "172.28.0.16:9097"

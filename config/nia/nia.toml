@@ -1,0 +1,2 @@
+identity = "./config/nia/nia.key"
+tls_id = "./certificates/nia/nia.pfx"

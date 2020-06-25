@@ -45,7 +45,7 @@ if_monitoring! {
         static ref BLOCKSTORAGE_ARRIVAL_TIME: Histogram = register_histogram!(
             "blockstorage_arrival_time",
             "The time a transaction takes from being created by the client until it reaches the BlockStorage.",
-            prometheus::exponential_buckets(0.3, 1.2, 25).unwrap()
+            prometheus::exponential_buckets(0.05, 1.2, 35).unwrap()
         ).unwrap();
 
         /// Measure the size of the BlockStorage on the disk.
@@ -78,7 +78,7 @@ impl BlockStorage {
             .path(path)
             .cache_capacity(8_000_000)
             .flush_every_ms(Some(400))
-            .snapshot_after_ops(100)
+            .snapshot_after_ops(1000000)
             .use_compression(false) // TODO: set this to `true`.
             .compression_factor(20);
 

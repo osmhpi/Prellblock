@@ -27,7 +27,7 @@ lazy_static! {
     static ref DATASTORAGE_ARRIVAL_TIME: Histogram = register_histogram!(
         "datastorage_arrival_time",
         "The time a transaction takes from being created by the client until it reaches the DataStorage.",
-        vec![0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7,]
+        vec![0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7,0.75,0.8,0.85,0.9,0.95,1.0,1.05,1.1,]
     ).unwrap();
 
     /// Measure the size of the DataStorage on the disk.
@@ -55,7 +55,7 @@ impl DataStorage {
             .path(path)
             .cache_capacity(8_000_000)
             .flush_every_ms(Some(400))
-            .snapshot_after_ops(100)
+            .snapshot_after_ops(1000000)
             .use_compression(false) // TODO: set this to `true`.
             .compression_factor(20);
 

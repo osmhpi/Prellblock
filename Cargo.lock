@@ -1275,15 +1275,14 @@ dependencies = [
 [[package]]
 name = "prometheus"
 version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd0ced56dee39a6e960c15c74dc48849d614586db2eaada6497477af7c7811cd"
+source = "git+https://github.com/felix-gohla/rust-prometheus.git#master#8c0a37ec279c9dda7d334c278e00bdf347056fa4"
 dependencies = [
  "cfg-if",
  "fnv",
  "lazy_static",
  "libc",
+ "parking_lot",
  "protobuf",
- "spin",
  "thiserror",
 ]
 
@@ -1566,12 +1565,6 @@ dependencies = [
  "redox_syscall",
  "winapi 0.3.9",
 ]
-
-[[package]]
-name = "spin"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
 name = "stable_deref_trait"

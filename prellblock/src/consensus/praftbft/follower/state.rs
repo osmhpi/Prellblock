@@ -133,6 +133,11 @@ impl State {
         assert!(self.buffered_commit_message.is_none());
 
         let block = self.block_with(ackappend_signatures);
+        log::trace!(
+            "Committing block #{} with {} transactions.",
+            block.body.height,
+            block.body.transactions.len()
+        );
         let block_hash = self.block_hash.take().unwrap();
 
         // We are sure that these transactions are really invalid and therefore

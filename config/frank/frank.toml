@@ -1,0 +1,2 @@
+identity = "./config/frank/frank.key"
+tls_id = "./certificates/frank/frank.pfx"

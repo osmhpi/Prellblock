@@ -6,5 +6,7 @@ target/
 # blockchain data
 blocks/
 data/
+config/
+certificates/
 # flamegraph data
 perf.data*

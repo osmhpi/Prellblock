@@ -18,6 +18,8 @@ services:
             - "./certificates:/prellblock/certificates"
             - "./config:/prellblock/config"
             - "./blocks:/prellblock/blocks"
+        environment:
+            - RUST_LOG=prellblock::batcher=trace
         networks:
             prellblock_net:
                 ipv4_address: 172.28.0.11
@@ -41,6 +43,40 @@ services:
         networks:
             prellblock_net:
                 ipv4_address: 172.28.0.13
+    frank:
+        command: frank
+        build: .
+        volumes:
+            - "./certificates:/prellblock/certificates"
+            - "./config:/prellblock/config"
+            - "./blocks:/prellblock/blocks"
+        networks:
+            prellblock_net:
+                ipv4_address: 172.28.0.14
+
+    heidi:
+        command: heidi
+        build: .
+        volumes:
+            - "./certificates:/prellblock/certificates"
+            - "./config:/prellblock/config"
+            - "./blocks:/prellblock/blocks"
+        networks:
+            prellblock_net:
+                ipv4_address: 172.28.0.15
+
+    ivan:
+        command: ivan
+        build: .
+        volumes:
+            - "./certificates:/prellblock/certificates"
+            - "./config:/prellblock/config"
+            - "./blocks:/prellblock/blocks"
+        environment: 
+            - RUST_LOG=prellblock::consensus=trace
+        networks:
+            prellblock_net:
+                ipv4_address: 172.28.0.16
 
     prometheus:
         image: prom/prometheus

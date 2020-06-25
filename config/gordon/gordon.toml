@@ -1,0 +1,2 @@
+identity = "./config/gordon/gordon.key"
+tls_id = "./certificates/gordon/gordon.pfx"

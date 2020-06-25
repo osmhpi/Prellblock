@@ -1,0 +1,2 @@
+identity = "./config/ivan/ivan.key"
+tls_id = "./certificates/ivan/ivan.pfx"

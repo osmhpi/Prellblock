@@ -72,10 +72,13 @@ impl Batcher {
             );
 
             let message = message::ExecuteBatch(transactions);
-            match self.broadcaster.broadcast(&message).await {
-                Ok(_) => log::debug!("Batch sent successfully"),
-                Err(err) => log::error!("Error while sending Batch: {}", err),
-            };
+            let broadcaster = self.broadcaster.clone();
+            tokio::spawn(async move {
+                match broadcaster.broadcast(&message).await {
+                    Ok(_) => log::debug!("Batch sent successfully"),
+                    Err(err) => log::error!("Error sending batch: {}", err),
+                }
+            });
         }
     }
 }
