@@ -1,22 +1,36 @@
-#![allow(non_snake_case)]
-
-use super::subscriptions::SubscriptionConfig;
-use crate::{block_storage, block_storage::BlockStorage, consensus::Error};
+use super::{error::Error, subscriptions::SubscriptionConfig};
+use crate::{block_storage, block_storage::BlockStorage};
 use http::StatusCode;
 use pinxit::PeerId;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, env, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+    time::Duration,
+};
 use tokio::time::delay_until;
 
 const ENV_THINGSBOARD_USERNAME: &str = "THINGSBOARD_USER_NAME";
 const ENV_THINGSBOARD_PASSWORD: &str = "THINGSBOARD_PASSWORD";
 const ENV_THINGSBOARD_TENANT_ID: &str = "THINGSBOARD_TENANT_ID";
 
+/// Internal representation for subscriptions of a specific `PeerId`.
+#[derive(Debug)]
+struct SubscriptionMeta {
+    /// All subscribed namespaces.
+    namespaces: HashSet<String>,
+    /// The name of the device in ThingsBoard (only when freshly created).
+    device_name: String,
+    /// The device's group label.
+    device_type: String,
+}
+
 /// Manages subscriptions of timeseries.
 #[derive(Debug)]
 pub struct SubscriptionManager {
     block_storage: BlockStorage,
-    subscriptions: HashMap<PeerId, (HashMap<String, ()>, String)>,
+    /// Every PeerId can have a number of subscriptions, corresponds to a device name.
+    subscriptions: HashMap<PeerId, SubscriptionMeta>,
     http_client: reqwest::Client,
     user_token: String,
 }
@@ -24,15 +38,22 @@ pub struct SubscriptionManager {
 impl SubscriptionManager {
     /// This creates a new `SubscriptionManager`.
     pub async fn new(block_storage: BlockStorage) -> Self {
-        let mut subscriptions: HashMap<PeerId, (HashMap<String, ()>, _)> = HashMap::new();
+        let mut subscriptions: HashMap<PeerId, SubscriptionMeta> = HashMap::new();
         let config = SubscriptionConfig::load();
         for subscription in config.subscription {
-            if let Some((peer_map, _)) = subscriptions.get_mut(&subscription.peer_id) {
-                peer_map.insert(subscription.namespace, ());
+            if let Some(meta) = subscriptions.get_mut(&subscription.peer_id) {
+                meta.namespaces.insert(subscription.namespace);
             } else {
-                let mut peer_map = HashMap::new();
-                peer_map.insert(subscription.namespace, ());
-                subscriptions.insert(subscription.peer_id, (peer_map, subscription.device_type));
+                let mut subscribed_namespaces = HashSet::new();
+                subscribed_namespaces.insert(subscription.namespace);
+                subscriptions.insert(
+                    subscription.peer_id,
+                    SubscriptionMeta {
+                        namespaces: subscribed_namespaces,
+                        device_name: subscription.device_name,
+                        device_type: subscription.device_type,
+                    },
+                );
             }
         }
 
@@ -83,14 +104,13 @@ impl SubscriptionManager {
             }
         };
 
-        let mut counter = 0;
-        for (peer_id, (_, device_type)) in &self.subscriptions {
+        for (peer_id, meta) in &self.subscriptions {
             // create a new device via POST
             let url = device_url(&peer_id.to_string());
 
             let body = build_thingsboard_device(
-                format!("Sensor{}", counter).to_string(),
-                device_type.to_string(),
+                meta.device_name.clone(),
+                meta.device_type.clone(),
                 tenant_id.clone(),
             );
 
@@ -105,9 +125,11 @@ impl SubscriptionManager {
 
             let response = request.send().await?;
 
-            println!("device: {}", response.text().await?);
-
-            counter += 1;
+            log::trace!(
+                "Setup ThingsBoard device {}: {}",
+                meta.device_name,
+                response.text().await?
+            );
         }
         Ok(())
     }
@@ -115,29 +137,26 @@ impl SubscriptionManager {
     /// This will retreive the token needed to authenticate device creation query.
     async fn user_token() -> Result<String, Error> {
         #[derive(Deserialize, Debug)]
+        #[serde(rename_all = "camelCase")]
         struct Tokens {
             token: String,
-            refreshToken: String,
+            refresh_token: String,
         }
 
         // Get the environment variables for the thingboard account and password
-        #[allow(clippy::single_match_else)]
-        let thingsboard_username = match env::var(ENV_THINGSBOARD_USERNAME) {
-            Ok(username) => username,
-            Err(_) => {
-                return Err(Error::ThingsboardUserNameNotSet);
-            }
+        let thingsboard_username = if let Ok(username) = env::var(ENV_THINGSBOARD_USERNAME) {
+            username
+        } else {
+            return Err(Error::ThingsboardUserNameNotSet);
         };
 
-        #[allow(clippy::single_match_else)]
-        let thingsboard_password = match env::var(ENV_THINGSBOARD_PASSWORD) {
-            Ok(password) => password,
-            Err(_) => {
-                return Err(Error::ThingsboardPasswordNotSet);
-            }
+        let thingsboard_password = if let Ok(password) = env::var(ENV_THINGSBOARD_PASSWORD) {
+            password
+        } else {
+            return Err(Error::ThingsboardPasswordNotSet);
         };
 
-        let body = serde_json::json!({ "username": thingsboard_username, "password":thingsboard_password });
+        let body = serde_json::json!({ "username": thingsboard_username, "password": thingsboard_password });
 
         let url = login_url();
 
@@ -157,10 +176,12 @@ impl SubscriptionManager {
         data: Vec<(PeerId, String)>,
     ) -> Result<(), block_storage::Error> {
         for (peer_id, namespace) in data {
-            if let Some((peer_map, _)) = self.subscriptions.get(&peer_id) {
-                if peer_map.contains_key(&namespace) {
+            if let Some(meta) = self.subscriptions.get(&peer_id) {
+                if meta.namespaces.contains(&namespace) {
                     // get transaction from block_storage
-                    let transaction = self.block_storage.read_transaction(&peer_id, &namespace)?;
+                    let transaction = self
+                        .block_storage
+                        .read_last_transaction(&peer_id, &namespace)?;
                     // post transaction to thingsboard
                     if let Some((_, value)) = transaction.iter().next() {
                         self.post_value(&value.0, &namespace, &peer_id.to_string())
@@ -171,11 +192,13 @@ impl SubscriptionManager {
         }
         Ok(())
     }
+
     async fn post_value(&self, value: &[u8], namespace: &str, access_token: &str) {
         let url = telemetry_url(access_token);
+        // FIXME: Use CBOR or so to automatically convert the data to JSON.
         let value: f64 = postcard::from_bytes(value).unwrap();
         let key_value_json = format!("{{{}:{}}}", namespace, value);
-        log::trace!("Sending POST w/ json body: {}", key_value_json);
+        log::trace!("Sending POST w/ json body: {:#?}", key_value_json);
         let body = self
             .http_client
             .post(&url)
@@ -188,11 +211,11 @@ impl SubscriptionManager {
                 StatusCode::OK => log::trace!("Send POST successfully."),
                 StatusCode::BAD_REQUEST => log::warn!("BAD_REQUEST response from {}.", url),
                 _ => {
-                    log::trace!("Statuscode: {:?}", res.status());
+                    log::trace!("Unknown statuscode: {:?}", res.status());
                 }
             },
             Err(err) => {
-                log::error!("{}", err);
+                log::error!("Error sending to ThingsBoard: {}", err);
             }
         }
     }
@@ -221,33 +244,28 @@ fn device_url(access_token: &str) -> String {
 /// This creates a thingsboard device json configuration.
 fn build_thingsboard_device(device_name: String, device_type: String, tenant_id: String) -> String {
     #[derive(Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
     struct Tenant {
-        #[allow(non_snake_case)]
-        entityType: String,
-
+        entity_type: String,
         id: String,
     }
+
     #[derive(Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
     struct Device {
-        #[allow(non_snake_case)]
         name: String,
-
-        #[allow(non_snake_case)]
-        tenantId: Tenant,
-
-        #[allow(non_snake_case)]
-        entityType: String,
-
+        tenant_id: Tenant,
+        entity_type: String,
         r#type: String,
     }
 
     let device = Device {
         name: device_name,
-        tenantId: Tenant {
-            entityType: "TENANT".to_string(),
+        tenant_id: Tenant {
+            entity_type: "TENANT".to_string(),
             id: tenant_id,
         },
-        entityType: "DEVICE".to_string(),
+        entity_type: "DEVICE".to_string(),
         r#type: device_type,
     };
 

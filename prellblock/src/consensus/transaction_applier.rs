@@ -43,6 +43,7 @@ impl TransactionApplier {
     pub async fn apply_block(&self, block: Block) {
         // Write Block to BlockStorage
         self.apply_to_block_storage(&block);
+
         // Write Block to WorldState
         self.apply_to_worldstate(block.clone()).await;
         // export data using HTTP POST request
@@ -75,6 +76,7 @@ impl TransactionApplier {
                 Transaction::UpdateAccount(_) => {}
             }
         }
+        // FIXME: This could break with sled's `open_tree`, does it?
         self.subscription_manager
             .notify_block_update(values)
             .await

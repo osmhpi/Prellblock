@@ -152,24 +152,6 @@ pub enum Error {
     /// Could not get supermajority.
     #[error(display = "Could not get supermajority.")]
     CouldNotGetSupermajority,
-
-    /// The environment variable for the thingsboard username was not set.
-    #[error(display = "The environment variable for the thingsboard username was not set.")]
-    ThingsboardUserNameNotSet,
-    /// The environment variable for the thingsboard password was not set.
-    #[error(display = "The environment variable for the thingsboard password was not set.")]
-    ThingsboardPasswordNotSet,
-    /// The environment variable for the thingsboard tenant id was not set.
-    #[error(display = "The environment variable for the thingsboard tenant id was not set.")]
-    ThingsboardTenantIdNotSet,
-
-    /// An error occurred while parsing to json.
-    #[error(display = "{}", 0)]
-    SerdeJson(#[error(from)] serde_json::error::Error),
-
-    /// An error occurred while sending an http request.
-    #[error(display = "{}", 0)]
-    Reqwest(#[error(from)] reqwest::Error),
 }
 
 pub(super) trait ErrorVerify {

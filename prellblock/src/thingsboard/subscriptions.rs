@@ -10,8 +10,9 @@ pub struct SubscriptionConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Subscription {
     pub peer_id: PeerId,
-    pub device_type: String,
     pub namespace: String,
+    pub device_name: String,
+    pub device_type: String,
 }
 
 impl SubscriptionConfig {

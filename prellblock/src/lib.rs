@@ -16,6 +16,7 @@ pub mod data_broadcaster;
 pub mod data_storage;
 pub mod peer;
 pub mod reader;
+#[cfg(feature = "thingsboard")]
 pub mod thingsboard;
 pub mod transaction_checker;
 pub mod turi;

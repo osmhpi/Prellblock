@@ -63,7 +63,6 @@ impl BlockStorage {
     pub fn write_block(&self, block: &Block) -> Result<(), Error> {
         let (last_block_hash, block_number) = if let Some(last_block) = self.read(..).next_back() {
             let last_block = last_block?;
-            println!("{:?}", last_block.hash());
             (last_block.hash(), last_block.body.height + 1)
         } else {
             (BlockHash::default(), BlockNumber::default())
@@ -118,7 +117,7 @@ impl BlockStorage {
             .insert(key, &[])?;
 
         // Insert value with timestamp into the time_series tree.
-        let time_series_name = [peer_id.as_bytes(), key.as_bytes()].join(&0);
+        let time_series_name = time_series_name(peer_id, key);
         let time = system_time_to_bytes(SystemTime::now());
         let data = postcard::to_stdvec(&(value, signature))?;
         self.database
@@ -168,7 +167,7 @@ impl BlockStorage {
                     if !account_checker.is_allowed_to_read_key(peer_id, key) {
                         return Ok(None);
                     }
-                    let time_series_name = [peer_id.as_bytes(), key.as_bytes()].join(&0);
+                    let time_series_name = time_series_name(peer_id, key);
                     let transactions = self.read_transactions_inner(&time_series_name, query)?;
                     let key = key.into();
                     Ok(Some((key, transactions)))
@@ -179,12 +178,12 @@ impl BlockStorage {
     }
 
     /// Get only the latest transaction of a `Peer` and a namespace.
-    pub fn read_transaction(
+    pub fn read_last_transaction(
         &self,
         peer_id: &PeerId,
         namespace: &str,
     ) -> Result<ReadValuesOfSeries, Error> {
-        let time_series_name = [peer_id.as_bytes(), namespace.as_bytes()].join(&0);
+        let time_series_name = time_series_name(peer_id, namespace);
         let query = Query::CurrentValue;
         self.read_transactions_inner(&time_series_name, &query)
     }
@@ -318,7 +317,7 @@ impl BlockStorage {
                 match transaction.unverified_ref() {
                     Transaction::KeyValue(params) => {
                         let peer_id = transaction.signer();
-                        let time_series_name = [peer_id.as_bytes(), params.key.as_bytes()].join(&0);
+                        let time_series_name = time_series_name(peer_id, &params.key);
                         self.database.open_tree(time_series_name)?.pop_max()?;
                     }
                     // We don't need to do anything here. Account permissions are rolled back in the `WorldState`.
@@ -331,6 +330,12 @@ impl BlockStorage {
             Ok(None)
         }
     }
+}
+
+/// Return a name for a time series as bytes.
+/// Used for identifying trees while reading and writing from and to the `BlockStorage`.
+fn time_series_name(peer_id: &PeerId, key: &str) -> Vec<u8> {
+    [peer_id.as_bytes(), key.as_bytes()].join(&0)
 }
 
 fn map_range_bound<T, R, U>(range_bound: R, mut f: impl FnMut(&T) -> U) -> impl RangeBounds<U>
