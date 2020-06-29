@@ -8,6 +8,7 @@ authors = [
     "Martin Michaelis <code@mgjm.de>",
 ]
 edition = "2018"
+license = "MIT/Apache-2.0"
 
 [dependencies]
 balise = { path = "../balise", features = ["server", "client", "tls"] }
