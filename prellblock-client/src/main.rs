@@ -10,24 +10,15 @@
 mod cli;
 
 use cli::prelude::*;
-use cmd::GeneratorType;
-use http::StatusCode;
-use noise::{Fbm, NoiseFn};
+// use http::StatusCode;
 use prellblock_client::{account::Permissions, Client, Query};
-use prellblock_client_api::{Filter, ReadValues};
 use rand::{
     rngs::{OsRng, StdRng},
     seq::SliceRandom,
     thread_rng, RngCore, SeedableRng,
 };
-use std::{
-    fs,
-    net::SocketAddr,
-    str,
-    time::{Duration, Instant},
-};
+use std::{fs, net::SocketAddr, str, time::Instant};
 use structopt::StructOpt;
-use tokio::time::{delay_until, timeout};
 
 #[tokio::main]
 async fn main() {
@@ -45,8 +36,6 @@ async fn main() {
         Cmd::GetAccount(cmd) => main_get_account(cmd).await,
         Cmd::GetBlock(cmd) => main_get_block(cmd).await,
         Cmd::CurrentBlockNumber => main_current_block_number().await,
-        Cmd::Generate(cmd) => main_generate(cmd).await,
-        Cmd::Listen(cmd) => main_listen(cmd).await,
     }
 }
 
@@ -61,6 +50,7 @@ fn writer_client(turi_address: SocketAddr) -> Client {
         "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc",
     )
 }
+
 #[derive(StructOpt, Debug)]
 enum Command {
     /// Transaction to set a key to a value.
@@ -85,24 +75,6 @@ enum Command {
         /// The number of workers (clients) to use simultaneously.
         #[structopt(short, long, default_value = "1")]
         workers: usize,
-    },
-    /// Generate and write values to the blockchain.
-    #[structopt(name = "gen")]
-    Generate {
-        /// The duration to generate data for. (in ms)
-        #[structopt(short, long, default_value = "60000")]
-        duration: u64,
-        /// The interval to generate and write a new value. (in ms)
-        #[structopt(short, long, default_value = "100")]
-        interval: u64,
-        /// The number of bytes each transaction's payload should have.       
-        gen_type: GeneratorType,
-    },
-    /// Listen to timeseries and push updates via POST.
-    Listen {
-        /// The interval to poll values from timeseries. (in ms)
-        #[structopt(short, long, default_value = "1000")]
-        polling_interval: u64,
     },
     /// Update the permissions for a given account.
     #[structopt(name = "update")]
@@ -319,130 +291,4 @@ async fn main_current_block_number() {
             block_number - 1
         ),
     }
-}
-
-async fn main_generate(cmd: cmd::Generate) {
-    let cmd::Generate {
-        duration,
-        interval,
-        gen_type,
-    } = cmd;
-
-    let mut rng = thread_rng();
-    let turi_address = Config::load().rpu.choose(&mut rng).unwrap().turi_address;
-
-    let mut client = writer_client(turi_address);
-    let res = timeout(
-        Duration::from_millis(duration),
-        generate_data(&mut client, gen_type.clone(), interval),
-    )
-    .await;
-
-    if res.is_err() {
-        log::info!("Done generating.");
-    }
-}
-
-async fn main_listen(cmd: cmd::Listen) {
-    let cmd::Listen { polling_interval } = cmd;
-    let mut client = reader_client();
-    let config = SubscriptionConfig::load();
-    log::info!("Polling in an interval of {} ms.", polling_interval);
-    loop {
-        let deadline = tokio::time::Instant::now() + Duration::from_millis(polling_interval);
-        // load timeseries from config
-        for subscription in &config.subscription {
-            let query = Query::Range {
-                span: 1.into(),
-                end: 0.into(),
-                skip: None,
-            };
-            match client
-                .query_values(
-                    vec![subscription.peer_id.parse().unwrap()],
-                    Filter::Exact(subscription.namespace.clone()),
-                    query,
-                )
-                .await
-            {
-                Ok(values) => {
-                    post_values(values, &subscription.access_token).await;
-                }
-                Err(err) => {
-                    log::warn!("Error while querying {}", err);
-                }
-            }
-        }
-
-        delay_until(deadline).await;
-    }
-}
-
-async fn generate_data(client: &mut Client, gen_type: GeneratorType, interval: u64) {
-    let start = Instant::now();
-    let noise = Fbm::new();
-
-    loop {
-        let deadline = tokio::time::Instant::now() + Duration::from_millis(interval);
-        match gen_type {
-            GeneratorType::Temperature => {
-                let time = Instant::now() - start;
-                let time = time.as_secs_f64();
-                let mut value = 10_f64.mul_add(noise.get([time, time, time]), 20_f64);
-                value = (value * 100.0).round() / 100.0;
-                log::trace!("temperatue: {}", value);
-
-                match client
-                    .send_key_value("temperature".to_string(), value)
-                    .await
-                {
-                    Err(err) => log::error!("Failed to send transaction: {}", err),
-                    Ok(()) => log::debug!("Transaction ok!"),
-                }
-            }
-        }
-        delay_until(deadline).await;
-    }
-}
-async fn post_values(values: ReadValues, access_token: &str) {
-    // only one peer
-    for (_, values_of_peer) in values {
-        // only one timeseries
-        for (key, values_by_key) in values_of_peer {
-            //only one value
-            for (_, value) in values_by_key {
-                // TODO: use timestamp
-                // post key:value
-                let url = thingsboard_url(access_token);
-                let value: f64 = postcard::from_bytes(&value.0).unwrap();
-                let key_value_json = format!("{{{}:{}}}", key, value);
-                let client = reqwest::Client::new();
-                log::trace!("Sending POST w/ json body: {}", key_value_json);
-                let body = client
-                    .post(&url)
-                    .header("Content-Type", "application/json")
-                    .body(key_value_json);
-                //send request
-                let res = body.send().await;
-                match res {
-                    Ok(res) => match res.status() {
-                        StatusCode::OK => log::trace!("Send POST successfully."),
-                        StatusCode::BAD_REQUEST => log::warn!("BAD_REQUEST response from {}.", url),
-                        _ => {
-                            log::trace!("Statuscode: {:?}", res.status());
-                        }
-                    },
-                    Err(err) => {
-                        log::error!("{}", err);
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn thingsboard_url(access_token: &str) -> String {
-    let host = "localhost";
-    let port = "8080";
-    format!("http://{}:{}/api/v1/{}/telemetry", host, port, access_token)
 }

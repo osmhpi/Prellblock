@@ -30,17 +30,11 @@ pub enum Cmd {
     /// Get the current block number (that is going to be committed).
     #[structopt(name = "current_block_number")]
     CurrentBlockNumber,
-    /// Generate data and write it to the blockchain.
-    #[structopt(name = "generate")]
-    Generate(cmd::Generate),
-    /// Listen to the timeseries of the config and send them via POST.
-    #[structopt(name = "listen")]
-    Listen(cmd::Listen),
 }
 pub mod cmd {
     use pinxit::PeerId;
     use prellblock_client::{consensus::BlockNumber, Filter, Span};
-    use std::{fmt, str::FromStr};
+    use std::str::FromStr;
     use structopt::StructOpt;
 
     /// Transaction to set a key to a value.
@@ -67,27 +61,6 @@ pub mod cmd {
         /// The number of workers (clients) to use simultaneously.
         #[structopt(short, long, default_value = "1")]
         pub workers: usize,
-    }
-
-    /// Generate and write values to the blockchain.
-    #[derive(StructOpt, Debug)]
-    pub struct Generate {
-        /// The duration to generate data for. (in ms)
-        #[structopt(short, long, default_value = "60000")]
-        pub duration: u64,
-        /// The interval to generate and write a new value. (in ms)
-        #[structopt(short, long, default_value = "100")]
-        pub interval: u64,
-        /// The number of bytes each transaction's payload should have.       
-        pub gen_type: GeneratorType,
-    }
-
-    /// Listen to timeseries and push updates via POST.
-    #[derive(StructOpt, Debug)]
-    pub struct Listen {
-        /// The interval to poll values from timeseries. (in ms)
-        #[structopt(short, long, default_value = "1000")]
-        pub polling_interval: u64,
     }
 
     /// Update the permissions for a given account.
@@ -140,29 +113,6 @@ pub mod cmd {
         /// Valid examples are: 42 (block 42), .. (get all blocks), ..42 (blocks 0 to 41),
         /// 42.. (blocks 42 to current), 200..220 (blocks 200 to 219).
         pub filter: ParseFilter<BlockNumber>,
-    }
-    #[derive(Debug, Clone)]
-    pub enum GeneratorType {
-        Temperature,
-    }
-
-    #[derive(Debug, Clone)]
-    pub struct GeneratorParseError;
-
-    impl fmt::Display for GeneratorParseError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "invalid GeneratorType")
-        }
-    }
-
-    impl FromStr for GeneratorType {
-        type Err = GeneratorParseError;
-        fn from_str(s: &str) -> Result<Self, Self::Err> {
-            match s {
-                "Temperature" => Ok(Self::Temperature),
-                _ => Err(GeneratorParseError),
-            }
-        }
     }
 
     #[derive(Debug)]
