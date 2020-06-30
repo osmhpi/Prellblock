@@ -16,8 +16,8 @@ pub use ring_buffer::RingBuffer;
 
 use self::core::Core;
 use super::TransactionApplier;
-#[cfg(feature = "thingsboard")]
-use crate::thingsboard::SubscriptionManager;
+#[cfg(feature = "subscriptions")]
+use crate::subscriptions::SubscriptionManager;
 use crate::{block_storage::BlockStorage, world_state::WorldStateService};
 use censorship_checker::CensorshipChecker;
 use error::ErrorVerify;
@@ -53,14 +53,14 @@ impl PRaftBFT {
         identity: Identity,
         block_storage: BlockStorage,
         world_state: WorldStateService,
-        #[cfg(feature = "thingsboard")] subscription_manager: SubscriptionManager,
+        #[cfg(feature = "subscriptions")] subscription_manager: SubscriptionManager,
     ) -> Arc<Self> {
         log::debug!("Started consensus.");
 
         let transaction_applier = TransactionApplier::new(
             block_storage.clone(),
             world_state.clone(),
-            #[cfg(feature = "thingsboard")]
+            #[cfg(feature = "subscriptions")]
             subscription_manager,
         );
 

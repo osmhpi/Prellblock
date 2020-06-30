@@ -16,8 +16,8 @@ pub mod data_broadcaster;
 pub mod data_storage;
 pub mod peer;
 pub mod reader;
-#[cfg(feature = "thingsboard")]
-pub mod thingsboard;
+#[cfg(feature = "subscriptions")]
+pub mod subscriptions;
 pub mod transaction_checker;
 pub mod turi;
 pub mod world_state;

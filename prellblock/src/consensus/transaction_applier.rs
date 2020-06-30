@@ -1,10 +1,10 @@
 //! Can be used by any consensus algorithm to apply blocks.
 
 use super::Block;
-#[cfg(feature = "thingsboard")]
-use crate::thingsboard::SubscriptionManager;
+#[cfg(feature = "subscriptions")]
+use crate::subscriptions::SubscriptionManager;
 use crate::{block_storage::BlockStorage, world_state::WorldStateService};
-#[cfg(feature = "thingsboard")]
+#[cfg(feature = "subscriptions")]
 use prellblock_client_api::Transaction;
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +19,7 @@ struct KeyValue {
 pub struct TransactionApplier {
     block_storage: BlockStorage,
     world_state: WorldStateService,
-    #[cfg(feature = "thingsboard")]
+    #[cfg(feature = "subscriptions")]
     subscription_manager: SubscriptionManager,
 }
 
@@ -29,12 +29,12 @@ impl TransactionApplier {
     pub const fn new(
         block_storage: BlockStorage,
         world_state: WorldStateService,
-        #[cfg(feature = "thingsboard")] subscription_manager: SubscriptionManager,
+        #[cfg(feature = "subscriptions")] subscription_manager: SubscriptionManager,
     ) -> Self {
         Self {
             block_storage,
             world_state,
-            #[cfg(feature = "thingsboard")]
+            #[cfg(feature = "subscriptions")]
             subscription_manager,
         }
     }
@@ -47,7 +47,7 @@ impl TransactionApplier {
         // Write Block to WorldState
         self.apply_to_worldstate(block.clone()).await;
         // export data using HTTP POST request
-        #[cfg(feature = "thingsboard")]
+        #[cfg(feature = "subscriptions")]
         self.notify_block_update(block).await;
     }
 
@@ -65,7 +65,7 @@ impl TransactionApplier {
         world_state.save();
     }
 
-    #[cfg(feature = "thingsboard")]
+    #[cfg(feature = "subscriptions")]
     async fn notify_block_update(&self, block: Block) {
         let mut values = Vec::new();
         for transaction in &block.body.transactions {

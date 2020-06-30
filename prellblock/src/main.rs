@@ -11,8 +11,8 @@
 
 use balise::server::TlsIdentity;
 use futures::future;
-#[cfg(feature = "thingsboard")]
-use prellblock::thingsboard::SubscriptionManager;
+#[cfg(feature = "subscriptions")]
+use prellblock::subscriptions::SubscriptionManager;
 use prellblock::{
     batcher::Batcher,
     block_storage::BlockStorage,
@@ -108,7 +108,7 @@ async fn main() {
 
     let block_storage = BlockStorage::new(&format!("./blocks/{}", opt.name)).unwrap();
 
-    #[cfg(feature = "thingsboard")]
+    #[cfg(feature = "subscriptions")]
     let subscription_manager = SubscriptionManager::new(block_storage.clone()).await;
 
     let world_state =
@@ -118,7 +118,7 @@ async fn main() {
         identity,
         block_storage.clone(),
         world_state.clone(),
-        #[cfg(feature = "thingsboard")]
+        #[cfg(feature = "subscriptions")]
         subscription_manager,
     )
     .await;

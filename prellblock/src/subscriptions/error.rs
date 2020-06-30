@@ -6,12 +6,6 @@ use err_derive::Error;
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
-    /// The environment variable for the thingsboard username was not set.
-    #[error(display = "The environment variable for the thingsboard username was not set.")]
-    ThingsboardUserNameNotSet,
-    /// The environment variable for the thingsboard password was not set.
-    #[error(display = "The environment variable for the thingsboard password was not set.")]
-    ThingsboardPasswordNotSet,
     /// The environment variable for the thingsboard tenant id was not set.
     #[error(display = "The environment variable for the thingsboard tenant id was not set.")]
     ThingsboardTenantIdNotSet,
