@@ -91,6 +91,23 @@ impl Turi {
                     std::time::SystemTime::now().duration_since(params.timestamp),
                 );
             }
+            Transaction::CreateAccount(params) => {
+                log::debug!(
+                    "Client {} creates account {}: {:#?} (difference of {:?}).",
+                    &transaction.signer(),
+                    params.id,
+                    params.permissions,
+                    std::time::SystemTime::now().duration_since(params.timestamp),
+                );
+            }
+            Transaction::DeleteAccount(params) => {
+                log::debug!(
+                    "Client {} deletes account {} (difference of {:?}).",
+                    &transaction.signer(),
+                    params.id,
+                    std::time::SystemTime::now().duration_since(params.timestamp),
+                );
+            }
         }
 
         let batcher = self.batcher.clone();

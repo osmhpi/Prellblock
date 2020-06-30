@@ -334,6 +334,7 @@ impl_signable!(
 );
 
 /// A blockchain transaction for prellblock.
+#[allow(clippy::large_enum_variant)]
 #[newtype_enum(variants = "transaction")]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum Transaction {
@@ -346,7 +347,6 @@ pub enum Transaction {
         /// The Timestamp.
         timestamp: SystemTime,
     },
-
     /// Update an account.
     UpdateAccount {
         /// The account to set the permissions for.
@@ -354,6 +354,24 @@ pub enum Transaction {
         /// The permission fields to update.
         permissions: Permissions,
         /// The Timestamp.
+        timestamp: SystemTime,
+    },
+    /// Create an account.
+    CreateAccount {
+        /// An ID for the new account.
+        id: PeerId,
+        /// The name for the new account.
+        name: String,
+        /// The permission fields to set.
+        permissions: Permissions,
+        /// The Timestamp
+        timestamp: SystemTime,
+    },
+    /// Delete an account.
+    DeleteAccount {
+        /// The account to delete.
+        id: PeerId,
+        /// The Timestamp
         timestamp: SystemTime,
     },
 }

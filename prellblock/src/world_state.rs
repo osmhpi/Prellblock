@@ -226,6 +226,34 @@ impl WorldState {
                     unreachable!("Account {} does not exist.", params.id);
                 }
             }
+            Transaction::CreateAccount(params) => {
+                let permissions = params.permissions;
+                let mut account = Account::new(params.name);
+                if let Some(account_type) = permissions.account_type {
+                    account.account_type = account_type;
+                }
+                if let Some(expire_at) = permissions.expire_at {
+                    account.expire_at = expire_at;
+                }
+                if let Some(writing_rights) = permissions.has_writing_rights {
+                    account.writing_rights = writing_rights;
+                }
+                if let Some(reading_rights) = permissions.reading_rights {
+                    account.reading_rights = reading_rights;
+                }
+                if self
+                    .accounts
+                    .insert(params.id.clone(), Arc::new(account))
+                    .is_some()
+                {
+                    unreachable!("Account {} already exist.", params.id);
+                }
+            }
+            Transaction::DeleteAccount(params) => {
+                if self.accounts.remove(&params.id).is_none() {
+                    unreachable!("Account {} does not exist.", params.id);
+                }
+            }
         }
     }
 }

@@ -17,6 +17,12 @@ pub enum Cmd {
     /// Update an account.
     #[structopt(name = "update")]
     UpdateAccount(cmd::UpdateAccount),
+    /// Create an account.
+    #[structopt(name = "create")]
+    CreateAccount(cmd::CreateAccount),
+    /// Delete an account.
+    #[structopt(name = "delete")]
+    DeleteAccount(cmd::DeleteAccount),
     /// Get values from the blockchain.
     ///
     /// Specifying only a filter returns the last recorded value.
@@ -72,6 +78,24 @@ pub mod cmd {
         pub id: String,
         /// The filepath to a yaml-file cotaining the accounts permissions.
         pub permission_file: String,
+    }
+
+    /// Create a new account.
+    #[derive(StructOpt, Debug)]
+    pub struct CreateAccount {
+        /// The id of the account to create.
+        pub id: String,
+        /// The name of the account to create
+        pub name: String,
+        /// The filepath to a yaml-file cotaining the accounts permissions.
+        pub permission_file: String,
+    }
+
+    /// Delete an account.
+    #[derive(StructOpt, Debug)]
+    pub struct DeleteAccount {
+        /// The id of the account to delete.
+        pub id: String,
     }
 
     /// Update the permissions for a given account.

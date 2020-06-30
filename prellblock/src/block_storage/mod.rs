@@ -87,12 +87,14 @@ impl BlockStorage {
                         transaction.signer(),
                         &params.key,
                         &params.value,
-                        &params.timestamp,
+                        params.timestamp,
                         transaction.signature(),
                     )?;
                 }
                 // We don't need to do anything here. Account permissions are saved in the `WorldState`.
-                Transaction::UpdateAccount(_) => {}
+                Transaction::UpdateAccount(_)
+                | Transaction::CreateAccount(_)
+                | Transaction::DeleteAccount(_) => {}
             }
         }
 
@@ -107,7 +109,7 @@ impl BlockStorage {
         peer_id: &PeerId,
         key: &str,
         value: &[u8],
-        timestamp: &SystemTime,
+        timestamp: SystemTime,
         signature: &Signature,
     ) -> Result<(), Error> {
         // Add the peer to the account db.
@@ -124,7 +126,7 @@ impl BlockStorage {
 
         // Write time has to be the first one because it is used when reading.
         let time = system_time_to_bytes(write_time);
-        let data = postcard::to_stdvec(&(value, *timestamp, signature))?;
+        let data = postcard::to_stdvec(&(value, timestamp, signature))?;
         self.database
             .open_tree(time_series_name)?
             .insert(time, data)?;
@@ -317,7 +319,9 @@ impl BlockStorage {
                         self.database.open_tree(time_series_name)?.pop_max()?;
                     }
                     // We don't need to do anything here. Account permissions are rolled back in the `WorldState`.
-                    Transaction::UpdateAccount(_) => {}
+                    Transaction::UpdateAccount(_)
+                    | Transaction::DeleteAccount(_)
+                    | Transaction::CreateAccount(_) => {}
                 }
             }
 

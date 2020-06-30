@@ -2,7 +2,7 @@
 
 use hexutil::ToHex;
 use pinxit::PeerId;
-use prellblock_client_api::transaction::UpdateAccount;
+use serde::Serialize;
 use sled::{Config, Db, IVec, Tree};
 use std::time::SystemTime;
 
@@ -50,7 +50,7 @@ impl DataStorage {
         peer: &PeerId,
         key: K,
         value: &[u8],
-        timestamp: &SystemTime,
+        timestamp: SystemTime,
     ) -> Result<(), BoxError>
     where
         K: AsRef<[u8]>,
@@ -93,14 +93,17 @@ impl DataStorage {
         Ok(self.database.open_tree(&tree_id)?)
     }
 
-    /// Write an `UpdateAccount` transaction to the data storage.
+    /// Write an `UpdateAccount`, `DeleteAccount` or `CreateAccount` transaction to the data storage.
     ///
     /// The data will be associated with the sender peer via its `PeerId`.
-    pub fn write_account_update(
+    pub fn write_account_transaction<T>(
         &self,
         peer: &PeerId,
-        transaction: &UpdateAccount,
-    ) -> Result<(), BoxError> {
+        transaction: &T,
+    ) -> Result<(), BoxError>
+    where
+        T: Serialize,
+    {
         // find tree for sender account
         let peer_tree = self.tree_for_name(&self.accounts, peer.to_hex())?;
 

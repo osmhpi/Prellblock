@@ -28,6 +28,20 @@ pub struct Account {
     pub reading_rights: Vec<ReadingPermission>,
 }
 
+impl Account {
+    /// Create a new Account with a given name and default values.
+    #[must_use]
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            account_type: AccountType::default(),
+            expire_at: Expiry::default(),
+            writing_rights: false,
+            reading_rights: Vec::new(),
+        }
+    }
+}
+
 /// Permission fields for a account.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]

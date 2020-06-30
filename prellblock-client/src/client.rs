@@ -96,6 +96,31 @@ impl Client {
         .await
     }
 
+    /// Create a new account with `permissions`.
+    pub async fn create_account(
+        &mut self,
+        account: PeerId,
+        name: String,
+        permissions: Permissions,
+    ) -> Result<(), Error> {
+        self.execute(transaction::CreateAccount {
+            id: account,
+            name,
+            permissions,
+            timestamp: SystemTime::now(),
+        })
+        .await
+    }
+
+    /// Delete an account.
+    pub async fn delete_account(&mut self, account: PeerId) -> Result<(), Error> {
+        self.execute(transaction::DeleteAccount {
+            id: account,
+            timestamp: SystemTime::now(),
+        })
+        .await
+    }
+
     /// Query one or multiple accounts.
     ///
     /// All accounts `Accounts` matching the `peer_ids` will be returned.

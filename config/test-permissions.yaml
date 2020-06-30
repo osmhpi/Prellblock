@@ -1,17 +1,9 @@
-type: admin
 expire_at: #never
-  at_date: 2020-06-15T10:04:59.300878700Z
-has_writing_rights: false
+  at_date: 2020-07-01T10:04:59.300878700Z
+has_writing_rights: true
 reading_rights:
-  - accounts:
-      whitelist:
-        - scope: Emily
-    namespace:
-      blacklist:
-        - scope: speed
-  - accounts:
-      whitelist:
-        - scope: Thomas
-    namespace:
-      blacklist:
-        - scope: speed
+  - whitelist:
+      accounts:
+        - 256cdb0197402705f96d39eab7dd3d47a39cb75673a58852d83f666973d80e01
+      namespace:
+        - scope: test

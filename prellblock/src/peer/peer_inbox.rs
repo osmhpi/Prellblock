@@ -56,7 +56,7 @@ impl PeerInbox {
                     transaction.signer(),
                     &params.key,
                     &params.value,
-                    &params.timestamp,
+                    params.timestamp,
                 )?;
             }
             Transaction::UpdateAccount(params) => {
@@ -68,7 +68,26 @@ impl PeerInbox {
                 );
 
                 self.data_storage
-                    .write_account_update(transaction.signer(), params)?;
+                    .write_account_transaction(transaction.signer(), params)?;
+            }
+            Transaction::CreateAccount(params) => {
+                log::debug!(
+                    "Client {} creates account {}: {:#?}",
+                    &transaction.signer(),
+                    params.id,
+                    params.permissions,
+                );
+                self.data_storage
+                    .write_account_transaction(transaction.signer(), params)?;
+            }
+            Transaction::DeleteAccount(params) => {
+                log::debug!(
+                    "Client {} deletes account {}",
+                    &transaction.signer(),
+                    params.id,
+                );
+                self.data_storage
+                    .write_account_transaction(transaction.signer(), params)?;
             }
         }
         Ok(())
