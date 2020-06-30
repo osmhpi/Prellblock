@@ -41,7 +41,7 @@ pub enum PermissionError {
     #[error(display = "The account {} is not an allowed to read blocks.", 0)]
     CannotReadBlocks(PeerId),
 
-    /// The account to be created already exists
+    /// The account to be created already exists.
     #[error(display = "The account {} already exists.", 0)]
     AccountAlreadyExists(PeerId),
 }

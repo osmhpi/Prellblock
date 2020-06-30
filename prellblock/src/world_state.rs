@@ -2,7 +2,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-pub use prellblock_client_api::account::Account;
+pub use prellblock_client_api::account::{Account, Permissions};
 
 use crate::{
     block_storage::BlockStorage,
@@ -209,38 +209,14 @@ impl WorldState {
             Transaction::KeyValue(_) => {}
             Transaction::UpdateAccount(params) => {
                 if let Some(account) = self.accounts.get_mut(&params.id).map(Arc::make_mut) {
-                    let permissions = params.permissions;
-                    if let Some(account_type) = permissions.account_type {
-                        account.account_type = account_type;
-                    }
-                    if let Some(expire_at) = permissions.expire_at {
-                        account.expire_at = expire_at;
-                    }
-                    if let Some(writing_rights) = permissions.has_writing_rights {
-                        account.writing_rights = writing_rights;
-                    }
-                    if let Some(reading_rights) = permissions.reading_rights {
-                        account.reading_rights = reading_rights;
-                    }
+                    account.apply_permissions(params.permissions);
                 } else {
                     unreachable!("Account {} does not exist.", params.id);
                 }
             }
             Transaction::CreateAccount(params) => {
-                let permissions = params.permissions;
                 let mut account = Account::new(params.name);
-                if let Some(account_type) = permissions.account_type {
-                    account.account_type = account_type;
-                }
-                if let Some(expire_at) = permissions.expire_at {
-                    account.expire_at = expire_at;
-                }
-                if let Some(writing_rights) = permissions.has_writing_rights {
-                    account.writing_rights = writing_rights;
-                }
-                if let Some(reading_rights) = permissions.reading_rights {
-                    account.reading_rights = reading_rights;
-                }
+                account.apply_permissions(params.permissions);
                 if self
                     .accounts
                     .insert(params.id.clone(), Arc::new(account))

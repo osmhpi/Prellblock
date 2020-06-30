@@ -169,12 +169,12 @@ async fn main_create_account(cmd: cmd::CreateAccount) {
         permission_file,
     } = cmd;
 
-    let id = id.parse().expect("Invalid account id given");
+    let id = id.parse().expect("Invalid account id given.");
     // Read `Permissions` from the given file.
     let permission_file_content =
-        fs::read_to_string(permission_file).expect("Could not read permission file");
+        fs::read_to_string(permission_file).expect("Could not read permission file.");
     let permissions: Permissions =
-        serde_yaml::from_str(&permission_file_content).expect("Invalid permission file content");
+        serde_yaml::from_str(&permission_file_content).expect("Invalid permission file content.");
 
     match reader_client().create_account(id, name, permissions).await {
         Err(err) => log::error!("Failed to send transaction: {}", err),
@@ -184,7 +184,7 @@ async fn main_create_account(cmd: cmd::CreateAccount) {
 
 async fn main_delete_account(cmd: cmd::DeleteAccount) {
     let cmd::DeleteAccount { id } = cmd;
-    let id = id.parse().expect("Invalid account id given");
+    let id = id.parse().expect("Invalid account id given.");
     match reader_client().delete_account(id).await {
         Err(err) => log::error!("Failed to send transaction: {}", err),
         Ok(()) => log::debug!("Transaction ok!"),

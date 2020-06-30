@@ -364,14 +364,14 @@ pub enum Transaction {
         name: String,
         /// The permission fields to set.
         permissions: Permissions,
-        /// The Timestamp
+        /// The timestamp of transaction creation.
         timestamp: SystemTime,
     },
     /// Delete an account.
     DeleteAccount {
         /// The account to delete.
         id: PeerId,
-        /// The Timestamp
+        /// The timestamp of transaction creation.
         timestamp: SystemTime,
     },
 }

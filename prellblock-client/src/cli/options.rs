@@ -85,7 +85,7 @@ pub mod cmd {
     pub struct CreateAccount {
         /// The id of the account to create.
         pub id: String,
-        /// The name of the account to create
+        /// The name of the account to create.
         pub name: String,
         /// The filepath to a yaml-file cotaining the accounts permissions.
         pub permission_file: String,

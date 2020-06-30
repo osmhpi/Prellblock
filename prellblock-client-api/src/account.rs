@@ -29,7 +29,7 @@ pub struct Account {
 }
 
 impl Account {
-    /// Create a new Account with a given name and default values.
+    /// Create a new `Account` with a given name and default values.
     #[must_use]
     pub fn new(name: String) -> Self {
         Self {
@@ -38,6 +38,22 @@ impl Account {
             expire_at: Expiry::default(),
             writing_rights: false,
             reading_rights: Vec::new(),
+        }
+    }
+
+    /// Apply `permissions` onto the account.
+    pub fn apply_permissions(&mut self, permissions: Permissions) {
+        if let Some(account_type) = permissions.account_type {
+            self.account_type = account_type;
+        }
+        if let Some(expire_at) = permissions.expire_at {
+            self.expire_at = expire_at;
+        }
+        if let Some(writing_rights) = permissions.has_writing_rights {
+            self.writing_rights = writing_rights;
+        }
+        if let Some(reading_rights) = permissions.reading_rights {
+            self.reading_rights = reading_rights;
         }
     }
 }

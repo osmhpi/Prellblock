@@ -82,7 +82,7 @@ impl PeerInbox {
             }
             Transaction::DeleteAccount(params) => {
                 log::debug!(
-                    "Client {} deletes account {}",
+                    "Client {} deletes account {}.",
                     &transaction.signer(),
                     params.id,
                 );
