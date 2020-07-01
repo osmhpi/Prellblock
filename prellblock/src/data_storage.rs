@@ -2,6 +2,7 @@
 
 use hexutil::ToHex;
 use pinxit::PeerId;
+use prellblock_client_api::AccountTransaction;
 use serde::Serialize;
 use sled::{Config, Db, IVec, Tree};
 use std::time::SystemTime;
@@ -102,7 +103,7 @@ impl DataStorage {
         transaction: &T,
     ) -> Result<(), BoxError>
     where
-        T: Serialize,
+        T: AccountTransaction + Serialize,
     {
         // find tree for sender account
         let peer_tree = self.tree_for_name(&self.accounts, peer.to_hex())?;

@@ -375,3 +375,10 @@ pub enum Transaction {
         timestamp: SystemTime,
     },
 }
+
+/// A trait signifying that a transaction can be written into the Account-tree in the `DataStorage`.
+pub trait AccountTransaction {}
+
+impl AccountTransaction for transaction::UpdateAccount {}
+impl AccountTransaction for transaction::CreateAccount {}
+impl AccountTransaction for transaction::DeleteAccount {}

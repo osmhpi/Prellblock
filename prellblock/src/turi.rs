@@ -75,7 +75,7 @@ impl Turi {
             Transaction::KeyValue(params) => {
                 // TODO: Deserialize value.
                 log::debug!(
-                    "Client {} set {} to {:?} (difference of {:?}).",
+                    "Client {} set {} to {:?} (time since transaction-creation on the client: {:?}).",
                     peer_id,
                     params.key,
                     params.value,
@@ -84,7 +84,7 @@ impl Turi {
             }
             Transaction::UpdateAccount(params) => {
                 log::debug!(
-                    "Client {} updates account {}: {:#?} (difference of {:?}).",
+                    "Client {} updates account {}: {:#?} (time since transaction-creation on the client: {:?}).",
                     &transaction.signer(),
                     params.id,
                     params.permissions,
@@ -93,7 +93,7 @@ impl Turi {
             }
             Transaction::CreateAccount(params) => {
                 log::debug!(
-                    "Client {} creates account {}: {:#?} (difference of {:?}).",
+                    "Client {} creates account {}: {:#?} (time since transaction-creation on the client: {:?}).",
                     &transaction.signer(),
                     params.id,
                     params.permissions,
@@ -102,7 +102,7 @@ impl Turi {
             }
             Transaction::DeleteAccount(params) => {
                 log::debug!(
-                    "Client {} deletes account {} (difference of {:?}).",
+                    "Client {} deletes account {} (time since transaction-creation on the client: {:?}).",
                     &transaction.signer(),
                     params.id,
                     std::time::SystemTime::now().duration_since(params.timestamp),
