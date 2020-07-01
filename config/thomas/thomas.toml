@@ -1,2 +1,6 @@
 identity = "./config/thomas/thomas.key"
 tls_id = "./certificates/thomas/thomas.pfx"
+block_path = "./blocks/thomas"
+data_path = "./data/thomas"
+turi_address = "127.0.0.1:3133"
+peer_address = "127.0.0.1:2483"

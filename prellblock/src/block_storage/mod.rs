@@ -5,11 +5,12 @@ mod error;
 pub use error::Error;
 
 use crate::{
-    consensus::{Block, BlockHash, BlockNumber},
+    consensus::{Block, BlockHash, BlockNumber, Body},
     transaction_checker::AccountChecker,
 };
 use pinxit::{PeerId, Signature};
 use prellblock_client_api::{
+    consensus::{GenesisTransactions, LeaderTerm, SignatureList},
     Filter, Query, ReadValuesOfPeer, ReadValuesOfSeries, Span, Transaction,
 };
 use sled::{Config, Db, Tree};
@@ -36,8 +37,11 @@ pub struct BlockStorage {
 }
 
 impl BlockStorage {
-    /// Create a new `Store` at path.
-    pub fn new(path: &str) -> Result<Self, Error> {
+    /// Create a new `BlockStorage` at path.
+    pub fn new(
+        path: &str,
+        genesis_transactions: Option<GenesisTransactions>,
+    ) -> Result<Self, Error> {
         let config = Config::default()
             .path(path)
             .cache_capacity(8_000_000)
@@ -50,11 +54,30 @@ impl BlockStorage {
         let blocks = database.open_tree(BLOCKS_TREE_NAME)?;
         let accounts = database.open_tree(ACCOUNTS_TREE_NAME)?;
 
-        Ok(Self {
+        let block_storage = Self {
             database,
             blocks,
             accounts,
-        })
+        };
+
+        // Apply genesis block if `BlockStorage` is empty.
+        if block_storage.blocks.is_empty() {
+            let genesis_transactions = genesis_transactions
+                .expect("No genesis transactions were given, but BlockStorage is empty.");
+            let genesis_block = Block {
+                body: Body {
+                    leader_term: LeaderTerm::default(),
+                    height: BlockNumber::default(),
+                    prev_block_hash: BlockHash::default(),
+                    timestamp: genesis_transactions.timestamp,
+                    transactions: genesis_transactions.transactions,
+                },
+                signatures: SignatureList::default(),
+            };
+            block_storage.write_block(&genesis_block)?;
+        }
+
+        Ok(block_storage)
     }
 
     /// Write a value to the store.

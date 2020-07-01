@@ -1,2 +1,6 @@
 identity = "./config/percy/percy.key"
 tls_id = "./certificates/percy/percy.pfx"
+block_path = "./blocks/percy"
+data_path = "./data/percy"
+turi_address = "127.0.0.1:3132"
+peer_address = "127.0.0.1:2482"

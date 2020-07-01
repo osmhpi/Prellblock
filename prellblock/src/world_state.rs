@@ -11,7 +11,7 @@ use crate::{
 };
 use im::{HashMap, Vector};
 use pinxit::{PeerId, Signed};
-use prellblock_client_api::Transaction;
+use prellblock_client_api::{account::AccountType, Transaction};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt, fs,
@@ -58,20 +58,8 @@ impl WorldStateService {
     }
 
     /// Create a new `WorldStateService` initalized with the blocks from a `block_storage`.
-    pub fn from_block_storage(
-        block_storage: &BlockStorage,
-        peer_accounts: impl Iterator<Item = (PeerId, Account)>,
-        peers: Vector<(PeerId, SocketAddr)>,
-    ) -> Result<Self, BoxError> {
+    pub fn from_block_storage(block_storage: &BlockStorage) -> Result<Self, BoxError> {
         let mut world_state_references = WorldStateReferences::default();
-
-        // TODO: Remove this. Currently for development purposes.
-        {
-            let world_state = &mut world_state_references.current;
-            world_state.load_fake_accounts();
-            world_state.accounts.extend(peer_accounts);
-            world_state.peers = peers;
-        }
 
         let mut blocks = block_storage.read(..);
         let last_block = blocks.next_back();
@@ -209,24 +197,84 @@ impl WorldState {
             Transaction::KeyValue(_) => {}
             Transaction::UpdateAccount(params) => {
                 if let Some(account) = self.accounts.get_mut(&params.id).map(Arc::make_mut) {
+                    // If was RPU and now it isn't, remove from peers list.
+                    // If it was, then add it to the peers list.
+                    match account.account_type {
+                        AccountType::RPU { .. } => {
+                            match params.permissions.account_type {
+                                None | Some(AccountType::RPU { .. }) => {}
+                                Some(_) => {
+                                    // Remove the account from peers.
+                                    if let Some(index) =
+                                        self.peers.iter().position(|(id, _)| *id == params.id)
+                                    {
+                                        self.peers.remove(index);
+                                    } else {
+                                        unreachable!(
+                                            "RPU to delete {} ({}) does not exist.",
+                                            params.id, account.name
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        _ => {
+                            match params.permissions.account_type {
+                                Some(AccountType::RPU { peer_address, .. }) => {
+                                    // Add account because now it's a RPU.
+                                    if self.peers.iter().any(|(id, _)| *id == params.id) {
+                                        unreachable!(
+                                            "RPU {} ({}) already exists.",
+                                            params.id, account.name
+                                        )
+                                    }
+                                    self.peers.push_back((params.id, peer_address));
+                                },
+                                _ => {},
+                            }
+                        }
+                    }
                     account.apply_permissions(params.permissions);
                 } else {
+                    // Should be checked in `TransactionChecker`.
                     unreachable!("Account {} does not exist.", params.id);
                 }
             }
             Transaction::CreateAccount(params) => {
                 let mut account = Account::new(params.name);
+                let account_id = params.id;
                 account.apply_permissions(params.permissions);
+                let account = Arc::new(account);
                 if self
                     .accounts
-                    .insert(params.id.clone(), Arc::new(account))
+                    .insert(account_id.clone(), account.clone())
                     .is_some()
                 {
-                    unreachable!("Account {} already exist.", params.id);
+                    // Should be checked in `TransactionChecker`.
+                    unreachable!("Account {} ({}) already exist.", account_id, account.name);
+                }
+
+                // Add the account as peer, if not exists.
+                if let AccountType::RPU { peer_address, .. } = account.account_type {
+                    if self.peers.iter().any(|(id, _)| *id == account_id) {
+                        unreachable!("RPU {} ({}) already exists.", account_id, account.name)
+                    }
+                    self.peers.push_back((account_id, peer_address));
                 }
             }
             Transaction::DeleteAccount(params) => {
-                if self.accounts.remove(&params.id).is_none() {
+                if let Some(account) = self.accounts.remove(&params.id) {
+                    // Remove the account from peers.
+                    if let Some(index) = self.peers.iter().position(|(id, _)| *id == params.id) {
+                        self.peers.remove(index);
+                    } else {
+                        unreachable!(
+                            "RPU to delete {} ({}) does not exist.",
+                            params.id, account.name
+                        )
+                    }
+                } else {
+                    // Should be checked in `TransactionChecker`.
                     unreachable!("Account {} does not exist.", params.id);
                 }
             }

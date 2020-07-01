@@ -166,19 +166,18 @@ impl AccountChecker {
         }
     }
 
-    /// Verify whether the accoount is a known RPU.
+    /// Verify whether the account is a known RPU.
     pub fn verify_is_rpu(&self) -> Result<(), PermissionError> {
-        if self.account.account_type == AccountType::RPU {
-            Ok(())
-        } else {
-            Err(PermissionError::NotAnRPU(self.peer_id.clone()))
+        match self.account.account_type {
+            AccountType::RPU { .. } => Ok(()),
+            _ => Err(PermissionError::NotAnRPU(self.peer_id.clone())),
         }
     }
 
     /// Verify whether the account is allowed to read blocks.
     pub fn verify_can_read_blocks(&self) -> Result<(), PermissionError> {
         match self.account.account_type {
-            AccountType::BlockReader | AccountType::RPU | AccountType::Admin => Ok(()),
+            AccountType::BlockReader | AccountType::RPU { .. } | AccountType::Admin => Ok(()),
             AccountType::Normal => Err(PermissionError::CannotReadBlocks(self.peer_id.clone())),
         }
     }

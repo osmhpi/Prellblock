@@ -3,6 +3,7 @@
 use chrono::prelude::*;
 use pinxit::PeerId;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 
 /// `Account` stores data needed for permission checking.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,7 +85,12 @@ pub enum AccountType {
     BlockReader,
     /// A RPU that can participate in the consesus.
     #[serde(rename = "rpu")]
-    RPU,
+    RPU {
+        /// The address on which the `Turi` listens for incoming client requests.
+        turi_address: SocketAddr,
+        /// The address on which the `PeerInbox` listens for incoming RPU-RPU communication.
+        peer_address: SocketAddr,
+    },
     /// An admin that can manage and edit all other accounts.
     Admin,
 }

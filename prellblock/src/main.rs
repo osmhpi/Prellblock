@@ -23,7 +23,11 @@ use prellblock::{
     turi::Turi,
     world_state::{Account, WorldStateService},
 };
-use prellblock_client_api::account::{AccountType, Expiry};
+use prellblock_client_api::{
+    account::{AccountType, Expiry},
+    consensus::GenesisTransactions,
+    Transaction,
+};
 use serde::Deserialize;
 use std::{env, fs, io, net::SocketAddr, sync::Arc};
 use structopt::StructOpt;
@@ -33,27 +37,20 @@ use tokio::net::TcpListener;
 
 #[derive(StructOpt, Debug)]
 struct Opt {
-    /// The identity name to load from config.toml file.
-    name: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct Config {
-    rpu: Vec<RpuConfig>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct RpuConfig {
-    name: String,
-    peer_id: String,
-    peer_address: SocketAddr,
-    turi_address: SocketAddr,
+    /// The path to the configuration file.
+    config: String,
+    /// The path to the genesis transactions file (only needed for the first start).
+    genesis_transactions: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct RpuPrivateConfig {
-    identity: String, // pinxit::Identity (hex -> .key)
-    tls_id: String,   // native_tls::Identity (pkcs12 -> .pfx)
+    identity: String,   // pinxit::Identity (hex -> .key)
+    tls_id: String,     // native_tls::Identity (pkcs12 -> .pfx)
+    block_path: String, // path to `BlockStorage` directory
+    data_path: String,  // path to `DataStorage` directory
+    turi_address: SocketAddr,
+    peer_address: SocketAddr,
 }
 
 #[tokio::main]
@@ -65,48 +62,26 @@ async fn main() {
     log::debug!("Command line arguments: {:#?}", opt);
 
     // load and parse config
-    let config_data = fs::read_to_string("./config/config.toml").unwrap();
-    let config: Config = toml::from_str(&config_data).unwrap();
-    let public_config = config
-        .rpu
-        .iter()
-        .find(|rpu_config| rpu_config.name == opt.name)
-        .unwrap()
-        .clone();
-    let private_config_data =
-        fs::read_to_string(format!("./config/{0}/{0}.toml", opt.name)).unwrap();
+    let private_config_data = fs::read_to_string(opt.config).unwrap();
     let private_config: RpuPrivateConfig = toml::from_str(&private_config_data).unwrap();
-    let peers = config
-        .rpu
-        .iter()
-        .map(|rpu_config| {
-            let peer_id = fs::read_to_string(&rpu_config.peer_id).unwrap();
-            let peer_id = peer_id.parse().unwrap();
-            (peer_id, rpu_config.peer_address)
-        })
-        .collect();
-    let peer_accounts = config.rpu.iter().map(|rpu_config| {
-        let peer_id = fs::read_to_string(&rpu_config.peer_id).unwrap();
-        let peer_id = peer_id.parse().unwrap();
-        (
-            peer_id,
-            Account {
-                name: rpu_config.name.clone(),
-                account_type: AccountType::RPU,
-                expire_at: Expiry::Never,
-                writing_rights: false,
-                reading_rights: Vec::new(),
-            },
-        )
-    });
+
+    // load genesis block (if a path is given)
+    let genesis_transactions = if let Some(genesis_transactions) = opt.genesis_transactions {
+        let genesis_transactions_data = fs::read_to_string(genesis_transactions).unwrap();
+        let genesis_transactions: GenesisTransactions =
+            serde_yaml::from_str(&genesis_transactions_data).unwrap();
+        Some(genesis_transactions)
+    } else {
+        None
+    };
 
     let hex_identity =
         fs::read_to_string(&private_config.identity).expect("Could not load identity file.");
     let identity = hex_identity.parse().expect("Identity could not be loaded.");
 
-    let block_storage = BlockStorage::new(&format!("./blocks/{}", opt.name)).unwrap();
-    let world_state =
-        WorldStateService::from_block_storage(&block_storage, peer_accounts, peers).unwrap();
+    let block_storage =
+        BlockStorage::new(&private_config.block_path, genesis_transactions).unwrap();
+    let world_state = WorldStateService::from_block_storage(&block_storage).unwrap();
 
     let consensus = Consensus::new(identity, block_storage.clone(), world_state.clone()).await;
 
@@ -121,19 +96,18 @@ async fn main() {
 
     // execute the turi in a new thread
     let turi_task = {
-        let public_config = public_config.clone();
         let private_config = private_config.clone();
         let transaction_checker = transaction_checker.clone();
 
         tokio::spawn(async move {
             let tls_identity = load_identity_from_env(private_config.tls_id).await?;
-            let mut listener = TcpListener::bind(public_config.turi_address).await?;
+            let mut listener = TcpListener::bind(private_config.turi_address).await?;
             let turi = Turi::new(tls_identity, batcher, reader, transaction_checker);
             turi.serve(&mut listener).await
         })
     };
 
-    let data_storage = DataStorage::new(&format!("./data/{}", opt.name)).unwrap();
+    let data_storage = DataStorage::new(&private_config.data_path).unwrap();
     let data_storage = Arc::new(data_storage);
 
     let calculator = Calculator::new();
@@ -145,7 +119,7 @@ async fn main() {
     // execute the receiver in a new thread
     let peer_receiver_task = tokio::spawn(async move {
         let tls_identity = load_identity_from_env(private_config.tls_id).await?;
-        let mut listener = TcpListener::bind(public_config.peer_address).await?;
+        let mut listener = TcpListener::bind(private_config.peer_address).await?;
         let receiver = Receiver::new(tls_identity, peer_inbox);
         receiver.serve(&mut listener).await
     });
