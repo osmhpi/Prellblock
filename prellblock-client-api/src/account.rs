@@ -155,7 +155,7 @@ pub enum ReadingPermission {
 }
 
 /// The right to read from specific accounts.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReadingRight {
     /// A black- or whitelist of accounts.
     pub accounts: Vec<PeerId>,

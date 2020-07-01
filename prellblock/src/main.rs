@@ -22,10 +22,10 @@ use prellblock::{
     transaction_checker::TransactionChecker,
     turi::Turi,
     world_state::WorldStateService,
+    RpuPrivateConfig,
 };
 use prellblock_client_api::consensus::GenesisTransactions;
-use serde::Deserialize;
-use std::{env, fs, io, net::SocketAddr, sync::Arc};
+use std::{env, fs, io, sync::Arc};
 use structopt::StructOpt;
 use tokio::net::TcpListener;
 
@@ -37,16 +37,6 @@ struct Opt {
     config: String,
     /// The path to the genesis transactions file (only needed for the first start).
     genesis_transactions: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct RpuPrivateConfig {
-    identity: String,   // pinxit::Identity (hex -> .key)
-    tls_id: String,     // native_tls::Identity (pkcs12 -> .pfx)
-    block_path: String, // path to `BlockStorage` directory
-    data_path: String,  // path to `DataStorage` directory
-    turi_address: SocketAddr,
-    peer_address: SocketAddr,
 }
 
 #[tokio::main]

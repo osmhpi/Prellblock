@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "balise",
+    "genesis-wizard",
     "pinxit",
     "prellblock",
     "prellblock-client",

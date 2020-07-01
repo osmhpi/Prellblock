@@ -1,0 +1,21 @@
+[package]
+name = "genesis-wizard"
+version = "0.1.0"
+authors = ["Felix Gohla <felix.gohla@student.hpi.de>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = "0.4.11"
+dialoguer = "0.6.2"
+hexutil = "0.1.0"
+humantime = "2.0.1"
+newtype-enum = "0.1.0"
+openssl = { version = "0.10.30", features = ["vendored"] }
+pinxit = { path = "../pinxit" }
+prellblock = { path = "../prellblock" }
+prellblock-client-api = { path = "../prellblock-client-api" }
+serde = "1.0.114"
+serde_yaml = "0.8.13"
+toml = "0.5.6"
