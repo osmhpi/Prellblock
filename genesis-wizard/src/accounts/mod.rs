@@ -3,10 +3,10 @@ use crate::AccountMeta;
 use dialoguer::{theme::Theme, Input, MultiSelect, Select};
 use hexutil::FromHex;
 use pinxit::{Identity, PeerId};
-use prellblock_client_api::account::{
-    Account, AccountType, Expiry, Permission, ReadingPermission, ReadingRight,
-};
+use prellblock_client_api::account::{Account, AccountType, Expiry};
 use std::{cmp::Reverse, time::SystemTime};
+
+mod reading_rights;
 
 pub(super) fn handle_create_accounts<'a>(theme: &'a dyn Theme, accounts: &mut Vec<AccountMeta>) {
     let create_account_menu = [
@@ -79,6 +79,7 @@ fn handle_create_account<'a>(theme: &'a dyn Theme, accounts: &mut Vec<AccountMet
         "Expiry date",
         "Set writing rights",
         "Set reading rights",
+        "Show account",
         "Finish",
         "Abort Mission",
     ];
@@ -108,10 +109,13 @@ fn handle_create_account<'a>(theme: &'a dyn Theme, accounts: &mut Vec<AccountMet
                 create_accounts_menu.default(5);
             }
             5 => {
-                handle_set_reading_rights(theme, &mut account);
+                reading_rights::handle_set_reading_rights(theme, &mut account, accounts);
                 create_accounts_menu.default(6);
             }
             6 => {
+                println!("{:#?}", account);
+            }
+            7 => {
                 accounts.push(AccountMeta {
                     account,
                     identifier,
@@ -119,7 +123,7 @@ fn handle_create_account<'a>(theme: &'a dyn Theme, accounts: &mut Vec<AccountMet
                 });
                 break;
             }
-            7 => break,
+            8 => break,
             _ => panic!("Invalid selection."),
         }
     }
@@ -238,203 +242,5 @@ fn handle_set_writing_rights<'a>(theme: &'a dyn Theme, account: &mut Account) {
         0 => account.writing_rights = true,
         1 => account.writing_rights = false,
         _ => panic!("Invalid selection"),
-    }
-}
-
-fn handle_set_reading_rights<'a>(theme: &'a dyn Theme, account: &mut Account) {
-    let mut reading_rights = Vec::new();
-    let reading_rights_options = ["Edit", "Add", "Remove", "Cancel"];
-    let mut reading_rights_select = Select::with_theme(theme);
-    reading_rights_select
-        .with_prompt("Actions for reading rights:\n(These are first fit)")
-        .items(&reading_rights_options)
-        .default(1);
-    match reading_rights_select.interact().unwrap() {
-        0 => account.writing_rights = true,
-        1 => {
-            handle_add_reading_right(theme, &mut reading_rights);
-            account.reading_rights.extend(reading_rights);
-        }
-        2 => account.writing_rights = false,
-        3 => {}
-        _ => panic!("Invalid selection"),
-    }
-}
-
-fn handle_add_reading_right<'a>(theme: &'a dyn Theme, reading_rights: &mut Vec<ReadingPermission>) {
-    let add_reading_rights_options = ["Blacklist", "Whitelist"];
-    let mut add_reading_rights_select = Select::with_theme(theme);
-    add_reading_rights_select
-        .items(&add_reading_rights_options)
-        .default(1);
-    match add_reading_rights_select.interact().unwrap() {
-        0 => handle_add_list(
-            theme,
-            reading_rights,
-            ReadingPermission::Blacklist(ReadingRight {
-                accounts: vec![],
-                namespace: vec![],
-            }),
-        ),
-        1 => handle_add_list(
-            theme,
-            reading_rights,
-            ReadingPermission::Whitelist(ReadingRight {
-                accounts: vec![],
-                namespace: vec![],
-            }),
-        ),
-        _ => panic!("Invalid selection"),
-    }
-}
-
-fn handle_add_list<'a>(
-    theme: &'a dyn Theme,
-    reading_rights: &mut Vec<ReadingPermission>,
-    mut reading_permission: ReadingPermission,
-) {
-    let mut reading_right = ReadingRight::default();
-
-    let account_options = ["List", "Add", "Remove", "Cancel"];
-    let mut account_options_select = Select::with_theme(theme);
-    account_options_select
-        .with_prompt("Edit, add or remove a permission to the reading right:")
-        .items(&account_options)
-        .default(1);
-    match account_options_select.interact().unwrap() {
-        0 => handle_list_permission_item(&mut reading_right),
-        1 => {
-            handle_add_permission_item(theme, &mut reading_right);
-            match reading_permission {
-                ReadingPermission::Blacklist(ref mut permission_list)
-                | ReadingPermission::Whitelist(ref mut permission_list) => {
-                    *permission_list = reading_right;
-                }
-            }
-            reading_rights.push(reading_permission);
-        }
-        2 => handle_remove_permission_item(theme, &mut reading_right),
-        3 => {}
-        _ => panic!("Invalid selection"),
-    };
-}
-
-fn handle_remove_permission_item<'a>(theme: &'a dyn Theme, reading_right: &mut ReadingRight) {
-    if reading_right.accounts.is_empty() {
-        println!("No permission rules.");
-        return;
-    }
-
-    let items: Vec<_> = reading_right
-        .accounts
-        .iter()
-        .zip(reading_right.namespace.iter())
-        .map(|(peer_id, namespace)| format!("{}-{}", peer_id, namespace.scope))
-        .collect();
-    let mut delete_rules_select = MultiSelect::with_theme(theme);
-    delete_rules_select
-        .with_prompt("Select permission rules to delete:")
-        .items(&items);
-    let mut permission_rules_to_delete = delete_rules_select.interact().unwrap();
-    permission_rules_to_delete.sort_by_key(|&a| Reverse(a));
-    let _: Vec<_> = permission_rules_to_delete
-        .iter()
-        .map(|i| {
-            reading_right.accounts.swap_remove(*i);
-            reading_right.namespace.swap_remove(*i)
-        })
-        .collect();
-}
-
-fn handle_list_permission_item(reading_right: &mut ReadingRight) {
-    if reading_right.accounts.is_empty() {
-        println!("No permission rules.");
-        return;
-    }
-
-    reading_right
-        .accounts
-        .iter()
-        .zip(reading_right.namespace.iter())
-        .for_each(|(peer_id, namespace)| {
-            println!("Account: {}\ntimeseries: {}", peer_id, namespace.scope)
-        });
-}
-
-fn handle_add_permission_item<'a>(theme: &'a dyn Theme, reading_right: &mut ReadingRight) {
-    // make a copy of the reading right to restore it on cancelation
-    let backup = reading_right.clone();
-
-    // outer loop for adding `PeerId`s.
-    loop {
-        // get user input and try to parse it into a `PeerId`
-        let peer_id = Input::<String>::new()
-            .with_prompt("Add a PeerId")
-            .interact()
-            .unwrap();
-        match peer_id.parse() {
-            Ok(peer_id) => reading_right.accounts.push(peer_id),
-            Err(_) => {
-                println!("The PeerId was invalid.");
-                continue;
-            }
-        }
-
-        println!("rr: {:?}", reading_right);
-
-        // state a dialog on how to go on
-        let options = ["Undo", "Add a namespace", "Cancel"];
-        let mut select = Select::with_theme(theme);
-        select.items(&options).default(1);
-
-        // outer loop for adding namespaces.
-        loop {
-            match select.interact().unwrap() {
-                // undo `PeerId`
-                0 => {
-                    reading_right.accounts.pop();
-                    continue;
-                }
-                // add a namespace
-                1 => {
-                    let namespace = Input::<String>::new()
-                        .with_prompt("Add a namespace")
-                        .interact()
-                        .unwrap();
-                    reading_right
-                        .namespace
-                        .push(Permission { scope: namespace });
-                }
-                // total cancellation
-                2 => {
-                    reading_right.accounts.pop();
-                    break;
-                }
-                _ => panic!("Invalid selection"),
-            }
-
-            // state a dialog on how to go on
-            let options = ["Undo", "Add another reading right", "Done", "Cancel"];
-            let mut select = Select::with_theme(theme);
-            select.items(&options).default(2);
-
-            match select.interact().unwrap() {
-                0 => {
-                    reading_right.namespace.pop();
-                    continue;
-                }
-                1 => {
-                    break;
-                }
-                2 => {
-                    return;
-                }
-                3 => {
-                    *reading_right = backup;
-                    return;
-                }
-                _ => panic!("Invalid selection"),
-            }
-        }
     }
 }
