@@ -213,7 +213,7 @@ fn load_ca_cert(theme: &'_ dyn Theme, ca: &mut Option<CA>) {
             .interact()
             .unwrap();
 
-        match PKey::private_key_from_pkcs8_passphrase(&key_content, password.as_bytes()) {
+        match PKey::private_key_from_pem_passphrase(&key_content, password.as_bytes()) {
             Ok(key) => {
                 break key;
             }
