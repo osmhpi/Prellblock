@@ -14,7 +14,12 @@ use prellblock::{
     turi::Turi,
     world_state::WorldStateService,
 };
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use prellblock_client_api::consensus::GenesisTransactions;
+use std::{
+    net::SocketAddr,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 use tokio::net::TcpListener;
 
 #[tokio::test]
@@ -31,7 +36,12 @@ async fn test_prellblock() {
     let identity = Identity::generate();
     peers.push_back((identity.id().clone(), peer_address));
 
-    let block_storage = BlockStorage::new("../blocks/test-prellblock").unwrap();
+    let fake_genesis = GenesisTransactions {
+        transactions: vec![],
+        timestamp: SystemTime::now(),
+    };
+
+    let block_storage = BlockStorage::new("../blocks/test-prellblock", Some(fake_genesis)).unwrap();
     let world_state = WorldStateService::default();
     {
         let mut world_state = world_state.get_writable().await;

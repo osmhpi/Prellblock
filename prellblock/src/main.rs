@@ -21,13 +21,9 @@ use prellblock::{
     reader::Reader,
     transaction_checker::TransactionChecker,
     turi::Turi,
-    world_state::{Account, WorldStateService},
+    world_state::WorldStateService,
 };
-use prellblock_client_api::{
-    account::{AccountType, Expiry},
-    consensus::GenesisTransactions,
-    Transaction,
-};
+use prellblock_client_api::consensus::GenesisTransactions;
 use serde::Deserialize;
 use std::{env, fs, io, net::SocketAddr, sync::Arc};
 use structopt::StructOpt;

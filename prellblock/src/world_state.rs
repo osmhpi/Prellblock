@@ -14,7 +14,7 @@ use pinxit::{PeerId, Signed};
 use prellblock_client_api::{account::AccountType, Transaction};
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt, fs,
+    fmt,
     net::SocketAddr,
     ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
@@ -161,22 +161,6 @@ pub struct WorldState {
 }
 
 impl WorldState {
-    /// Function used for developement purposes, loads static accounts from a config file.
-    fn load_fake_accounts(&mut self) {
-        let yaml_file = fs::read_to_string("./config/accounts.yaml").unwrap();
-        let accounts_strings: HashMap<String, Account> = serde_yaml::from_str(&yaml_file).unwrap();
-
-        self.accounts = accounts_strings
-            .into_iter()
-            .map(|(key, account)| {
-                (
-                    key.parse().expect("peer_id in accounts.yaml"),
-                    account.into(),
-                )
-            })
-            .collect();
-    }
-
     /// Apply a block to the current world state.
     pub fn apply_block(&mut self, block: Block) -> Result<(), BoxError> {
         if block.body.prev_block_hash != self.last_block_hash {
@@ -219,18 +203,17 @@ impl WorldState {
                             }
                         }
                         _ => {
-                            match params.permissions.account_type {
-                                Some(AccountType::RPU { peer_address, .. }) => {
-                                    // Add account because now it's a RPU.
-                                    if self.peers.iter().any(|(id, _)| *id == params.id) {
-                                        unreachable!(
-                                            "RPU {} ({}) already exists.",
-                                            params.id, account.name
-                                        )
-                                    }
-                                    self.peers.push_back((params.id, peer_address));
-                                },
-                                _ => {},
+                            if let Some(AccountType::RPU { peer_address, .. }) =
+                                params.permissions.account_type
+                            {
+                                // Add account because now it's a RPU.
+                                if self.peers.iter().any(|(id, _)| *id == params.id) {
+                                    unreachable!(
+                                        "RPU {} ({}) already exists.",
+                                        params.id, account.name
+                                    )
+                                }
+                                self.peers.push_back((params.id, peer_address));
                             }
                         }
                     }
