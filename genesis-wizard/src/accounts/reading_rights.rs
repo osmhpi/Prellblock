@@ -8,7 +8,7 @@ use std::cmp::Reverse;
 pub(super) fn handle_set_reading_rights<'a>(
     theme: &'a dyn Theme,
     account: &mut Account,
-    accounts: &mut Vec<AccountMeta>,
+    accounts: &[AccountMeta],
 ) {
     // TODO: option to remove a Black-/Whitelist
     let reading_rights_options = ["Add", "Show", "Done"];

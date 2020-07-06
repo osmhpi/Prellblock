@@ -26,6 +26,7 @@ mod accounts;
 mod certificates;
 mod util;
 
+#[derive(Clone)]
 enum Identifier {
     WithIdentity(Identity),
     WithPeerId(PeerId),
@@ -41,6 +42,15 @@ struct AccountMeta {
     account: Account,
     identifier: Identifier,
     rpu_cert: Option<Pkcs12>,
+}
+
+impl AccountMeta {
+    fn id(&self) -> &PeerId {
+        match &self.identifier {
+            Identifier::WithIdentity(identity) => identity.id(),
+            Identifier::WithPeerId(id) => &id,
+        }
+    }
 }
 
 fn main() {

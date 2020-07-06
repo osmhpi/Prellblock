@@ -1,7 +1,7 @@
 use super::Identifier;
 use crate::AccountMeta;
 use dialoguer::{theme::Theme, Input, MultiSelect, Select};
-use hexutil::FromHex;
+use hexutil::{FromHex, ToHex};
 use pinxit::{Identity, PeerId};
 use prellblock_client_api::account::{Account, AccountType, Expiry};
 use std::{cmp::Reverse, time::SystemTime};
@@ -11,6 +11,7 @@ mod reading_rights;
 pub(super) fn handle_create_accounts<'a>(theme: &'a dyn Theme, accounts: &mut Vec<AccountMeta>) {
     let create_account_menu = [
         "Create a new account",
+        "Edit account",
         "Show accounts",
         "Delete accounts",
         "Finish",
@@ -24,9 +25,10 @@ pub(super) fn handle_create_accounts<'a>(theme: &'a dyn Theme, accounts: &mut Ve
             .default(0);
         match create_account_select.interact().unwrap() {
             0 => handle_create_account(theme, accounts),
-            1 => handle_show_accounts(accounts),
-            2 => handle_delete_accounts(theme, accounts),
-            3 => break,
+            1 => handle_edit_account(theme, accounts),
+            2 => handle_show_accounts(accounts),
+            3 => handle_delete_accounts(theme, accounts),
+            4 => break,
             _ => panic!("Invalid Selection."),
         }
     }
@@ -40,7 +42,7 @@ fn handle_delete_accounts<'a>(theme: &'a dyn Theme, accounts: &mut Vec<AccountMe
 
     let account_names: Vec<String> = accounts
         .iter()
-        .map(|meta| meta.account.name.clone())
+        .map(|meta| format!("{} ({})", meta.account.name.clone(), meta.id().to_hex()))
         .collect();
     let mut delete_account_select = MultiSelect::with_theme(theme);
     delete_account_select
@@ -54,24 +56,42 @@ fn handle_delete_accounts<'a>(theme: &'a dyn Theme, accounts: &mut Vec<AccountMe
         .collect();
 }
 
-fn handle_show_accounts(accounts: &mut Vec<AccountMeta>) {
+fn handle_edit_account(theme: &'_ dyn Theme, accounts: &mut Vec<AccountMeta>) {
     if accounts.is_empty() {
         println!("No accounts.");
         return;
     }
-    let accounts_with_peer_ids = accounts.iter().map(|meta| match &meta.identifier {
-        Identifier::WithIdentity(identity) => (&meta.account, identity.id()),
-        Identifier::WithPeerId(peer_id) => (&meta.account, peer_id),
-    });
-    for (account, peer_id) in accounts_with_peer_ids {
-        println!("{:?} ({}):\n{:#?}", account.name, peer_id, account);
+    let edit_account_options: Vec<String> = accounts
+        .iter()
+        .map(|meta| format!("{} ({})", meta.account.name, meta.id().to_hex()))
+        .collect();
+    let mut edit_account_select = Select::with_theme(theme);
+    edit_account_select
+        .with_prompt("Select an account to edit:")
+        .items(&edit_account_options);
+    let edit_selection = edit_account_select.interact().unwrap();
+    if edit_selection >= accounts.len() {
+        panic!("Invalid selection!");
+    }
+    let account = accounts[edit_selection].account.clone();
+    let identifier = accounts[edit_selection].identifier.clone();
+    if let Some((account, identifier)) =
+        handle_edit_account_inner(theme, account, identifier, accounts)
+    {
+        accounts[edit_selection].account = account;
+        accounts[edit_selection].identifier = identifier;
+    } else {
+        println!("No accounts changed.");
     }
 }
 
-fn handle_create_account<'a>(theme: &'a dyn Theme, accounts: &mut Vec<AccountMeta>) {
+fn handle_edit_account_inner(
+    theme: &'_ dyn Theme,
+    mut account: Account,
+    mut identifier: Identifier,
+    accounts: &[AccountMeta],
+) -> Option<(Account, Identifier)> {
     let mut create_accounts_menu = Select::with_theme(theme);
-    let mut identifier = Identifier::WithIdentity(Identity::generate());
-    let mut account = Account::new("New Account".to_string());
     let create_accounts_items = [
         "Public Key (optional)",
         "Name",
@@ -116,16 +136,38 @@ fn handle_create_account<'a>(theme: &'a dyn Theme, accounts: &mut Vec<AccountMet
                 println!("{:#?}", account);
             }
             7 => {
-                accounts.push(AccountMeta {
-                    account,
-                    identifier,
-                    rpu_cert: None,
-                });
-                break;
+                break (Some((account, identifier)));
             }
-            8 => break,
+            8 => break (None),
             _ => panic!("Invalid selection."),
         }
+    }
+}
+
+fn handle_show_accounts(accounts: &mut Vec<AccountMeta>) {
+    if accounts.is_empty() {
+        println!("No accounts.");
+        return;
+    }
+    let accounts_with_peer_ids = accounts.iter().map(|meta| (&meta.account, meta.id()));
+    for (account, peer_id) in accounts_with_peer_ids {
+        println!("{:?} ({}):\n{:#?}", account.name, peer_id, account);
+    }
+}
+
+fn handle_create_account<'a>(theme: &'a dyn Theme, accounts: &mut Vec<AccountMeta>) {
+    let account = Account::new("New Account".to_string());
+    let identifier = Identifier::WithIdentity(Identity::generate());
+    if let Some((account, identifier)) =
+        handle_edit_account_inner(theme, account, identifier, accounts)
+    {
+        accounts.push(AccountMeta {
+            account,
+            identifier,
+            rpu_cert: None,
+        })
+    } else {
+        println!("No account created.");
     }
 }
 
