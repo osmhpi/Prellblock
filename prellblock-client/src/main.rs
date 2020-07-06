@@ -13,8 +13,7 @@ use cli::prelude::*;
 use prellblock_client::{account::Permissions, Client, Query};
 use rand::{
     rngs::{OsRng, StdRng},
-    seq::SliceRandom,
-    thread_rng, RngCore, SeedableRng,
+    RngCore, SeedableRng,
 };
 use std::{fs, net::SocketAddr, str, time::Instant};
 use structopt::StructOpt;
@@ -36,7 +35,7 @@ async fn main() {
         Cmd::GetValue(cmd) => main_get_value(cmd).await,
         Cmd::GetAccount(cmd) => main_get_account(cmd).await,
         Cmd::GetBlock(cmd) => main_get_block(cmd).await,
-        Cmd::CurrentBlockNumber => main_current_block_number().await,
+        Cmd::CurrentBlockNumber(cmd) => main_current_block_number(cmd).await,
     }
 }
 
@@ -52,10 +51,7 @@ fn writer_client(turi_address: SocketAddr) -> Client {
     )
 }
 
-fn reader_client() -> Client {
-    let mut rng = thread_rng();
-    let turi_address = Config::load().rpu.choose(&mut rng).unwrap().turi_address;
-
+fn reader_client(turi_address: SocketAddr) -> Client {
     // matching peerid is: cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc
     create_client(
         turi_address,
@@ -64,10 +60,11 @@ fn reader_client() -> Client {
 }
 
 async fn main_set(cmd: cmd::Set) {
-    let cmd::Set { key, value } = cmd;
-
-    let mut rng = thread_rng();
-    let turi_address = Config::load().rpu.choose(&mut rng).unwrap().turi_address;
+    let cmd::Set {
+        turi_address,
+        key,
+        value,
+    } = cmd;
 
     // execute the test client
     match writer_client(turi_address).send_key_value(key, value).await {
@@ -78,19 +75,12 @@ async fn main_set(cmd: cmd::Set) {
 
 async fn main_benchmark(cmd: cmd::Benchmark) {
     let cmd::Benchmark {
-        rpu_name,
+        turi_address,
         key,
         transactions,
         size,
         workers,
     } = cmd;
-
-    let turi_address = Config::load()
-        .rpu
-        .iter()
-        .find(|rpu| rpu.name == rpu_name)
-        .unwrap()
-        .turi_address;
 
     let mut worker_handles = Vec::new();
     for _ in 0..workers {
@@ -143,6 +133,7 @@ async fn main_benchmark(cmd: cmd::Benchmark) {
 
 async fn main_update_account(cmd: cmd::UpdateAccount) {
     let cmd::UpdateAccount {
+        turi_address,
         id,
         permission_file,
     } = cmd;
@@ -156,7 +147,10 @@ async fn main_update_account(cmd: cmd::UpdateAccount) {
     let permissions: Permissions =
         serde_yaml::from_str(&permission_file_content).expect("Invalid permission file content");
 
-    match reader_client().update_account(id, permissions).await {
+    match reader_client(turi_address)
+        .update_account(id, permissions)
+        .await
+    {
         Err(err) => log::error!("Failed to send transaction: {}", err),
         Ok(()) => log::debug!("Transaction ok!"),
     }
@@ -164,6 +158,7 @@ async fn main_update_account(cmd: cmd::UpdateAccount) {
 
 async fn main_create_account(cmd: cmd::CreateAccount) {
     let cmd::CreateAccount {
+        turi_address,
         id,
         name,
         permission_file,
@@ -176,16 +171,19 @@ async fn main_create_account(cmd: cmd::CreateAccount) {
     let permissions: Permissions =
         serde_yaml::from_str(&permission_file_content).expect("Invalid permission file content.");
 
-    match reader_client().create_account(id, name, permissions).await {
+    match reader_client(turi_address)
+        .create_account(id, name, permissions)
+        .await
+    {
         Err(err) => log::error!("Failed to send transaction: {}", err),
         Ok(()) => log::debug!("Transaction ok!"),
     }
 }
 
 async fn main_delete_account(cmd: cmd::DeleteAccount) {
-    let cmd::DeleteAccount { id } = cmd;
+    let cmd::DeleteAccount { turi_address, id } = cmd;
     let id = id.parse().expect("Invalid account id given.");
-    match reader_client().delete_account(id).await {
+    match reader_client(turi_address).delete_account(id).await {
         Err(err) => log::error!("Failed to send transaction: {}", err),
         Ok(()) => log::debug!("Transaction ok!"),
     }
@@ -193,6 +191,7 @@ async fn main_delete_account(cmd: cmd::DeleteAccount) {
 
 async fn main_get_value(cmd: cmd::GetValue) {
     let cmd::GetValue {
+        turi_address,
         peer_id,
         filter,
         span,
@@ -206,7 +205,7 @@ async fn main_get_value(cmd: cmd::GetValue) {
         skip: skip.map(|skip| skip.0),
     };
 
-    match reader_client()
+    match reader_client(turi_address)
         .query_values(vec![peer_id], filter.0, query)
         .await
     {
@@ -243,9 +242,12 @@ async fn main_get_value(cmd: cmd::GetValue) {
 }
 
 async fn main_get_account(cmd: cmd::GetAccount) {
-    let cmd::GetAccount { peer_ids } = cmd;
+    let cmd::GetAccount {
+        turi_address,
+        peer_ids,
+    } = cmd;
 
-    match reader_client().query_account(peer_ids).await {
+    match reader_client(turi_address).query_account(peer_ids).await {
         Ok(accounts) => {
             if accounts.is_empty() {
                 log::warn!("No accounts retrieved.");
@@ -261,9 +263,12 @@ async fn main_get_account(cmd: cmd::GetAccount) {
 }
 
 async fn main_get_block(cmd: cmd::GetBlock) {
-    let cmd::GetBlock { filter } = cmd;
+    let cmd::GetBlock {
+        turi_address,
+        filter,
+    } = cmd;
 
-    match reader_client().query_block(filter.0).await {
+    match reader_client(turi_address).query_block(filter.0).await {
         Ok(block_vec) => {
             if block_vec.is_empty() {
                 log::warn!("No blocks retrieved for the given range.");
@@ -278,8 +283,8 @@ async fn main_get_block(cmd: cmd::GetBlock) {
     }
 }
 
-async fn main_current_block_number() {
-    match reader_client().current_block_number().await {
+async fn main_current_block_number(cmd: cmd::GetCurrentBlockNumber) {
+    match reader_client(cmd.turi_address).current_block_number().await {
         Err(err) => log::error!("Failed to retrieve current block number: {}", err),
         Ok(block_number) => log::info!(
             "The current block number is: {:?}. The last committed block number is: {:?}.",
