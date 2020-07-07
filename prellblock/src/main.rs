@@ -11,6 +11,7 @@
 
 use balise::server::TlsIdentity;
 use futures::future;
+use pinxit::Identity;
 use prellblock::{
     batcher::Batcher,
     block_storage::BlockStorage,
@@ -24,7 +25,7 @@ use prellblock::{
     world_state::WorldStateService,
     RpuPrivateConfig,
 };
-use prellblock_client_api::consensus::GenesisTransactions;
+use prellblock_client_api::{account::AccountType, consensus::GenesisTransactions};
 use std::{env, fs, io, sync::Arc};
 use structopt::StructOpt;
 use tokio::net::TcpListener;
@@ -63,7 +64,8 @@ async fn main() {
 
     let hex_identity =
         fs::read_to_string(&private_config.identity).expect("Could not load identity file.");
-    let identity = hex_identity.parse().expect("Identity could not be loaded.");
+    let identity: Identity = hex_identity.parse().expect("Identity could not be loaded.");
+    let peer_id = identity.id().clone();
 
     let block_storage =
         BlockStorage::new(&private_config.block_path, genesis_transactions).unwrap();
@@ -78,7 +80,23 @@ async fn main() {
 
     let reader = Reader::new(block_storage, world_state.clone());
 
+    // if configured correctly, the addresses for `Turi` and `PeerInbox` are in the `world_state`
+    let rpu_account = world_state
+        .get()
+        .accounts
+        .get(&peer_id)
+        .expect("RPU account not found")
+        .clone();
+
     let transaction_checker = TransactionChecker::new(world_state);
+
+    let (turi_address, peer_address) = match rpu_account.account_type {
+        AccountType::RPU {
+            turi_address,
+            peer_address,
+        } => (turi_address, peer_address),
+        _ => panic!("Given account {} is no RPU.", peer_id),
+    };
 
     // execute the turi in a new thread
     let turi_task = {
@@ -87,7 +105,7 @@ async fn main() {
 
         tokio::spawn(async move {
             let tls_identity = load_identity_from_env(private_config.tls_id).await?;
-            let mut listener = TcpListener::bind(private_config.turi_address).await?;
+            let mut listener = TcpListener::bind(turi_address).await?;
             let turi = Turi::new(tls_identity, batcher, reader, transaction_checker);
             turi.serve(&mut listener).await
         })
@@ -105,7 +123,7 @@ async fn main() {
     // execute the receiver in a new thread
     let peer_receiver_task = tokio::spawn(async move {
         let tls_identity = load_identity_from_env(private_config.tls_id).await?;
-        let mut listener = TcpListener::bind(private_config.peer_address).await?;
+        let mut listener = TcpListener::bind(peer_address).await?;
         let receiver = Receiver::new(tls_identity, peer_inbox);
         receiver.serve(&mut listener).await
     });

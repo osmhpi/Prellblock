@@ -88,6 +88,7 @@ impl WorldStateService {
     pub fn get(&self) -> WorldState {
         self.world_state_references.lock().unwrap().current.clone()
     }
+
     /// Rollback the `WorldState` to the previous state.
     #[allow(clippy::must_use_candidate)]
     pub fn rollback(&self) -> Option<WorldState> {

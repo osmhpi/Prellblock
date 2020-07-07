@@ -161,11 +161,7 @@ fn handle_finish(theme: &'_ dyn Theme, accounts: Vec<AccountMeta>, ca: Option<CA
         };
 
         let name = account.name;
-        if let AccountType::RPU {
-            turi_address,
-            peer_address,
-        } = account.account_type
-        {
+        if let AccountType::RPU { .. } = account.account_type {
             let mut pfx_path = "<path to .pfx file>".to_string();
             if let Some(rpu_cert) = rpu_cert {
                 pfx_path = format!("{}/{}.pfx", account_directory, name);
@@ -179,8 +175,6 @@ fn handle_finish(theme: &'_ dyn Theme, accounts: Vec<AccountMeta>, ca: Option<CA
                 tls_id: pfx_path,
                 block_path: format!("blocks/{}", name),
                 data_path: format!("data/{}", name),
-                turi_address,
-                peer_address,
             };
             let rpu_config = toml::to_string(&rpu_config).unwrap();
             fs::write(format!("{}/{}.toml", account_directory, name), rpu_config).unwrap();

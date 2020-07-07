@@ -10,7 +10,6 @@
 //! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
 
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 
 pub mod batcher;
 pub mod block_storage;
@@ -37,8 +36,4 @@ pub struct RpuPrivateConfig {
     pub block_path: String,
     /// The path to the directory for the `DataStorage`.
     pub data_path: String,
-    /// The address for the `Turi`.
-    pub turi_address: SocketAddr,
-    /// The address for the `PeerInbox`.
-    pub peer_address: SocketAddr,
 }
