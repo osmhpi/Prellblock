@@ -57,7 +57,6 @@ fn main() {
     // All the variables that are used for writing later.
     let mut accounts: Vec<AccountMeta> = Vec::new();
     let mut ca = None;
-    // let mut rpu_certificates = Some(Vec::new());
 
     let menu_theme = ColorfulTheme::default();
     let main_menu_items = [
@@ -167,13 +166,13 @@ fn handle_finish(theme: &'_ dyn Theme, accounts: Vec<AccountMeta>, ca: Option<CA
             peer_address,
         } = account.account_type
         {
-            let pfx_path = format!("{}/{}.pfx", account_directory, name);
-            // FIXME: expect is not good here.
-            fs::write(
-                pfx_path.clone(),
-                &rpu_cert.expect("No certificate.").to_der().unwrap(),
-            )
-            .unwrap();
+            let mut pfx_path = "<path to .pfx file>".to_string();
+            if let Some(rpu_cert) = rpu_cert {
+                pfx_path = format!("{}/{}.pfx", account_directory, name);
+                fs::write(pfx_path.clone(), &rpu_cert.to_der().unwrap()).unwrap();
+            } else {
+                println!("No certificate for {}, cannot set tls_id.", name);
+            }
 
             let rpu_config = RpuPrivateConfig {
                 identity: private_key_path,

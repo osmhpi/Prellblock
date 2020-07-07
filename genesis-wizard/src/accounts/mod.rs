@@ -4,7 +4,10 @@ use dialoguer::{theme::Theme, Input, MultiSelect, Select};
 use hexutil::{FromHex, ToHex};
 use pinxit::{Identity, PeerId};
 use prellblock_client_api::account::{Account, AccountType, Expiry};
-use std::{cmp::Reverse, time::SystemTime};
+use std::{
+    cmp::Reverse,
+    time::{Duration, SystemTime},
+};
 
 mod reading_rights;
 
@@ -61,6 +64,7 @@ fn handle_edit_account(theme: &'_ dyn Theme, accounts: &mut Vec<AccountMeta>) {
         println!("No accounts.");
         return;
     }
+
     let edit_account_options: Vec<String> = accounts
         .iter()
         .map(|meta| format!("{} ({})", meta.account.name, meta.id().to_hex()))
@@ -136,9 +140,9 @@ fn handle_edit_account_inner(
                 println!("{:#?}", account);
             }
             7 => {
-                break (Some((account, identifier)));
+                break Some((account, identifier));
             }
-            8 => break (None),
+            8 => break None,
             _ => panic!("Invalid selection."),
         }
     }
@@ -149,6 +153,7 @@ fn handle_show_accounts(accounts: &mut Vec<AccountMeta>) {
         println!("No accounts.");
         return;
     }
+
     let accounts_with_peer_ids = accounts.iter().map(|meta| (&meta.account, meta.id()));
     for (account, peer_id) in accounts_with_peer_ids {
         println!("{:?} ({}):\n{:#?}", account.name, peer_id, account);
@@ -253,7 +258,9 @@ fn handle_set_expiry_date<'a>(theme: &'a dyn Theme, account: &mut Account) {
                 let default = if let Expiry::AtDate(expiry) = account.expire_at {
                     humantime::format_rfc3339_millis(SystemTime::from(expiry)).to_string()
                 } else {
-                    "2020-05-04T13:37:00".to_string()
+                    let one_year = Duration::from_secs(60 * 60 * 24 * 365);
+                    let next_year = SystemTime::now() + one_year;
+                    humantime::format_rfc3339(next_year).to_string()
                 };
                 let expiry_date_string = expiry_date_input.default(default).interact().unwrap();
                 match humantime::parse_rfc3339_weak(&expiry_date_string) {
@@ -264,8 +271,8 @@ fn handle_set_expiry_date<'a>(theme: &'a dyn Theme, account: &mut Account) {
                     Err(_) => {
                         expiry_date_input
                             .with_prompt(format!(
-                            "Invalid Date! Please enter the expiry date for {} (RFC3339 and UTC):"
-                            , account.name));
+                            "Invalid Date! Please enter the expiry date for {} (RFC3339 and UTC):",
+                            account.name));
                     }
                 }
             }

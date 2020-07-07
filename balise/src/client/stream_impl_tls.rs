@@ -1,7 +1,7 @@
 use crate::Error;
 use lazy_static::lazy_static;
 use native_tls::{Certificate, TlsConnector};
-use std::{fs, net::SocketAddr};
+use std::{env, fs, net::SocketAddr};
 use tokio::net::TcpStream;
 use tokio_tls::{TlsConnector as AsyncTlsConnector, TlsStream};
 
@@ -16,7 +16,8 @@ impl<'a> super::StreamGuard<'a> {
 lazy_static! {
     static ref CONNECTOR: AsyncTlsConnector = {
         // open certificate file
-        let buffer = fs::read("./certificates/ca/ca_prellblock-ca.cert").unwrap();
+        let ca_cert_path = env::var("CA_CERT_PATH").unwrap_or_else(|_| "./config/ca/ca-certificate.pem".to_string());
+        let buffer = fs::read(ca_cert_path).unwrap();
         //load certificate from file
         let cert = Certificate::from_pem(&buffer).unwrap();
         // new builder with trusted root cert

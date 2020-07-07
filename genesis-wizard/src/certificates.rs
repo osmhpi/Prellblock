@@ -51,7 +51,7 @@ pub(super) fn handle_create_certificates<'a>(
                         pkey,
                         created: true,
                     });
-                    certificate_selection.default(1);
+                    certificate_selection.default(2);
                 }
                 Err(err) => panic!(
                     "Failed to create Certificate Authority Certificate: {}",
@@ -66,7 +66,7 @@ pub(super) fn handle_create_certificates<'a>(
                 }
                 let ca = ca.as_ref().unwrap();
 
-                // Filter all RPUs and create certs based on name
+                // Filter all RPUs and create certs based on name.
                 let rpus = accounts.iter_mut().filter(|meta| {
                     if let AccountType::RPU { .. } = meta.account.account_type {
                         true
@@ -105,13 +105,13 @@ fn create_ca_cert(theme: &'_ dyn Theme) -> Result<(X509, PKey<Private>), ErrorSt
 
     let organization = Input::<String>::with_theme(theme)
         .with_prompt("Enter Organization:")
-        .default("Hasso-Plattner-Institut".to_string())
+        .default("Acme Corporation".to_string())
         .interact()
         .unwrap();
 
     let common_name = Input::<String>::with_theme(theme)
         .with_prompt("Enter Common Name:")
-        .default("prellblock.io".to_string())
+        .default("acme-ca".to_string())
         .interact()
         .unwrap();
 
@@ -239,6 +239,7 @@ fn create_rpu_cert(ca: &CA, rpu: &Account) -> Result<(X509, PKey<Private>), Erro
     {
         println!("Creating Certificate for RPU {}.", rpu.name);
 
+        // FIXME: 365 hardcoded is somehow stupid.
         let valid_for = 365;
         let days = Duration::from_secs(60 * 60 * 24 * (valid_for as u64));
         let info = SystemTime::now().checked_add(days).unwrap();
@@ -282,9 +283,7 @@ fn create_rpu_cert(ca: &CA, rpu: &Account) -> Result<(X509, PKey<Private>), Erro
             .map(|address| address.ip())
             .collect();
         for ip in ips {
-            alternative_names
-                .ip(&ip.to_string())
-                .build(&x509.x509v3_context(None, None))?;
+            alternative_names.ip(&ip.to_string());
         }
         let alternative_names = alternative_names
             .build(&x509.x509v3_context(None, None))

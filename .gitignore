@@ -11,6 +11,8 @@
 # Identities and stuff
 /config/*/*.key
 /config/*/*.pub
+/config/*/*.pem
+/config/*/*.pfx
 
 # Data storage
 /data/

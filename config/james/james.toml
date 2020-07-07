@@ -1,7 +1,6 @@
-identity = "./config/james/james.key"
-tls_id = "./certificates/james/james.pfx"
-block_path = "./blocks/james"
-data_path = "./data/james"
+identity = "config/james/james.key"
+tls_id = "config/james/james.pfx"
+block_path = "blocks/james"
+data_path = "data/james"
 turi_address = "127.0.0.1:3131"
 peer_address = "127.0.0.1:2481"
-
