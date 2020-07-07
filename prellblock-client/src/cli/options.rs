@@ -15,13 +15,13 @@ pub enum Cmd {
     #[structopt(name = "bench")]
     Benchmark(cmd::Benchmark),
     /// Update an account.
-    #[structopt(name = "update")]
+    #[structopt(name = "update_account")]
     UpdateAccount(cmd::UpdateAccount),
     /// Create an account.
-    #[structopt(name = "create")]
+    #[structopt(name = "create_account")]
     CreateAccount(cmd::CreateAccount),
     /// Delete an account.
-    #[structopt(name = "delete")]
+    #[structopt(name = "delete_account")]
     DeleteAccount(cmd::DeleteAccount),
     /// Get values from the blockchain.
     ///
@@ -78,8 +78,8 @@ pub mod cmd {
     pub struct UpdateAccount {
         /// The address of the receiving RPU's address.
         pub turi_address: SocketAddr,
-        /// The id of the account to update.
-        pub id: String,
+        /// The public key of the account to update.
+        pub peer_id: String,
         /// The filepath to a yaml-file cotaining the accounts permissions.
         pub permission_file: String,
     }
@@ -89,8 +89,8 @@ pub mod cmd {
     pub struct CreateAccount {
         /// The address of the receiving RPU's address.
         pub turi_address: SocketAddr,
-        /// The id of the account to create.
-        pub id: String,
+        /// The public key of the account to create.
+        pub peer_id: String,
         /// The name of the account to create.
         pub name: String,
         /// The filepath to a yaml-file cotaining the accounts permissions.
@@ -102,8 +102,8 @@ pub mod cmd {
     pub struct DeleteAccount {
         /// The address of the receiving RPU's address.
         pub turi_address: SocketAddr,
-        /// The id of the account to delete.
-        pub id: String,
+        /// The public key of the account to delete.
+        pub peer_id: String,
     }
 
     /// Update the permissions for a given account.

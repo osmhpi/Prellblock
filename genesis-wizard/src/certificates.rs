@@ -33,7 +33,7 @@ pub(super) fn handle_create_certificates<'a>(
     let certificate_actions = [
         "Create CA certificate",
         "Load CA certificate",
-        "Create keys and certificates for all RPUs",
+        "Create TLS keys and certificates for all RPUs",
         "Go Back",
     ];
     let mut certificate_selection = Select::with_theme(theme);

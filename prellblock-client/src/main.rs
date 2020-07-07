@@ -134,12 +134,12 @@ async fn main_benchmark(cmd: cmd::Benchmark) {
 async fn main_update_account(cmd: cmd::UpdateAccount) {
     let cmd::UpdateAccount {
         turi_address,
-        id,
+        peer_id,
         permission_file,
     } = cmd;
 
     // TestCLI: 256cdb0197402705f96d39eab7dd3d47a39cb75673a58852d83f666973d80e01
-    let id = id.parse().expect("Invalid account id given");
+    let peer_id = peer_id.parse().expect("Invalid account id given");
 
     // Read `Permissions` from the given file.
     let permission_file_content =
@@ -148,7 +148,7 @@ async fn main_update_account(cmd: cmd::UpdateAccount) {
         serde_yaml::from_str(&permission_file_content).expect("Invalid permission file content");
 
     match reader_client(turi_address)
-        .update_account(id, permissions)
+        .update_account(peer_id, permissions)
         .await
     {
         Err(err) => log::error!("Failed to send transaction: {}", err),
@@ -159,12 +159,12 @@ async fn main_update_account(cmd: cmd::UpdateAccount) {
 async fn main_create_account(cmd: cmd::CreateAccount) {
     let cmd::CreateAccount {
         turi_address,
-        id,
+        peer_id,
         name,
         permission_file,
     } = cmd;
 
-    let id = id.parse().expect("Invalid account id given.");
+    let peer_id = peer_id.parse().expect("Invalid account id given.");
     // Read `Permissions` from the given file.
     let permission_file_content =
         fs::read_to_string(permission_file).expect("Could not read permission file.");
@@ -172,7 +172,7 @@ async fn main_create_account(cmd: cmd::CreateAccount) {
         serde_yaml::from_str(&permission_file_content).expect("Invalid permission file content.");
 
     match reader_client(turi_address)
-        .create_account(id, name, permissions)
+        .create_account(peer_id, name, permissions)
         .await
     {
         Err(err) => log::error!("Failed to send transaction: {}", err),
@@ -181,9 +181,12 @@ async fn main_create_account(cmd: cmd::CreateAccount) {
 }
 
 async fn main_delete_account(cmd: cmd::DeleteAccount) {
-    let cmd::DeleteAccount { turi_address, id } = cmd;
-    let id = id.parse().expect("Invalid account id given.");
-    match reader_client(turi_address).delete_account(id).await {
+    let cmd::DeleteAccount {
+        turi_address,
+        peer_id,
+    } = cmd;
+    let peer_id = peer_id.parse().expect("Invalid account id given.");
+    match reader_client(turi_address).delete_account(peer_id).await {
         Err(err) => log::error!("Failed to send transaction: {}", err),
         Ok(()) => log::debug!("Transaction ok!"),
     }

@@ -79,11 +79,11 @@ pub struct Permissions {
 #[allow(clippy::module_name_repetitions)]
 #[serde(rename_all = "snake_case")]
 pub enum AccountType {
-    /// A normal accoount with no special privileges.
+    /// A normal account with no special privileges.
     Normal,
     /// An acccount that can read whole blocks and therefore read all values.
     BlockReader,
-    /// A RPU that can participate in the consesus.
+    /// An RPU that can participate in the consesus.
     #[serde(rename = "rpu")]
     RPU {
         /// The address on which the `Turi` listens for incoming client requests.

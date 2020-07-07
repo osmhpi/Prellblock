@@ -1,41 +1,41 @@
-# PrellBlock
+# Prellblock
 
 Bahndaten verlässlich und schnell in die Blockchain gepuffert - **Persistente Redundante Einheit für Langzeit-Logging über Blockchain**
+
+<img src="./images/logo.png" height="196">
 
 [[_TOC_]]
 
 ## Overview
 
-`PrellBlock` is a lightweight logging blockchain, written in `Rust`, which is designed for datastorage purposes in a railway environment.
+`PrellBlock` is a lightweight (private) logging blockchain, written in `Rust`, which is designed for datastorage purposes in a railway environment.
 By using an execute-order-validate procedure it is assured, that data will be saved, even in case of a total failure of all but one redundant processing unit.
-While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
+While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG represented by DB Systel GmbH**.
 
-## Running prellblock
+### Network and Architecture
 
-### Usage Of TLS
+The functionality of the blockchain is split into two basic components: **RPUs** (Redundant Processing Units) and **Clients**.
+A *RPU* is a peer in the blockchain and may participate in the consensus process.
+A *Client* can send transactions to RPUs.
+All components are connected via Ethernet.
 
-The blockchain by default uses TLS for the connections.
-You therefore need certificates for running a prellblock **RPU**.
+A network for using Prellblock could look like this (in a railway environment):
+![Example network](./images/example-network.png)
 
-This can be achieved by creating a custom CA. A [script](./certificates/generate_certificate.sh) automatically creates a CA certificate.
-For **every RPU** you need to run:
+## Setting Up Prellblock
 
-```sh
-certificates/generate_certificate.sh <desired_output_name> <rpu_dns_name> <rpu_ip>
-```
+Prellblock provides a setup wizard to generate the genesis transactions.
+This is the starting point for the blockchain and has to include at least 4 different peers (called *RPUs*).
 
-Running the script creates a CA-key and -certificate in `./certificates/ca` and some files in `./certificates/<desired_output_name>`.
+**A detailed guide to using the wizard** can be found in the [`genesis-wizard` subdirectory](./genesis-wizard).
 
-The most important file is `./certificates/<desired_output_name>/<desired_output_name>.pfx`. It is used by prellblock to load the TLS certificate.
-Since it is protected by a password, *prellblock* needs to know the password for reading the file.
+After stepping through the wizard, all necessary configuration files should have been created.
+An example configuration is provided in the [`config` subdirectory](./config).<br />
+*Caution:* The configuration will not work out of the box, because you are missing the private keys and certificates for the RPUs and the Certificate Authority (see [TLS](...))!
 
-**Warning: Do not use the default password in production!**
+<!-- ### RPU Identitiy
 
-You can pass another password to *prellblock* via the `TLS_PASSWORD` environment variable.
-
-### RPU Identitiy
-
-Each RPU has to have a identity. They can be generated with the following command:
+Each RPU has to have an identity. They can be generated with the following command:
 
 ```sh
 cargo run --bin gen-key <rpu_name>
@@ -44,104 +44,83 @@ cargo run --bin gen-key <rpu_name>
 The files are placed (and searched in prellblock) in `config/<rpu_name>/`:
 
 - `<rpu_name>.key` is the **private key** of the identity.
-- `<rpu_name>.pub` is the **public key** of the identity.
+- `<rpu_name>.pub` is the **public key** of the identity. -->
 
-### Configuration
+### Configuration files
 
-Please have a look at the sections [Usage Of TLS](#Usage-Of-TLS) and [RPU Identity](#rpu-identity) beforehand.
-Configuration of the blockchain peers is done via `.toml` files.
-The main configuration file is searched at `config/config.toml`.
-Each peer has a name and adresses. The corresponding public keys (`peer_id`s) must be *accessible for all peers*.
-An example for this **public configuration** could look like this
-(all paths are relative from the current working directory):
+Each RPU needs a *private configuration* (which is also created by the genesis wizard).
+In that file, you have to specify paths to various files like the TLS private key.
+
+An example looks like this (`emily.toml`):
 
 ```toml
-[[rpu]]
-name = "emily"
-peer_id = "./config/emily/emily.pub"
-peer_address = "127.0.0.1:2480"
-turi_address = "127.0.0.1:3130"
-
-[[rpu]]
-name = "james"
-peer_id = "./config/james/james.pub"
-peer_address = "127.0.0.1:2481"
-turi_address = "127.0.0.1:3131"
-
-[[rpu]]
-name = "percy"
-peer_id = "./config/percy/percy.pub"
-peer_address = "127.0.0.1:2482"
-turi_address = "127.0.0.1:3132"
-
-[[rpu]]
-name = "thomas"
-peer_id = "./config/thomas/thomas.pub"
-peer_address = "127.0.0.1:2483"
-turi_address = "127.0.0.1:3133"
+identity = "config/emily/emily.key" # path to the RPU's account's private key 
+tls_id = "config/emily/emily.pfx" # path to the TLS private key
+block_path = "blocks/emily" # path for the blocks
+data_path = "data/emily" # path for storing transactions temporarily
 ```
 
-Each peer also needs a **private configuration**:
+## Running Prellblock
 
-```toml
-identity = "./config/emily/emily.key"
-tls_id = "./certificates/emily/emily.pfx"
-```
+### Building Prellblock
 
-The `identity` here is the private key as generated in [RPU Identitiy](#RPU-Identitiy).
-The `tls_id` is the `pfx`-file containing the private key and certificate signed by the CA.
-
-### Using `prellblock-client`
-
-The `prellblock-client` binary provides a CLI with predefined Commands for each of the transaction types. Otherwise, you can use the provided library as dependency to build your own clients.
-
-Currently implemented actions are:
-
-- setting a key to a specific Value (using `set <key> <value>` subcommand)
-- updating account permissions  (using `update <AccountId> <PermissionFilePath>` subcommand)
-- benchmarking (using `bench <rpu_name> <key> <number of transactions>` subcommand)
-
-#### Key-Value Transactions
-
-The keys for this type of transaction needs to be of type `string`, whereas values may be of any type. 
-
-#### Updating Account permissions:
-
-For updating the permissions of a account, the sender account **must be an administrator**
-The specified AccountID needs to be a hex-value `PeerId`.
+All binaries and libraries can be built by installing [Rust and Cargo via Rustup](https://rustup.rs) and running the following commands:
 
 ```sh
-prellblock-client <target account id as hex> <path to permission file>
+rustup toolchain install nightly
+rustup override set nightly
+cargo build --release
 ```
 
-The permission file is a `yaml`-file containing all necessary permission inforamtions to be applied onto the target account.
-Reading rights can be specified as white- or blacklist. They refer to one or more accounts. Futhermore you can define white- or blacklists for specific keys that either can or must not be read.
-For its structure, see the example below (all fields can be ommitted resulting in that field being left unchanged):
+Because of some dependencies, Prellblock needs to be compiled with the *nightly* toolchain.<br />
+*Info:* Running Prellblock in Debug-Mode (without the `--release` flag) will degrade the performance of the RPU.
 
-```yaml
-is_admin: true
-is_rpu: false
-expire_at:
-  at_date: 2020-04-15T10:04:59.300878700Z # any date according to RFC3339
-# expire_at: never # this can be used for accounts to never expire
-has_writing_rights: true
-reading_rights:
-  - accounts:
-      whitelist:
-        - scope: Emily
-    namespace:
-      blacklist:
-        - scope: speed
-  - accounts:
-      whitelist:
-        - scope: Thomas
-    namespace:
-      blacklist:
-        - scope: temperature
+#### Cross-Compiling for ARM based machines
+
+For running *prellblock* on a RaspberryPi or similar ARM-based machines, you need to cross compile the blockchain.
+Building fully static binaries can be done via [`cross`](https://github.com/rust-embedded/cross) (this needs Docker to be running):
+
+```sh
+rustup toolchain install nightly
+rustup override set nightly
+cargo install cross
+cross build --target armv7-unknown-linux-musleabihf --release
+```
+
+### Starting the Blockchain
+
+Running a RPU can be done via the following command:
+
+```sh
+cargo run --release --bin prellblock -- config/<rpu-name>/<rpu-name>.toml config/genesis/genesis.yaml
+```
+
+The genesis file is only needed for the first run, after that you can provide a path to a configuration file only.
+For the structure of a configuration file see [...](...).
+You need to start **at least four different RPUs** in order to allow the consensus algorithm to work properly.
+
+### Usage Of TLS
+
+The blockchain by default uses TLS for the connections.
+You therefore need certificates for running a prellblock **RPU**.
+
+These certificates are stored in the `*.pfx` file format.
+They is used by Prellblock to load the TLS certificate.
+Since they is protected by a password, *prellblock* needs to know the password for reading the file.<br />
+RPU TLS certificates and keys (`config/<rpu_name>/<rpu_name>.pfx`) created by [Fill Collins](./genesis-wizard) will have the default password `prellblock`.
+**Warning: Do not use the default password in production!**<br />
+You can pass another password to *prellblock* via the `TLS_PASSWORD` environment variable. 
+
+Furthermore, each Client and RPU need to know the TLS certificate of the Certificate Authority. By default, Clients and RPUs search in `$PWD/config/ca/ca-certificate.pem`.
+To override this value, set the `CA_CERT_PATH` environment variable:
+
+```
+export CA_CERT_PATH="/path/to/ca-certificate.pem"
 ```
 
 ### Logging
 
+Prellblock includes a lot of useful log output, by default only *warnings and errors* are displayed in the console.
 To help setting the correct log-levels, you can use the [`run.sh`](./run.sh) script.
 You **need to create** a `run.local.sh` script to configure logging.
 Available levels are:
@@ -159,15 +138,107 @@ An example would be:
 level info
 
 trace prellblock
-off prellblock::
+warn prellblock::consensus
+error balise
 ```
 
 This will set the default log level to `info`, show all `trace` logs of `prellblock`
-and disable all logs in submodules of `prellblock` (sets `RUST_LOG=info,prellblock=trace,prellblock::=off`).
+and disable all logs in submodules of `prellblock` (sets `RUST_LOG=info,prellblock=trace,prellblock::consensus=off,balise=error`).
 To use this configuration execute `./run.sh <binary> <options>` instead of `cargo run -- bin <binary> -- <options>`.
 If you whish to run `cargo watch` you can also run the script with `./run.sh w(atch) <binary> <options>`.
 
-### Profiling
+## Using `prellblock-client`
+
+The `prellblock-client` binary provides a CLI with predefined Commands for each of the transaction types. Otherwise, you can use the provided library as dependency to build your own clients.
+
+Currently implemented actions are:
+
+- benchmarking (using `bench <turi-address> <key> <number of transactions>` subcommand)
+- [creating new accounts](#creating-new-accounts) (using `create_account <turi-address> <peer-id> <name> <permission-file>` subcommand)
+- checking the current block number (using `current_block_number <turi-address>` subcommand)
+- [deleting accounts](#deleting-accounts) (using `delete_account <turi-address> <peer-id>` subcommand)
+- [reading account details](#reading-from-the-blockchain) (using `get_account <turi-address> <peer-ids>...`)
+- [reading blocks](#reading-from-the-blockhain) (using `get_block <turi-address> <filter>` subcommand)
+- [reading values from the blockchain](#reading-from-the-blockchain) (using `get_value <turi-address> <peer-id> <filter> <span> <end> <skip>` subcommand)
+- [setting a key to a specific value](#key-value-transactions) (using `set <turi-address> <key> <value>` subcommand)
+- [updating account permissions](#updating-accounts) (using `update <turi-address> <peer-id> <permission-file>` subcommand)
+
+#### Key-Value Transactions
+
+The keys for this type of transaction needs to be of type `string`, whereas values may be of any type.
+
+#### Reading from the blockchain
+
+There are several ways to read values from the blockchain. You can read the current `block number`, information about `accounts`, whole `blocks` or certain `values`.
+1. The subcommand `current_block_number` will give you the block number of the newly comming block (or the current length of the blockchain).
+2. The subcommand `get_account <turi-address> <peer-ids>` will print information about the specified accounts. You may request information about multiple accounts by including multiple peer ids.
+3. The subcommand `get_block <turi-address> <filter>` will display a block's information. Again, you may request information about more blocks. A range of blocks can be specified by giving a range of block number. For valid filters see [Filters](#filters).
+4. The subcommand `get_value <turi-address> <peer-id> <filter> <span> <end> <skip>` will get (multiple) logged values of a given account (`peer-id`). Keys to read are selected using `filter`. The `span` specifies how many values (or which timespan) should be read, while `end` specifies the last value to read (a date or x values from last). `skip` can skip x values or a specific timespan between each read value.
+
+##### Filters
+
+Filters can be used in the following ways:
+
+- **".."**: all values
+- **"1..100"**: all values from 1 (inclusive) to 100 (exclusive)
+- **"42.."**: all values from 42 (inclusive)
+- **"..42"**: all values until 42 (exclusive)
+
+This also works with strings using lexicographical order.
+
+#### Account Transactions:
+
+For modifying accounts, the sender account **must be of type Admin**.
+
+##### Updating accounts
+
+The specified `peer-id` needs to be a hex-value ed25519 public key.
+
+```sh
+cargo run --bin prellblock-client -- <turi-address> <target account id as hex> <path to permission file>
+```
+
+The permission file is a `yaml`-file containing all necessary permission informations to be applied onto the target account.
+Reading rights can be specified as white- or blacklist. They refer to one or more accounts. Futhermore you can define white- or blacklists for specific keys that either can or must not be read.
+For its structure, see the example below (all fields can be ommitted resulting in that field being left unchanged):
+
+```yaml
+expire_at: #never
+  at_date: 2020-07-01T10:04:59.300878700Z
+has_writing_rights: true
+reading_rights:
+  - whitelist:
+      accounts:
+        - 256cdb0197402705f96d39eab7dd3d47a39cb75673a58852d83f666973d80e01
+      namespace:
+        - scope: test
+```
+
+**NOTE:** If you change an account's account-type to `RPU`, it will immediately be part of the validating set of nodes and will partake in the consenus until it gets removed.
+
+##### Creating new accounts
+
+Using the `create` subcommand as an Admin-account, you can create new accounts during the runtime of Prellblock.
+
+```sh
+cargo run --bin prellblock-client -- create <turi-address> <id of the new account> <name of the new account> <permission-file>
+```
+
+For this, you need a ed25519 key-pair, the public key of which serves as the `PeerId` for the new account. Said `PeerId` will be used as the first parameter (after the turi-ipv4-address that is). Next you will need to specifiy a name for new account. Lastly, you need to specify a path to a permissionfile, similar to the one explained under [Updating accounts](#updating-accounts).
+
+**NOTE:** If you create an account with the account-type `RPU`, it will immediately be part of the validating set of nodes and will partake in the consenus until it gets removed.
+
+##### Deleting accounts
+
+As an Admin-account, it is possible to delete accounts from the system using the `delete`-subcommand.
+
+```sh
+cargo run --bin prellblock-client -- delete <turi-address> <id of the account to delete>
+```
+
+The id of the account to delete needs to be a `PeerId` of an existing account in the system. Upon successful completion of this commnad, the account with the given `PeerId` will no longer be available for sedning transactions or requests, but the data it has written before can still be queried through other accounts.
+
+<!-- ### Profiling
 
 For testing speed and efficiency of the *prellblock*, there is a tool called [flamegraph-rs/flamegraph](https://github.com/flamegraph-rs/flamegraph).
 You can install it via `cargo install flamegraph`. On Linux (Debian) you need to install `linux-perf`, too.
@@ -184,14 +255,4 @@ On **macOS** run:
 ./run.sh f prellblock <options>
 ```
 
-After stopping the program, a graph (`flamegraph.svg`) will be created.
-
-## Cross-Compiling for ARM based machines
-
-For running *prellblock* on a RaspberryPi or similar ARM-based machines, you need to cross compile the blockchain.
-Building fully static binaries can be done via [`cross`](https://github.com/rust-embedded/cross) (this needs Docker to be running):
-
-```sh
-cargo install cross
-cross build --target armv7-unknown-linux-musleabihf --release
-```
+After stopping the program, a graph (`flamegraph.svg`) will be created. -->
