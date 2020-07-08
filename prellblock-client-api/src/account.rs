@@ -83,7 +83,7 @@ pub enum AccountType {
     Normal,
     /// An acccount that can read whole blocks and therefore read all values.
     BlockReader,
-    /// An RPU that can participate in the consesus.
+    /// An RPU that can participate in the consensus.
     #[serde(rename = "rpu")]
     RPU {
         /// The address on which the `Turi` listens for incoming client requests.

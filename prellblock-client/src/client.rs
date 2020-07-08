@@ -36,7 +36,7 @@ pub struct Client {
 }
 
 impl Client {
-    /// Create a new client for sending transactions to a RPU.
+    /// Create a new client for sending transactions to an RPU.
     ///
     /// The `turi_address` is the Turi's port to connect to.
     #[must_use]

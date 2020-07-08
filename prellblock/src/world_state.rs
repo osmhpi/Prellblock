@@ -207,7 +207,7 @@ impl WorldState {
                             if let Some(AccountType::RPU { peer_address, .. }) =
                                 params.permissions.account_type
                             {
-                                // Add account because now it's a RPU.
+                                // Add account because now it's an RPU.
                                 if self.peers.iter().any(|(id, _)| *id == params.id) {
                                     unreachable!(
                                         "RPU {} ({}) already exists.",

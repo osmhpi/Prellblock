@@ -155,7 +155,7 @@ pub mod cmd {
         pub filter: ParseFilter<BlockNumber>,
     }
 
-    /// Get the current block number of a RPU.
+    /// Get the current block number of an RPU.
     #[derive(StructOpt, Debug)]
     pub struct GetCurrentBlockNumber {
         /// The address of the receiving RPU's address.

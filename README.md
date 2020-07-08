@@ -8,14 +8,14 @@ Bahndaten verlässlich und schnell in die Blockchain gepuffert - **Persistente R
 
 ## Overview
 
-`PrellBlock` is a lightweight (private) logging blockchain, written in `Rust`, which is designed for datastorage purposes in a railway environment.
-By using an execute-order-validate procedure it is assured, that data will be saved, even in case of a total failure of all but one redundant processing unit.
+`Prellblock` is a lightweight (private) logging blockchain, written in `Rust`, which is designed for datastorage purposes in a railway environment.
+By using an replicate-order-validate-execute procedure it is assured, that data will be saved, even in case of a total failure of all but one redundant processing unit.
 While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG represented by DB Systel GmbH**.
 
 ### Network and Architecture
 
 The functionality of the blockchain is split into two basic components: **RPUs** (Redundant Processing Units) and **Clients**.
-A *RPU* is a peer in the blockchain and may participate in the consensus process.
+An *RPU* is a peer in the blockchain and may participate in the consensus process. This is similar to the term *Peer* used in most other blockchains.
 A *Client* can send transactions to RPUs.
 All components are connected via Ethernet.
 
@@ -25,7 +25,7 @@ A network for using Prellblock could look like this (in a railway environment):
 ## Setting Up Prellblock
 
 Prellblock provides a setup wizard to generate the genesis transactions.
-This is the starting point for the blockchain and has to include at least 4 different peers (called *RPUs*).
+This is the starting point for the blockchain and has to include at least 4 different RPUs.
 
 **A detailed guide to using the wizard** can be found in the [`genesis-wizard` subdirectory](./genesis-wizard).
 
@@ -77,7 +77,7 @@ Because of some dependencies, Prellblock needs to be compiled with the *nightly*
 
 #### Cross-Compiling for ARM based machines
 
-For running *prellblock* on a RaspberryPi or similar ARM-based machines, you need to cross compile the blockchain.
+For running Prellblock on a RaspberryPi or similar ARM-based machines, you need to cross compile the blockchain.
 Building fully static binaries can be done via [`cross`](https://github.com/rust-embedded/cross) (this needs Docker to be running):
 
 ```sh
@@ -89,7 +89,7 @@ cross build --target armv7-unknown-linux-musleabihf --release
 
 ### Starting the Blockchain
 
-Running a RPU can be done via the following command:
+Running an RPU can be done via the following command:
 
 ```sh
 cargo run --release --bin prellblock -- config/<rpu-name>/<rpu-name>.toml config/genesis/genesis.yaml
@@ -105,16 +105,16 @@ The blockchain by default uses TLS for the connections.
 You therefore need certificates for running a prellblock **RPU**.
 
 These certificates are stored in the `*.pfx` file format.
-They is used by Prellblock to load the TLS certificate.
-Since they is protected by a password, *prellblock* needs to know the password for reading the file.<br />
+They are used by Prellblock to load the TLS certificate.
+Since they are protected by a password, Prellblock needs to know the password for reading the file.<br />
 RPU TLS certificates and keys (`config/<rpu_name>/<rpu_name>.pfx`) created by [Fill Collins](./genesis-wizard) will have the default password `prellblock`.
 **Warning: Do not use the default password in production!**<br />
-You can pass another password to *prellblock* via the `TLS_PASSWORD` environment variable. 
+You can pass another password to Prellblock via the `TLS_PASSWORD` environment variable. 
 
 Furthermore, each Client and RPU need to know the TLS certificate of the Certificate Authority. By default, Clients and RPUs search in `$PWD/config/ca/ca-certificate.pem`.
 To override this value, set the `CA_CERT_PATH` environment variable:
 
-```
+```sh
 export CA_CERT_PATH="/path/to/ca-certificate.pem"
 ```
 
@@ -132,24 +132,26 @@ Available levels are:
 - `error`
 - `off`
 
-An example would be:
+An example `run.local.sh` file would be:
 
 ```sh
 level info
 
-trace prellblock
-warn prellblock::consensus
+debug prellblock::
+trace prellblock::consensus
 error balise
 ```
 
-This will set the default log level to `info`, show all `trace` logs of `prellblock`
-and disable all logs in submodules of `prellblock` (sets `RUST_LOG=info,prellblock=trace,prellblock::consensus=off,balise=error`).
+This will set the default log level to `info`, show only `error` logs of `balise`, enable `debug` loglevel in submodules of `prellblock` and show all logs (`trace`) of the `consensus` submodule (sets `RUST_LOG=info,prellblock::=debug,prellblock::consensus=trace,balise=error`).
 To use this configuration execute `./run.sh <binary> <options>` instead of `cargo run -- bin <binary> -- <options>`.
 If you whish to run `cargo watch` you can also run the script with `./run.sh w(atch) <binary> <options>`.
 
 ## Using `prellblock-client`
 
-The `prellblock-client` binary provides a CLI with predefined Commands for each of the transaction types. Otherwise, you can use the provided library as dependency to build your own clients.
+The `prellblock-client` binary provides a CLI with predefined commands for each of the transaction types. Otherwise, you can use the provided library as dependency to build your own clients.
+
+**Info:** As of now, there is no possibility for a Client to track a transaction through the system.
+Clients won't be notified of the result whether the transaction is finally included in the blockchain ("fire and forget").
 
 Currently implemented actions are:
 
@@ -170,7 +172,7 @@ The keys for this type of transaction needs to be of type `string`, whereas valu
 #### Reading from the blockchain
 
 There are several ways to read values from the blockchain. You can read the current `block number`, information about `accounts`, whole `blocks` or certain `values`.
-1. The subcommand `current_block_number` will give you the block number of the newly comming block (or the current length of the blockchain).
+1. The subcommand `current_block_number` will give you the block number of the next block to be craeted (which is the current length of the blockchain).
 2. The subcommand `get_account <turi-address> <peer-ids>` will print information about the specified accounts. You may request information about multiple accounts by including multiple peer ids.
 3. The subcommand `get_block <turi-address> <filter>` will display a block's information. Again, you may request information about more blocks. A range of blocks can be specified by giving a range of block number. For valid filters see [Filters](#filters).
 4. The subcommand `get_value <turi-address> <peer-id> <filter> <span> <end> <skip>` will get (multiple) logged values of a given account (`peer-id`). Keys to read are selected using `filter`. The `span` specifies how many values (or which timespan) should be read, while `end` specifies the last value to read (a date or x values from last). `skip` can skip x values or a specific timespan between each read value.
@@ -199,7 +201,7 @@ cargo run --bin prellblock-client -- <turi-address> <target account id as hex> <
 ```
 
 The permission file is a `yaml`-file containing all necessary permission informations to be applied onto the target account.
-Reading rights can be specified as white- or blacklist. They refer to one or more accounts. Futhermore you can define white- or blacklists for specific keys that either can or must not be read.
+Reading rights can be specified as white- or blacklist. They refer to one or more accounts. Furthermore you can define white- or blacklists for specific keys that either can be read or must not be read.
 For its structure, see the example below (all fields can be ommitted resulting in that field being left unchanged):
 
 ```yaml
@@ -224,23 +226,23 @@ Using the `create` subcommand as an Admin-account, you can create new accounts d
 cargo run --bin prellblock-client -- create <turi-address> <id of the new account> <name of the new account> <permission-file>
 ```
 
-For this, you need a ed25519 key-pair, the public key of which serves as the `PeerId` for the new account. Said `PeerId` will be used as the first parameter (after the turi-ipv4-address that is). Next you will need to specifiy a name for new account. Lastly, you need to specify a path to a permissionfile, similar to the one explained under [Updating accounts](#updating-accounts).
+For this, you need a ed25519 key-pair, the public key of which serves as the `PeerId` for the new account. Said `PeerId` will be used as the first parameter (after the turi-ipv4-address that is). Next you will need to specifiy a name for the new account. Lastly, you need to specify a path to a permission file, similar to the one explained under [Updating accounts](#updating-accounts).
 
 **NOTE:** If you create an account with the account-type `RPU`, it will immediately be part of the validating set of nodes and will partake in the consenus until it gets removed.
 
 ##### Deleting accounts
 
-As an Admin-account, it is possible to delete accounts from the system using the `delete`-subcommand.
+As an admin account, it is possible to delete accounts from the system using the `delete`-subcommand.
 
 ```sh
 cargo run --bin prellblock-client -- delete <turi-address> <id of the account to delete>
 ```
 
-The id of the account to delete needs to be a `PeerId` of an existing account in the system. Upon successful completion of this commnad, the account with the given `PeerId` will no longer be available for sedning transactions or requests, but the data it has written before can still be queried through other accounts.
+The id of the account to delete needs to be a `PeerId` of an existing account in the system. Upon successful completion of this command, the account with the given `PeerId` will no longer be available for sending transactions or requests, but the data it has written before can still be queried through other accounts.
 
 <!-- ### Profiling
 
-For testing speed and efficiency of the *prellblock*, there is a tool called [flamegraph-rs/flamegraph](https://github.com/flamegraph-rs/flamegraph).
+For testing speed and efficiency of the Prellblock, there is a tool called [flamegraph-rs/flamegraph](https://github.com/flamegraph-rs/flamegraph).
 You can install it via `cargo install flamegraph`. On Linux (Debian) you need to install `linux-perf`, too.
 To generate an interactive graph on **Linux**, run:
 

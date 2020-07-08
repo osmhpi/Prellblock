@@ -5,9 +5,9 @@
 //!
 //! ## Overview
 //!
-//! `PrellBlock` is a lightweight logging blockchain, written in `Rust`, which is designed for datastorage purposes in a railway environment.
-//! By using an execute-order-validate-execute procedure it is assured, that data will be saved, even in case of a total failure of all but one redundant processing unit.
-//! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG**.
+//! `Prellblock` is a lightweight (private) logging blockchain, written in `Rust`, which is designed for datastorage purposes in a railway environment.
+//! By using an replicate-order-validate-execute procedure it is assured, that data will be saved, even in case of a total failure of all but one redundant processing unit.
+//! While working in full capactiy, data is stored and validated under byzantine fault tolerance. This project is carried out in cooperation with **Deutsche Bahn AG represented by DB Systel GmbH**.
 
 use serde::{Deserialize, Serialize};
 
@@ -25,7 +25,7 @@ pub mod world_state;
 // TODO: remove this sh** lmao yeet
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-/// The Configuration for a RPU.
+/// The Configuration for an RPU.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpuPrivateConfig {
     /// The `PeerId` of the RPU.

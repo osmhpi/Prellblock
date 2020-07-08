@@ -51,9 +51,9 @@ There are several options to specify an account which you should set.
 2. Next an `Account-Type` is expected. In Prellblock there are four types of accounts:
    - **Normal**: a normal account with no special privileges
    - **BlockReader**: an account that can read whole blocks and therefore read all values
-   - **Admin**: a RPU that can participate in the consesus
+   - **Admin**: an RPU that can participate in the consensus
    - **RPU**: an admin that can manage and edit all other accounts
-3. There need to be at least four accounts of type `RPU` to form a working Prellblock blockchain. A RPU needs to be setup with a `Turi IPv4 address` and a `Peer IPv4 address`. The first of which is used to connect from a `Client` to an RPU, the second for internal communication between RPUs. 
+3. There need to be at least four accounts of type `RPU` to form a working Prellblock blockchain. An RPU needs to be setup with a `Turi IPv4 address` and a `Peer IPv4 address`.The first of which is used to connect from a Client to an RPU, the second for internal communication between RPUs.
 4. For security reasons an account may have an expiry date. If you choose to set an expiry date you may do so in [rfc3999](https://tools.ietf.org/html/rfc3339) format.
 5. An account may have a right to `write` into his own `keyspace`. Therefore `writing rights` is either `true` or `false` (default is `false`).
 6. `Reading rights` can be extensively defined. You can choose to define a `Blacklist` or `Whitelist` to deny or allow certain accesses respectively. They consist of a list of `accounts` and corresponding `namespaces` (provides as strings). 
