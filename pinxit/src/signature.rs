@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{convert::TryFrom, fmt};
 
 const SIGNATURE_LEN: usize = ed25519_dalek::SIGNATURE_LENGTH;
 
@@ -13,7 +13,7 @@ impl fmt::Debug for Signature {
 }
 
 hexutil::impl_hex!(Signature, SIGNATURE_LEN, |self| self.0.to_bytes(), |data| {
-    ed25519_dalek::Signature::from_bytes(&data)
+    ed25519_dalek::Signature::try_from(&data[..])
         .map(Self)
         .map_err(|_| hexutil::FromHexError::InvalidValue)
 });

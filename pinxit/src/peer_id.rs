@@ -1,5 +1,5 @@
 use crate::{Error, Signable, Signature};
-use ed25519_dalek::PublicKey;
+use ed25519_dalek::{PublicKey, Verifier};
 use lazy_static::lazy_static;
 use std::{
     collections::HashMap,
