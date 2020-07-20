@@ -234,7 +234,7 @@ fn handle_set_rpu_addresses<'a>(theme: &'a dyn Theme, account: &mut Account) {
         .unwrap();
     let monitoring_address = Input::<String>::with_theme(theme)
         .with_prompt("Please enter the RPU's monitoring (Prometheus) IPv4-Address:")
-        .default("127.0.0.1:2480".to_string())
+        .default("127.0.0.1:9091".to_string())
         .interact()
         .unwrap()
         .parse()

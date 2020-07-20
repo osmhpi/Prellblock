@@ -2,20 +2,18 @@ version: "3.3"
 
 services:
     alice:
-        command: alice
+        command: config/alice/alice.toml config/genesis/genesis.yaml
         build: .
         volumes:
-            - "./certificates:/prellblock/certificates"
             - "./config:/prellblock/config"
             - "./blocks:/prellblock/blocks"
         networks:
             prellblock_net:
                 ipv4_address: 172.28.0.10
     bob:
-        command: bob
+        command: config/bob/bob.toml config/genesis/genesis.yaml
         build: .
         volumes:
-            - "./certificates:/prellblock/certificates"
             - "./config:/prellblock/config"
             - "./blocks:/prellblock/blocks"
         environment:
@@ -24,30 +22,27 @@ services:
             prellblock_net:
                 ipv4_address: 172.28.0.11
     carol:
-        command: carol
+        command: config/carol/carol.toml config/genesis/genesis.yaml
         build: .
         volumes:
-            - "./certificates:/prellblock/certificates"
             - "./config:/prellblock/config"
             - "./blocks:/prellblock/blocks"
         networks:
             prellblock_net:
                 ipv4_address: 172.28.0.12
     dave:
-        command: dave
+        command: config/dave/dave.toml config/genesis/genesis.yaml
         build: .
         volumes:
-            - "./certificates:/prellblock/certificates"
             - "./config:/prellblock/config"
             - "./blocks:/prellblock/blocks"
         networks:
             prellblock_net:
                 ipv4_address: 172.28.0.13
     frank:
-        command: frank
+        command: config/frank/frank.toml config/genesis/genesis.yaml
         build: .
         volumes:
-            - "./certificates:/prellblock/certificates"
             - "./config:/prellblock/config"
             - "./blocks:/prellblock/blocks"
         networks:
@@ -55,10 +50,9 @@ services:
                 ipv4_address: 172.28.0.14
 
     heidi:
-        command: heidi
+        command: config/heidi/heidi.toml config/genesis/genesis.yaml
         build: .
         volumes:
-            - "./certificates:/prellblock/certificates"
             - "./config:/prellblock/config"
             - "./blocks:/prellblock/blocks"
         networks:
@@ -66,10 +60,9 @@ services:
                 ipv4_address: 172.28.0.15
 
     ivan:
-        command: ivan
+        command: config/ivan/ivan.toml config/genesis/genesis.yaml
         build: .
         volumes:
-            - "./certificates:/prellblock/certificates"
             - "./config:/prellblock/config"
             - "./blocks:/prellblock/blocks"
         environment: 

@@ -26,22 +26,22 @@ scrape_configs:
     static_configs:
       -
         targets:
-          - "host.docker.internal:9091"
+          - "host.docker.internal:9001"
         labels:
           "instance": "emily"
       - 
         targets:
-          - "host.docker.internal:9092"
+          - "host.docker.internal:9002"
         labels:
           "instance": "james"
       -
         targets:
-          - "host.docker.internal:9093"
+          - "host.docker.internal:9003"
         labels:
           "instance": "percy"
       - 
         targets:
-          - "host.docker.internal:9094"
+          - "host.docker.internal:9004"
         labels:
           "instance": "thomas"
 

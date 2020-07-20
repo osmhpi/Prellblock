@@ -3,75 +3,79 @@ transactions:
   - signer: 2109d5d5c62c449a8a713eb0a0ad30bdde875a28116c551c29710e0095a8bcbd
     body:
       CreateAccount:
-        id: 31ec267d018ca96007e8189b08c3e7c7b4377fbbf676c17690f9d036e4467132
+        id: cf7b8353d7d3d8b2bcff0d77cca83249209c894d8834ba98717eb1557827aa71
         name: emily
         permissions:
           type:
             rpu:
               turi_address: "127.0.0.1:3130"
               peer_address: "127.0.0.1:2480"
+              monitoring_address: "127.0.0.1:9001"
           expire_at: never
           has_writing_rights: false
           reading_rights: []
         timestamp:
-          secs_since_epoch: 1595236372
-          nanos_since_epoch: 659062000
-    signature: 7143bc049a6b9585dc3453c7e692fe297a496c824ae6835b7b263fd90e27b611671184e168554510d5b8b827a259bc827df2195291b8940773ce12a0a7baff01
+          secs_since_epoch: 1595242057
+          nanos_since_epoch: 841610000
+    signature: 9dc8bc68e2aeae779c39513c3b04114caba6a9813278e925ea2a43da55ea3967bad9f0bb64cf22b313aef97d039b146f70d8c430ec9bec06aa39a979d2d84803
   - signer: 2109d5d5c62c449a8a713eb0a0ad30bdde875a28116c551c29710e0095a8bcbd
     body:
       CreateAccount:
-        id: 55e9d5206bb31ccfb8e75564d01074ae08247c8ba32d6d1a088ecc52b6383df7
+        id: 20886d249c0b982ca5135196e90dbef60d27d139050d5c1026db70e9c3eb997b
         name: james
         permissions:
           type:
             rpu:
               turi_address: "127.0.0.1:3131"
-              peer_address: "127.0.0.1:2841"
+              peer_address: "127.0.0.1:2481"
+              monitoring_address: "127.0.0.1:9002"
           expire_at: never
           has_writing_rights: false
           reading_rights: []
         timestamp:
-          secs_since_epoch: 1595236372
-          nanos_since_epoch: 659376000
-    signature: 88168747321d994d04d533828c8af3064d7507b0611381929b3730633c2d110e68a520aac7924134263e1b1f730a2edf651d7d0335aa319fb1fc83b7596b8c0c
+          secs_since_epoch: 1595242057
+          nanos_since_epoch: 842563000
+    signature: b61e7e95a03ffe50effeee2480dc9cc7377e26ee04fd08ee7c9d35b0e308b96411cf1da7bc3766ec1723df4a1ddefea4f7007d6ba0193a76720cfdd7958aed08
   - signer: 2109d5d5c62c449a8a713eb0a0ad30bdde875a28116c551c29710e0095a8bcbd
     body:
       CreateAccount:
-        id: 1a133d1d597539c5f5d917f06ab2944cf8b12a4178fb97219c1031a6b38e8994
+        id: 5cb3958e73f380259e7519a3e8d7a195fd0d20e54a9fcdf8263b856b83221a36
         name: percy
         permissions:
           type:
             rpu:
               turi_address: "127.0.0.1:3132"
               peer_address: "127.0.0.1:2482"
+              monitoring_address: "127.0.0.1:9003"
           expire_at: never
           has_writing_rights: false
           reading_rights: []
         timestamp:
-          secs_since_epoch: 1595236372
-          nanos_since_epoch: 659689000
-    signature: 81d3608cad67d3056dfa58c17020ec234c8ba1bcb74888a0b01fa0987a107bbb25d46146c000d8171271ce02d4dc7dbe6a7fe61c349878a5c5db358113a0c507
+          secs_since_epoch: 1595242057
+          nanos_since_epoch: 842926000
+    signature: 2fd7af429e33401165fe775fca0ab76522ae37246e4091e48a475d9d531552e17f96f173514c9e266f5254db0d07019ae4a8252d36f7179707b95365ee5f210b
   - signer: 2109d5d5c62c449a8a713eb0a0ad30bdde875a28116c551c29710e0095a8bcbd
     body:
       CreateAccount:
-        id: 00b8df9f6fe1b7184ce3b08004b53c3cf7be4726072a740567bea379658f8739
+        id: 516f46d19d93577b6985f04d52c919ce24b53d599cd9b526fbcedd44c27145ca
         name: thomas
         permissions:
           type:
             rpu:
               turi_address: "127.0.0.1:3133"
               peer_address: "127.0.0.1:2483"
+              monitoring_address: "127.0.0.1:9004"
           expire_at: never
           has_writing_rights: false
           reading_rights: []
         timestamp:
-          secs_since_epoch: 1595236372
-          nanos_since_epoch: 659978000
-    signature: c5f0a29ba82a0cc746e3f7786b40d55d1c6925d4b47e0909c48c7b4d9cb8ceccb78b05aabc7cd0af39054049bcc263d4248d76c3675f2a93ffb5a2df17bf0f01
+          secs_since_epoch: 1595242057
+          nanos_since_epoch: 843217000
+    signature: 1a24d474e37864d25508f3f60c7c622952d58401fd2df99c366ca198627128f3ca4e3036060c1c9f2317b7fdb389834e4d2329aba38f23f391ecd49ce8856502
   - signer: 2109d5d5c62c449a8a713eb0a0ad30bdde875a28116c551c29710e0095a8bcbd
     body:
       CreateAccount:
-        id: 7cef0c1a95ed34f391c6ca489ca1e584c5744b5f21137d569eb4502c72a24d48
+        id: a330416b7fe01bf7d4967f9d650d9bccb5eb9ebf904db9c95625287f060c033c
         name: admin
         permissions:
           type: admin
@@ -80,17 +84,17 @@ transactions:
           reading_rights:
             - whitelist:
                 accounts:
-                  - 108cc7dbbe7b5e21788ad0013122148e2c82a42293ad21e9f855909ffdec0997
+                  - e450553d7391559d71e6c576016e1a8581ff24750de20a677b2f4dba7694d784
                 namespace:
                   - scope: temperature
         timestamp:
-          secs_since_epoch: 1595236372
-          nanos_since_epoch: 660154000
-    signature: 756dd375a73f41fd91324ab2edcf8d5ae506513602be00bdf18ce51eed04a4d3708ac9618017b47d518ce76a01168d3c53910cd1bc31e7a8fd0418c911689b07
+          secs_since_epoch: 1595242057
+          nanos_since_epoch: 843365000
+    signature: 994348e46231be628ba175059892f5461c69f257daff1a37110d089b6f8d710e0b347e0f0e3188ec458ecaaac6dfea9d151fcd1bcf61b736aaf8992eb355bc06
   - signer: 2109d5d5c62c449a8a713eb0a0ad30bdde875a28116c551c29710e0095a8bcbd
     body:
       CreateAccount:
-        id: 108cc7dbbe7b5e21788ad0013122148e2c82a42293ad21e9f855909ffdec0997
+        id: e450553d7391559d71e6c576016e1a8581ff24750de20a677b2f4dba7694d784
         name: temperature-1
         permissions:
           type: normal
@@ -98,9 +102,9 @@ transactions:
           has_writing_rights: true
           reading_rights: []
         timestamp:
-          secs_since_epoch: 1595236372
-          nanos_since_epoch: 660366000
-    signature: 5e45f95cf418b24efc02fb793145e8fb6e03d6a5a6affff8d823a7a65ddde76f2d938dba98f15c04657089fc027c170aaf273f859be00909e91f2f78db56d506
+          secs_since_epoch: 1595242057
+          nanos_since_epoch: 843528000
+    signature: 54397e155e2b3fd190715889c5c9a5f9dc9e372ec2140e5bdec5c1393b3585245b52d8eef0e71f5a629cc0a8afae52f8b83e8cbb53bb2b305eaaeb3fb0e75701
 timestamp:
-  secs_since_epoch: 1595236387
-  nanos_since_epoch: 149820000
+  secs_since_epoch: 1595242057
+  nanos_since_epoch: 843565000
