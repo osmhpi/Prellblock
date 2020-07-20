@@ -102,6 +102,7 @@ impl BlockStorage {
         let value = postcard::to_stdvec(&block)?;
         self.blocks
             .insert(block.block_number().to_be_bytes(), value)?;
+        log::trace!("Writing block #{}: {:#?}", block.block_number(), block);
 
         for transaction in &block.body.transactions {
             match transaction.unverified_ref() {

@@ -1,7 +1,12 @@
+use std::net::SocketAddr;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
 pub struct Opt {
+    /// Private key file path.
+    pub private_key_file: String,
+    /// The address of the receiving RPU's address.
+    pub turi_address: SocketAddr,
     #[structopt(subcommand)]
     pub cmd: Cmd,
 }
@@ -36,20 +41,18 @@ pub enum Cmd {
     GetBlock(cmd::GetBlock),
     /// Get the current block number (that is going to be committed).
     #[structopt(name = "current_block_number")]
-    CurrentBlockNumber(cmd::GetCurrentBlockNumber),
+    CurrentBlockNumber,
 }
 
 pub mod cmd {
     use pinxit::PeerId;
     use prellblock_client::{consensus::BlockNumber, Filter, Span};
-    use std::{net::SocketAddr, str::FromStr};
+    use std::str::FromStr;
     use structopt::StructOpt;
 
     /// Transaction to set a key to a value.
     #[derive(StructOpt, Debug)]
     pub struct Set {
-        /// The address of the receiving RPU's address.
-        pub turi_address: SocketAddr,
         /// The key of this transaction.
         pub key: String,
         /// The value of the corresponding key.
@@ -59,8 +62,6 @@ pub mod cmd {
     /// Benchmark the blockchain.
     #[derive(StructOpt, Debug)]
     pub struct Benchmark {
-        /// The address of the receiving RPU's address.
-        pub turi_address: SocketAddr,
         /// The key to use for saving benchmark generated data.
         pub key: String,
         /// The number of transactions to send
@@ -76,8 +77,6 @@ pub mod cmd {
     /// Update the permissions for a given account.
     #[derive(StructOpt, Debug)]
     pub struct UpdateAccount {
-        /// The address of the receiving RPU's address.
-        pub turi_address: SocketAddr,
         /// The public key of the account to update.
         pub peer_id: String,
         /// The filepath to a yaml-file cotaining the accounts permissions.
@@ -87,8 +86,6 @@ pub mod cmd {
     /// Create a new account.
     #[derive(StructOpt, Debug)]
     pub struct CreateAccount {
-        /// The address of the receiving RPU's address.
-        pub turi_address: SocketAddr,
         /// The public key of the account to create.
         pub peer_id: String,
         /// The name of the account to create.
@@ -100,8 +97,6 @@ pub mod cmd {
     /// Delete an account.
     #[derive(StructOpt, Debug)]
     pub struct DeleteAccount {
-        /// The address of the receiving RPU's address.
-        pub turi_address: SocketAddr,
         /// The public key of the account to delete.
         pub peer_id: String,
     }
@@ -109,8 +104,6 @@ pub mod cmd {
     /// Update the permissions for a given account.
     #[derive(StructOpt, Debug)]
     pub struct GetValue {
-        /// The address of the receiving RPU's address.
-        pub turi_address: SocketAddr,
         /// The `PeerId` to fetch values from.
         pub peer_id: PeerId,
         /// A filter to select keys.
@@ -137,8 +130,6 @@ pub mod cmd {
     /// Update the permissions for a given account.
     #[derive(StructOpt, Debug)]
     pub struct GetAccount {
-        /// The address of the receiving RPU's address.
-        pub turi_address: SocketAddr,
         /// The IDs of the accounts to fetch.
         pub peer_ids: Vec<PeerId>,
     }
@@ -146,20 +137,11 @@ pub mod cmd {
     /// Update the permissions for a given account.
     #[derive(StructOpt, Debug)]
     pub struct GetBlock {
-        /// The address of the receiving RPU's address.
-        pub turi_address: SocketAddr,
         /// A filter to select some blocks.
         ///
         /// Valid examples are: 42 (block 42), .. (get all blocks), ..42 (blocks 0 to 41),
         /// 42.. (blocks 42 to current), 200..220 (blocks 200 to 219).
         pub filter: ParseFilter<BlockNumber>,
-    }
-
-    /// Get the current block number of an RPU.
-    #[derive(StructOpt, Debug)]
-    pub struct GetCurrentBlockNumber {
-        /// The address of the receiving RPU's address.
-        pub turi_address: SocketAddr,
     }
 
     #[derive(Debug)]

@@ -26,56 +26,42 @@ async fn main() {
     let opt = Opt::from_args();
     log::debug!("Command line arguments: {:#?}", opt);
 
+    let identity_bytes =
+        fs::read_to_string(opt.private_key_file).expect("Could not open private key file.");
+    let client = create_client(opt.turi_address, &identity_bytes);
+
     match opt.cmd {
-        Cmd::Set(cmd) => main_set(cmd).await,
-        Cmd::Benchmark(cmd) => main_benchmark(cmd).await,
-        Cmd::UpdateAccount(cmd) => main_update_account(cmd).await,
-        Cmd::CreateAccount(cmd) => main_create_account(cmd).await,
-        Cmd::DeleteAccount(cmd) => main_delete_account(cmd).await,
-        Cmd::GetValue(cmd) => main_get_value(cmd).await,
-        Cmd::GetAccount(cmd) => main_get_account(cmd).await,
-        Cmd::GetBlock(cmd) => main_get_block(cmd).await,
-        Cmd::CurrentBlockNumber(cmd) => main_current_block_number(cmd).await,
+        Cmd::Set(cmd) => main_set(client, cmd).await,
+        Cmd::Benchmark(cmd) => main_benchmark(identity_bytes, opt.turi_address, cmd).await,
+        Cmd::UpdateAccount(cmd) => main_update_account(client, cmd).await,
+        Cmd::CreateAccount(cmd) => main_create_account(client, cmd).await,
+        Cmd::DeleteAccount(cmd) => main_delete_account(client, cmd).await,
+        Cmd::GetValue(cmd) => main_get_value(client, cmd).await,
+        Cmd::GetAccount(cmd) => main_get_account(client, cmd).await,
+        Cmd::GetBlock(cmd) => main_get_block(client, cmd).await,
+        Cmd::CurrentBlockNumber => main_current_block_number(client).await,
     }
 }
 
 fn create_client(turi_address: SocketAddr, identity: &str) -> Client {
-    let identity = identity.parse().unwrap();
+    let identity = identity
+        .parse()
+        .expect("Cannot read identity. Wrong format?");
     Client::new(turi_address, identity)
 }
 
-fn writer_client(turi_address: SocketAddr) -> Client {
-    create_client(
-        turi_address,
-        "406ed6170c8672e18707fb7512acf3c9dbfc6e5ad267d9a57b9c486a94d99dcc",
-    )
-}
-
-fn reader_client(turi_address: SocketAddr) -> Client {
-    // matching peerid is: cb932f482dc138a76c6f679862aa3692e08c140284967f687c1eaf75fd97f1bc
-    create_client(
-        turi_address,
-        "03d738c972f37a6fd9b33278ac0c50236e45637bcd5aeee82d8323655257d256",
-    )
-}
-
-async fn main_set(cmd: cmd::Set) {
-    let cmd::Set {
-        turi_address,
-        key,
-        value,
-    } = cmd;
+async fn main_set(mut client: Client, cmd: cmd::Set) {
+    let cmd::Set { key, value } = cmd;
 
     // execute the test client
-    match writer_client(turi_address).send_key_value(key, value).await {
+    match client.send_key_value(key, value).await {
         Err(err) => log::error!("Failed to send transaction: {}", err),
         Ok(()) => log::debug!("Transaction ok!"),
     }
 }
 
-async fn main_benchmark(cmd: cmd::Benchmark) {
+async fn main_benchmark(identity: String, turi_address: SocketAddr, cmd: cmd::Benchmark) {
     let cmd::Benchmark {
-        turi_address,
         key,
         transactions,
         size,
@@ -85,10 +71,11 @@ async fn main_benchmark(cmd: cmd::Benchmark) {
     let mut worker_handles = Vec::new();
     for _ in 0..workers {
         let key = key.clone();
+        let identity = identity.clone();
         worker_handles.push(tokio::spawn(async move {
+            let mut client = create_client(turi_address, &identity);
+            drop(identity);
             let mut rng = StdRng::from_rng(OsRng {}).unwrap();
-            let mut client = writer_client(turi_address);
-
             let start = Instant::now();
             let half_size = (size + 1) / 2;
             let mut bytes = vec![0; half_size];
@@ -131,9 +118,8 @@ async fn main_benchmark(cmd: cmd::Benchmark) {
     }
 }
 
-async fn main_update_account(cmd: cmd::UpdateAccount) {
+async fn main_update_account(mut client: Client, cmd: cmd::UpdateAccount) {
     let cmd::UpdateAccount {
-        turi_address,
         peer_id,
         permission_file,
     } = cmd;
@@ -147,18 +133,14 @@ async fn main_update_account(cmd: cmd::UpdateAccount) {
     let permissions: Permissions =
         serde_yaml::from_str(&permission_file_content).expect("Invalid permission file content");
 
-    match reader_client(turi_address)
-        .update_account(peer_id, permissions)
-        .await
-    {
+    match client.update_account(peer_id, permissions).await {
         Err(err) => log::error!("Failed to send transaction: {}", err),
         Ok(()) => log::debug!("Transaction ok!"),
     }
 }
 
-async fn main_create_account(cmd: cmd::CreateAccount) {
+async fn main_create_account(mut client: Client, cmd: cmd::CreateAccount) {
     let cmd::CreateAccount {
-        turi_address,
         peer_id,
         name,
         permission_file,
@@ -171,30 +153,23 @@ async fn main_create_account(cmd: cmd::CreateAccount) {
     let permissions: Permissions =
         serde_yaml::from_str(&permission_file_content).expect("Invalid permission file content.");
 
-    match reader_client(turi_address)
-        .create_account(peer_id, name, permissions)
-        .await
-    {
+    match client.create_account(peer_id, name, permissions).await {
         Err(err) => log::error!("Failed to send transaction: {}", err),
         Ok(()) => log::debug!("Transaction ok!"),
     }
 }
 
-async fn main_delete_account(cmd: cmd::DeleteAccount) {
-    let cmd::DeleteAccount {
-        turi_address,
-        peer_id,
-    } = cmd;
+async fn main_delete_account(mut client: Client, cmd: cmd::DeleteAccount) {
+    let cmd::DeleteAccount { peer_id } = cmd;
     let peer_id = peer_id.parse().expect("Invalid account id given.");
-    match reader_client(turi_address).delete_account(peer_id).await {
+    match client.delete_account(peer_id).await {
         Err(err) => log::error!("Failed to send transaction: {}", err),
         Ok(()) => log::debug!("Transaction ok!"),
     }
 }
 
-async fn main_get_value(cmd: cmd::GetValue) {
+async fn main_get_value(mut client: Client, cmd: cmd::GetValue) {
     let cmd::GetValue {
-        turi_address,
         peer_id,
         filter,
         span,
@@ -208,10 +183,7 @@ async fn main_get_value(cmd: cmd::GetValue) {
         skip: skip.map(|skip| skip.0),
     };
 
-    match reader_client(turi_address)
-        .query_values(vec![peer_id], filter.0, query)
-        .await
-    {
+    match client.query_values(vec![peer_id], filter.0, query).await {
         Ok(values) => {
             if values.is_empty() {
                 log::warn!("No values retrieved.");
@@ -244,13 +216,10 @@ async fn main_get_value(cmd: cmd::GetValue) {
     }
 }
 
-async fn main_get_account(cmd: cmd::GetAccount) {
-    let cmd::GetAccount {
-        turi_address,
-        peer_ids,
-    } = cmd;
+async fn main_get_account(mut client: Client, cmd: cmd::GetAccount) {
+    let cmd::GetAccount { peer_ids } = cmd;
 
-    match reader_client(turi_address).query_account(peer_ids).await {
+    match client.query_account(peer_ids).await {
         Ok(accounts) => {
             if accounts.is_empty() {
                 log::warn!("No accounts retrieved.");
@@ -265,13 +234,10 @@ async fn main_get_account(cmd: cmd::GetAccount) {
     }
 }
 
-async fn main_get_block(cmd: cmd::GetBlock) {
-    let cmd::GetBlock {
-        turi_address,
-        filter,
-    } = cmd;
+async fn main_get_block(mut client: Client, cmd: cmd::GetBlock) {
+    let cmd::GetBlock { filter } = cmd;
 
-    match reader_client(turi_address).query_block(filter.0).await {
+    match client.query_block(filter.0).await {
         Ok(block_vec) => {
             if block_vec.is_empty() {
                 log::warn!("No blocks retrieved for the given range.");
@@ -286,8 +252,8 @@ async fn main_get_block(cmd: cmd::GetBlock) {
     }
 }
 
-async fn main_current_block_number(cmd: cmd::GetCurrentBlockNumber) {
-    match reader_client(cmd.turi_address).current_block_number().await {
+async fn main_current_block_number(mut client: Client) {
+    match client.current_block_number().await {
         Err(err) => log::error!("Failed to retrieve current block number: {}", err),
         Ok(block_number) => log::info!(
             "The current block number is: {:?}. The last committed block number is: {:?}.",
