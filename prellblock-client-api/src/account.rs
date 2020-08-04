@@ -95,6 +95,16 @@ pub enum AccountType {
     Admin,
 }
 
+impl AccountType {
+    /// Whether the account type is AccountType::RPU
+    pub fn is_rpu(&self) -> bool {
+        match self {
+            Self::RPU { .. } => true,
+            _ => false,
+        }
+    }
+}
+
 impl Default for AccountType {
     fn default() -> Self {
         Self::Normal

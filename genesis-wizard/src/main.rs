@@ -16,11 +16,12 @@ use openssl::{
 use pinxit::{Identity, PeerId, Signable};
 use prellblock::RpuPrivateConfig;
 use prellblock_client_api::{
-    account::{Account, AccountType, Permissions},
+    account::{Account, AccountType, Permissions, Expiry},
     consensus::GenesisTransactions,
     transaction, Transaction,
 };
 use std::{fs, path::Path, time::SystemTime};
+use serde::{Deserialize};
 
 mod accounts;
 mod certificates;
@@ -53,10 +54,45 @@ impl AccountMeta {
     }
 }
 
+#[derive(Deserialize)]
+struct AccountTypeInput {
+    #[serde(rename = "type")]
+    account_type: String,
+    turi_address: String,
+    peer_address: String
+}
+
+#[derive(Deserialize)]
+struct AccountInput {
+    name: String,
+    #[serde(rename = "type")]
+    account_type: AccountTypeInput
+}
+
 fn main() {
     // All the variables that are used for writing later.
     let mut accounts: Vec<AccountMeta> = Vec::new();
     let mut ca = None;
+
+    let yaml = fs::read_to_string("config/accounts.yaml").unwrap();
+    let v: Vec<AccountInput> = serde_yaml::from_str(&yaml).unwrap();
+
+    for a in v {
+        accounts.push(AccountMeta {
+            account: Account {
+                name: a.name,
+                account_type: AccountType::RPU {
+                    turi_address: a.account_type.turi_address.parse().unwrap(),
+                    peer_address: a.account_type.peer_address.parse().unwrap(),
+                },
+                expire_at: Expiry::Never,
+                writing_rights: true,
+                reading_rights: Vec::new()
+            },
+            identifier: Identifier::WithIdentity(Identity::generate()),
+            rpu_cert: None
+        })
+    }
 
     let menu_theme = ColorfulTheme::default();
     let main_menu_items = [
@@ -80,6 +116,9 @@ fn main() {
             1 => accounts::handle_create_accounts(&menu_theme, &mut accounts),
             2 => certificates::handle_create_certificates(&menu_theme, &mut accounts, &mut ca),
             3 => {
+                if validate(&accounts) == false {
+                    continue
+                }
                 handle_finish(&menu_theme, accounts, ca);
                 break;
             }
@@ -109,6 +148,35 @@ fn handle_generate_private_key(theme: &'_ dyn Theme) {
         "Saved private key to {}.",
         path.canonicalize().unwrap().display()
     );
+}
+
+fn validate(accounts: &Vec<AccountMeta>) -> bool {
+    let mut valid = true;
+    for AccountMeta {
+        account,
+        identifier: _,
+        rpu_cert,
+    } in accounts
+    {
+        if let AccountType::RPU { .. } = account.account_type {
+            if rpu_cert.is_none() {
+                println!("Validation error: No certificate for {}.", account.name);
+                valid = false;
+            }
+        }
+    }
+
+    let num_rpus = accounts.iter().filter(|&a| a.account.account_type.is_rpu()).count();
+    if num_rpus < 4 {
+        println!("Validation error: Your configuration must include at least four accounts of type RPU.");
+        valid = false;
+    }
+
+    if !valid {
+        println!("Please fix your configuration.");
+    }
+
+    return valid;
 }
 
 fn handle_finish(theme: &'_ dyn Theme, accounts: Vec<AccountMeta>, ca: Option<CA>) {
