@@ -1,0 +1,23 @@
+- name: "emily"
+  type:
+    type: "rpu"
+    turi_address: "127.0.0.1:3130"
+    peer_address: "127.0.0.1:2480"
+
+- name: "james"
+  type:
+      type: "rpu"
+      turi_address: "127.0.0.1:3131"
+      peer_address: "127.0.0.1:2481"
+
+- name: "percy"
+  type:
+    type: "rpu"
+    turi_address: "127.0.0.1:3132"
+    peer_address: "127.0.0.1:2482"
+
+- name: "thomas"
+  type:
+    type: "rpu"
+    turi_address: "127.0.0.1:3133"
+    peer_address: "127.0.0.1:2483"
