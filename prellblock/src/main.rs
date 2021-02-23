@@ -30,7 +30,7 @@ use prellblock::{
     RpuPrivateConfig,
 };
 use prellblock_client_api::{account::AccountType, consensus::GenesisTransactions};
-use std::{env, fs, io, net::SocketAddr, sync::Arc};
+use std::{env, fs, io, net::ToSocketAddrs, sync::Arc};
 use structopt::StructOpt;
 use tokio::net::TcpListener;
 
@@ -102,8 +102,19 @@ async fn main() {
         _ => panic!("Given account {} is no RPU.", peer_id),
     };
 
-    let turi_address = turi_address.parse::<SocketAddr>().unwrap();
-    let peer_address = peer_address.parse::<SocketAddr>().unwrap();
+    let resolved_addresses: Vec<_> = turi_address
+        .to_socket_addrs()
+        .expect("Unable to resolve turi address")
+        .collect();
+    let resolved_address = resolved_addresses.first().unwrap();
+    let turi_address = *resolved_address;
+
+    let resolved_addresses: Vec<_> = peer_address
+        .to_socket_addrs()
+        .expect("Unable to resolve peer address")
+        .collect();
+    let resolved_address = resolved_addresses.first().unwrap();
+    let peer_address = *resolved_address;
 
     // execute the turi in a new thread
     let turi_task = {

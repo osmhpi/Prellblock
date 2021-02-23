@@ -214,7 +214,12 @@ impl WorldState {
                                         params.id, account.name
                                     )
                                 }
-                                self.peers.push_back((params.id, peer_address.to_socket_addrs().unwrap().next().unwrap()));
+                                let resolved_addresses: Vec<_> = peer_address
+                                    .to_socket_addrs()
+                                    .expect("Unable to resolve peer address")
+                                    .collect();
+                                let resolved_address = resolved_addresses.first().unwrap();
+                                self.peers.push_back((params.id, *resolved_address));
                             }
                         }
                     }
@@ -243,7 +248,13 @@ impl WorldState {
                     if self.peers.iter().any(|(id, _)| *id == account_id) {
                         unreachable!("RPU {} ({}) already exists.", account_id, account.name)
                     }
-                    self.peers.push_back((account_id, peer_address.to_socket_addrs().unwrap().next().unwrap()));
+
+                    let resolved_addresses: Vec<_> = peer_address
+                        .to_socket_addrs()
+                        .expect("Unable to resolve peer address")
+                        .collect();
+                    let resolved_address = resolved_addresses.first().unwrap();
+                    self.peers.push_back((account_id, *resolved_address));
                 }
             }
             Transaction::DeleteAccount(params) => {
