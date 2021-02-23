@@ -2,6 +2,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
+use balise::Address;
 pub use prellblock_client_api::account::{Account, Permissions};
 
 use crate::{
@@ -15,7 +16,6 @@ use prellblock_client_api::{account::AccountType, Transaction};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
-    net::{SocketAddr, ToSocketAddrs},
     ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
 };
@@ -101,6 +101,7 @@ impl WorldStateService {
     /// Return a copy of the entire `WorldState`.
     pub async fn get_writable(&self) -> WritableWorldState {
         let permit = self.writer.clone().acquire_owned().await;
+        let permit = permit.expect("unable to acquire");
         WritableWorldState {
             shared_world_state: self.world_state_references.clone(),
             world_state: self.get(),
@@ -154,7 +155,7 @@ pub struct WorldState {
     /// Field storing the `Account` `Permissions`.
     pub accounts: HashMap<PeerId, Arc<Account>>,
     /// Field storing the `Peer`s.
-    pub peers: Vector<(PeerId, SocketAddr)>,
+    pub peers: Vector<(PeerId, Address)>,
     /// The number of `Block`s applied to the `WorldState`.
     pub block_number: BlockNumber,
     /// Hash of the last `Block` in the `BlockStorage`.
@@ -214,12 +215,7 @@ impl WorldState {
                                         params.id, account.name
                                     )
                                 }
-                                let resolved_addresses: Vec<_> = peer_address
-                                    .to_socket_addrs()
-                                    .expect("Unable to resolve peer address")
-                                    .collect();
-                                let resolved_address = resolved_addresses.first().unwrap();
-                                self.peers.push_back((params.id, *resolved_address));
+                                self.peers.push_back((params.id, peer_address.parse().unwrap()));
                             }
                         }
                     }
@@ -248,13 +244,7 @@ impl WorldState {
                     if self.peers.iter().any(|(id, _)| *id == account_id) {
                         unreachable!("RPU {} ({}) already exists.", account_id, account.name)
                     }
-
-                    let resolved_addresses: Vec<_> = peer_address
-                        .to_socket_addrs()
-                        .expect("Unable to resolve peer address")
-                        .collect();
-                    let resolved_address = resolved_addresses.first().unwrap();
-                    self.peers.push_back((account_id, *resolved_address));
+                    self.peers.push_back((account_id, peer_address.parse().unwrap()));
                 }
             }
             Transaction::DeleteAccount(params) => {

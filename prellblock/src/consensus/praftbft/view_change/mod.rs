@@ -143,11 +143,11 @@ impl ViewChange {
             state.did_reach_supermajority(new_leader_term);
 
             // Notify leader task to begin to work.
-            self.notify_leader.notify();
+            self.notify_leader.notify_one();
 
             // Start the new view timeout.
             drop(state);
-            self.notify_new_view.notify();
+            self.notify_new_view.notify_one();
         }
 
         Ok(response::Ok)
@@ -161,7 +161,7 @@ impl ViewChange {
 
             // The new view arrived in time.
             drop(state);
-            self.notify_new_view.notify();
+            self.notify_new_view.notify_one();
         }
     }
 

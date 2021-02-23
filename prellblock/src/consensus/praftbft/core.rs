@@ -6,11 +6,11 @@ use crate::{
     transaction_checker::TransactionChecker,
     world_state::WorldStateService,
 };
+use balise::Address;
 use futures::{stream::FuturesUnordered, StreamExt};
 use newtype_enum::Enum;
 use pinxit::{Identity, PeerId, Signable, Signed, Verified};
 use prellblock_client_api::Transaction;
-use std::net::SocketAddr;
 use tokio::sync::{Mutex, Notify};
 
 #[derive(Debug)]
@@ -85,7 +85,7 @@ impl Core {
     #[allow(clippy::future_not_send)]
     pub async fn send_message<M>(
         &self,
-        peer_address: SocketAddr,
+        peer_address: Address,
         message: M,
     ) -> Result<Verified<M::Response>, Error>
     where
@@ -112,13 +112,14 @@ impl Core {
         let peers = self.world_state.get().peers;
         let peers_count = peers.len();
         for (peer_id, peer_address) in peers {
+            let address = peer_address.clone();
             let signed_message = signed_message.clone();
             let verify_response = verify_response.clone();
 
             futures.push(tokio::spawn(async move {
                 let send_message_and_verify_response = async {
                     let verified_response =
-                        send_signed_message::<M>(peer_address, signed_message).await?;
+                        send_signed_message::<M>(address, signed_message).await?;
                     let signer = verified_response.signer().clone();
                     if signer == peer_id {
                         verify_response(&*verified_response)?;
@@ -174,7 +175,7 @@ impl Core {
 }
 
 async fn send_signed_message<M>(
-    peer_address: SocketAddr,
+    peer_address: Address,
     signed_message: peer_message::Consensus,
 ) -> Result<Verified<M::Response>, Error>
 where

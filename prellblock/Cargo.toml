@@ -30,5 +30,5 @@ serde_yaml = "0.8.13"
 slab = "0.4.2"
 sled = { version = "0.31.0", features = ["compression"] }
 structopt = "0.3.12"
-tokio = { version = "0.2.19", features = ["rt-threaded", "macros", "time"] }
+tokio = { version = "1.2.0", features = ["rt-multi-thread", "macros", "time", "sync"] }
 toml = "0.5.6"

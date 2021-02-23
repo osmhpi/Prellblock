@@ -2,7 +2,7 @@
 
 mod connection_pool;
 
-use crate::{Error, Request};
+use crate::{Address, Error, Request};
 use serde::Serialize;
 use std::{
     convert::TryInto,
@@ -17,7 +17,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 /// The client keeps up a connection pool of open connections
 /// for improved efficiency.
 pub struct Client<T> {
-    addr: SocketAddr,
+    addr: Address,
     request_data: PhantomData<T>,
 }
 
@@ -33,7 +33,7 @@ impl<T> Client<T> {
     /// let client = Client::<()>::new(addr);
     /// ```
     #[must_use]
-    pub const fn new(addr: SocketAddr) -> Self {
+    pub const fn new(addr: Address) -> Self {
         Self {
             addr,
             request_data: PhantomData,
@@ -70,7 +70,7 @@ impl<T> Client<T> {
                 return Err(Error::Timeout);
             }
 
-            let stream = match connection_pool::POOL.stream(self.addr).await {
+            let stream = match connection_pool::POOL.stream(self.addr.clone()).await {
                 Ok(stream) => stream,
                 Err(err) => {
                     log::warn!(

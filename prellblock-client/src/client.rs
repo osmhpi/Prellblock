@@ -2,7 +2,7 @@
 
 #![allow(clippy::future_not_send)]
 
-use balise::{client, Error};
+use balise::{client, Address, Error};
 use newtype_enum::{Enum, Variant};
 use pinxit::{Identity, PeerId, Signable, Signed};
 use prellblock_client_api::{
@@ -12,7 +12,7 @@ use prellblock_client_api::{
     GetValue, Query, ReadValues, Transaction,
 };
 use serde::Serialize;
-use std::{net::SocketAddr, time::SystemTime};
+use std::time::SystemTime;
 
 /// A Client Instance.
 ///
@@ -41,7 +41,7 @@ impl Client {
     /// The `turi_address` is the Turi's port to connect to.
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
-    pub fn new(turi_address: SocketAddr, identity: Identity) -> Self {
+    pub fn new(turi_address: Address, identity: Identity) -> Self {
         Self {
             rpu_client: client::Client::new(turi_address),
             identity,

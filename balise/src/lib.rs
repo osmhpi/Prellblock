@@ -34,7 +34,9 @@
 //!     handler,
 //!     server,
 //!     server::{Response, Server},
+//!     Address,
 //!     Error,
+//!     Host,
 //!     Request,
 //! };
 //! use std::net::SocketAddr;
@@ -75,6 +77,7 @@
 //!     let bind_addr: SocketAddr = "127.0.0.1:0".parse().unwrap(); // replace 0 with a useful port
 //!     let mut listener = TcpListener::bind(bind_addr).await.unwrap();
 //!     let peer_addr = listener.local_addr().unwrap(); // address with allocated port
+//!     let peer_addr: Address = peer_addr.to_string().parse().unwrap();
 //!
 //!     tokio::spawn(async move {
 //!         let server = PingAPIServer;
@@ -96,10 +99,12 @@ pub mod client;
 #[cfg(feature = "server")]
 pub mod server;
 
+mod address;
 mod error;
 mod macros;
 mod stream;
 
+pub use address::{Address, Host};
 pub use error::Error;
 pub use stream::Stream;
 

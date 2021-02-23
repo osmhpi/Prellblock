@@ -24,5 +24,5 @@ rand = "0.7.3"
 serde = { version = "1.0.105", features = ["derive"] }
 serde_yaml = "0.8.11"
 structopt = "0.3.12"
-tokio = { version = "0.2.19", features = ["rt-threaded", "macros"] }
+tokio = { version = "1.2.0", features = ["rt-multi-thread", "macros"] }
 toml = "0.5.6"

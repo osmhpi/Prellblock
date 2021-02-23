@@ -6,11 +6,10 @@ mod stream_impl;
 #[path = "stream_impl_tcp.rs"]
 mod stream_impl;
 
-use crate::Error;
+use crate::{Address, Error};
 use lazy_static::lazy_static;
 use std::{
     collections::HashMap,
-    net::SocketAddr,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -18,7 +17,7 @@ use stream_impl::StreamImpl;
 use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 
 pub struct ConnectionPool {
-    states: Mutex<HashMap<SocketAddr, State>>,
+    states: Mutex<HashMap<Address, State>>,
 }
 
 struct State {
@@ -35,14 +34,14 @@ impl ConnectionPool {
         }
     }
 
-    pub async fn stream(&self, addr: SocketAddr) -> Result<StreamGuard<'_>, Error> {
+    pub async fn stream(&self, addr: Address) -> Result<StreamGuard<'_>, Error> {
         let mut states = self.states.lock().await;
         let (current_streams, stream) = if let Some(state) = states.get_mut(&addr) {
             (state.current_streams.clone(), state.streams.pop())
         } else {
             let current_streams = Arc::new(Semaphore::new(Self::MAX_STREAMS));
             states.insert(
-                addr,
+                addr.clone(),
                 State {
                     streams: Vec::new(),
                     current_streams: current_streams.clone(),
@@ -52,6 +51,7 @@ impl ConnectionPool {
         };
         drop(states);
         let permit = current_streams.acquire_owned().await;
+        let permit = permit.expect("unable to acquire");
 
         let stream = match stream {
             Some(stream) => stream,
@@ -66,7 +66,7 @@ impl ConnectionPool {
     }
 
     /// Add an existing `stream` back into the pool for the given `addr`.
-    async fn add_stream(&self, addr: SocketAddr, stream: StreamImpl) {
+    async fn add_stream(&self, addr: Address, stream: StreamImpl) {
         let mut states = self.states.lock().await;
         let state = states.get_mut(&addr).unwrap();
         state.streams.push(stream);
@@ -75,10 +75,10 @@ impl ConnectionPool {
 
 pub struct StreamGuard<'a> {
     stream: Option<StreamImpl>,
-    addr: SocketAddr,
+    addr: Address,
     pool: &'a ConnectionPool,
     /// This has to be stored in the guard.
-    /// On dorp, this will signal the semaphore (number of connections).
+    /// On drop, this will signal the semaphore (number of connections).
     #[allow(dead_code)]
     permit: OwnedSemaphorePermit,
 }

@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -6,7 +5,7 @@ pub struct Opt {
     /// Private key file path.
     pub private_key_file: String,
     /// The address of the receiving RPU's address.
-    pub turi_address: SocketAddr,
+    pub turi_address: String,
     #[structopt(subcommand)]
     pub cmd: Cmd,
 }

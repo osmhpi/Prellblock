@@ -1,8 +1,8 @@
 use super::{super::message::Metadata, message, response, Error, ErrorVerify, Follower, State};
 use crate::consensus::{Block, BlockNumber, LeaderTerm};
+use balise::Address;
 use pinxit::PeerId;
 use rand::Rng;
-use std::net::SocketAddr;
 use tokio::sync::{MutexGuard, SemaphorePermit};
 
 const SYNCHRONIZATION_BLOCK_THRESHOLD: u64 = 3;
@@ -15,6 +15,7 @@ impl Follower {
         block_number: BlockNumber,
     ) -> Result<(), Error> {
         let synchronizer_permit = self.synchronizer_semaphore.acquire().await;
+        let synchronizer_permit = synchronizer_permit.expect("unable to acquire");
         let state = self.state.lock().await;
 
         if self.is_synchronization_needed(&state, leader_term, block_number) {
@@ -26,11 +27,11 @@ impl Follower {
                 let peer_index = rand::thread_rng().gen_range(0, peers.len());
                 let peer = &peers[peer_index];
                 if peer.0 != *self.identity.id() {
-                    break peer.1;
+                    break &peer.1;
                 }
             };
 
-            self.synchronize(synchronizer_permit, state, peer_address)
+            self.synchronize(synchronizer_permit, state, peer_address.clone())
                 .await
                 .map_err(|err| {
                     log::error!("Synchronization error: {}", err);
@@ -56,6 +57,7 @@ impl Follower {
 
     pub async fn synchronize_from(&self, peer_id: &PeerId) -> Result<MutexGuard<'_, State>, Error> {
         let synchronizer_permit = self.synchronizer_semaphore.acquire().await;
+        let synchronizer_permit = synchronizer_permit.expect("unable to acquire");
         if let Some((_, peer_address)) = self
             .world_state
             .get()
@@ -64,7 +66,7 @@ impl Follower {
             .find(|(pid, _)| pid == peer_id)
         {
             let state = self.state.lock().await;
-            self.synchronize(synchronizer_permit, state, *peer_address)
+            self.synchronize(synchronizer_permit, state, peer_address.clone())
                 .await
                 .map_err(|err| {
                     log::error!("Synchronization error: {}", err);
@@ -79,7 +81,7 @@ impl Follower {
         &self,
         synchronizer_permit: SemaphorePermit<'_>,
         state: MutexGuard<'_, State>,
-        peer_address: SocketAddr,
+        peer_address: Address,
     ) -> Result<MutexGuard<'_, State>, Error> {
         let request = message::SynchronizationRequest {
             leader_term: state.leader_term,

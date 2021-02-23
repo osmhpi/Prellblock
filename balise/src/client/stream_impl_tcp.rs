@@ -10,7 +10,7 @@ impl<'a> super::StreamGuard<'a> {
     }
 }
 
-pub async fn connect(addr: &SocketAddr) -> Result<StreamImpl, Error> {
+pub async fn connect(addr: &Address) -> Result<StreamImpl, Error> {
     let stream = TcpStream::connect(addr).await?;
     Ok(stream)
 }

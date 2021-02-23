@@ -304,7 +304,7 @@ impl Follower {
             state.new_leader_term(message.leader_term, message.view_change_signatures);
 
             // The leader can start it's work.
-            self.notify_leader.notify();
+            self.notify_leader.notify_one();
         }
     }
 }

@@ -9,13 +9,14 @@
 
 mod cli;
 
+use balise::Address;
 use cli::prelude::*;
 use prellblock_client::{account::Permissions, Client, Query};
 use rand::{
     rngs::{OsRng, StdRng},
     RngCore, SeedableRng,
 };
-use std::{fs, net::SocketAddr, str, time::Instant};
+use std::{fs, str, time::Instant};
 use structopt::StructOpt;
 
 #[tokio::main]
@@ -26,13 +27,19 @@ async fn main() {
     let opt = Opt::from_args();
     log::debug!("Command line arguments: {:#?}", opt);
 
+    let turi_address: Address = opt
+        .turi_address
+        .parse()
+        .expect("Invalid turi address provided");
+
     let identity_bytes =
         fs::read_to_string(opt.private_key_file).expect("Could not open private key file.");
-    let client = create_client(opt.turi_address, &identity_bytes);
+
+    let client = create_client(turi_address.clone(), &identity_bytes);
 
     match opt.cmd {
         Cmd::Set(cmd) => main_set(client, cmd).await,
-        Cmd::Benchmark(cmd) => main_benchmark(identity_bytes, opt.turi_address, cmd).await,
+        Cmd::Benchmark(cmd) => main_benchmark(identity_bytes, turi_address, cmd).await,
         Cmd::UpdateAccount(cmd) => main_update_account(client, cmd).await,
         Cmd::CreateAccount(cmd) => main_create_account(client, cmd).await,
         Cmd::DeleteAccount(cmd) => main_delete_account(client, cmd).await,
@@ -43,7 +50,7 @@ async fn main() {
     }
 }
 
-fn create_client(turi_address: SocketAddr, identity: &str) -> Client {
+fn create_client(turi_address: Address, identity: &str) -> Client {
     let identity = identity
         .parse()
         .expect("Cannot read identity. Wrong format?");
@@ -60,7 +67,7 @@ async fn main_set(mut client: Client, cmd: cmd::Set) {
     }
 }
 
-async fn main_benchmark(identity: String, turi_address: SocketAddr, cmd: cmd::Benchmark) {
+async fn main_benchmark(identity: String, turi_address: Address, cmd: cmd::Benchmark) {
     let cmd::Benchmark {
         key,
         transactions,
@@ -71,9 +78,10 @@ async fn main_benchmark(identity: String, turi_address: SocketAddr, cmd: cmd::Be
     let mut worker_handles = Vec::new();
     for _ in 0..workers {
         let key = key.clone();
+        let address = turi_address.clone();
         let identity = identity.clone();
         worker_handles.push(tokio::spawn(async move {
-            let mut client = create_client(turi_address, &identity);
+            let mut client = create_client(address, &identity);
             drop(identity);
             let mut rng = StdRng::from_rng(OsRng {}).unwrap();
             let start = Instant::now();

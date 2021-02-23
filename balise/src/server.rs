@@ -31,7 +31,7 @@ pub use native_tls::Identity as TlsIdentity;
 use ::{
     native_tls::{Identity, Protocol, TlsAcceptor},
     std::path::Path,
-    tokio_tls::TlsAcceptor as AsyncTlsAcceptor,
+    tokio_native_tls::TlsAcceptor as AsyncTlsAcceptor,
 };
 
 #[cfg(not(feature = "tls"))]

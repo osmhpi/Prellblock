@@ -97,7 +97,7 @@ impl PRaftBFT {
         };
 
         if queue_len > MAX_TRANSACTIONS_PER_BLOCK {
-            self.core.notify_leader.notify();
+            self.core.notify_leader.notify_one();
         }
     }
 
