@@ -20,7 +20,8 @@ use prellblock_client_api::{
     consensus::GenesisTransactions,
     transaction, Transaction,
 };
-use std::{fs, path::Path, time::SystemTime};
+use std::{fs, path::{Path, PathBuf}, time::SystemTime};
+use structopt::StructOpt;
 
 mod accounts;
 mod certificates;
@@ -54,69 +55,40 @@ impl AccountMeta {
     }
 }
 
+// https://crates.io/crates/structopt
+
+#[derive(StructOpt, Debug)]
+struct Opt {
+    /// The path to a configuration template file.
+    #[structopt(short, long, parse(from_os_str))]
+    template: Option<PathBuf>,
+}
+
 fn main() {
+    let opt = Opt::from_args();
+
     // All the variables that are used for writing later.
     let mut accounts: Vec<AccountMeta> = Vec::new();
     let mut ca = None;
 
-    let yaml = fs::read_to_string("config/accounts.template.yaml").unwrap();
-    let template: Vec<templates::AccountTemplate> = serde_yaml::from_str(&yaml).unwrap();
+    if let Some(template) = opt.template {
+        let yaml = fs::read_to_string(template).unwrap();
+        let template: Vec<templates::AccountTemplate> = serde_yaml::from_str(&yaml).unwrap();
 
-    for a in template {
-        accounts.push(AccountMeta{
-            account: Account {
-                name: a.name,
-                account_type: a.permissions.account_type.unwrap(),
-                expire_at: a.permissions.expire_at.unwrap(),
-                writing_rights: a.permissions.has_writing_rights.unwrap(),
-                reading_rights: a.permissions.reading_rights.unwrap()
-            },
-            identifier: Identifier::WithIdentity(Identity::generate()),
-            rpu_cert: None
-        })
+        for a in template {
+            accounts.push(AccountMeta{
+                account: Account {
+                    name: a.name,
+                    account_type: a.permissions.account_type.unwrap(),
+                    expire_at: a.permissions.expire_at.unwrap(),
+                    writing_rights: a.permissions.has_writing_rights.unwrap(),
+                    reading_rights: a.permissions.reading_rights.unwrap()
+                },
+                identifier: Identifier::WithIdentity(Identity::generate()),
+                rpu_cert: None
+            })
+        }
     }
-
-    // for a in template {
-    //     accounts.push(match a.account_type.account_type.as_ref() {
-    //         "rpu" => AccountMeta {
-    //             account: Account {
-    //                 name: a.name,
-    //                 account_type: AccountType::RPU {
-    //                     turi_address: a.account_type.turi_address.parse().unwrap(),
-    //                     peer_address: a.account_type.peer_address.parse().unwrap(),
-    //                 },
-    //                 expire_at: Expiry::Never,
-    //                 writing_rights: false,
-    //                 reading_rights: Vec::new()
-    //             },
-    //             identifier: Identifier::WithIdentity(Identity::generate()),
-    //             rpu_cert: None
-    //         },
-    //         "admin" => AccountMeta{
-    //             account: Account {
-    //                 name: a.name,
-    //                 account_type: AccountType::Admin,
-    //                 expire_at: Expiry::Never,
-    //                 writing_rights: true,
-    //                 reading_rights: vec!()
-    //             },
-    //             identifier: Identifier::WithIdentity(Identity::generate()),
-    //             rpu_cert: None
-    //         },
-    //         "normal" => AccountMeta{
-    //             account: Account {
-    //                 name: a.name,
-    //                 account_type: AccountType::Normal,
-    //                 expire_at: Expiry::Never,
-    //                 writing_rights: true,
-    //                 reading_rights: vec!()
-    //             },
-    //             identifier: Identifier::WithIdentity(Identity::generate()),
-    //             rpu_cert: None
-    //         },
-    //         _ => panic!("Invalid account type detected."),
-    //     })
-    // }
 
     let menu_theme = ColorfulTheme::default();
     let main_menu_items = [

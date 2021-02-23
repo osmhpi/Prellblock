@@ -21,4 +21,5 @@ prellblock = { path = "../prellblock" }
 prellblock-client-api = { path = "../prellblock-client-api" }
 serde = { version = "1.0.114", features = ["derive"] }
 serde_yaml = "0.8.13"
+structopt = "0.3.12"
 toml = "0.5.6"

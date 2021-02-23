@@ -568,6 +568,7 @@ dependencies = [
  "prellblock-client-api",
  "serde",
  "serde_yaml",
+ "structopt",
  "toml",
 ]
 
