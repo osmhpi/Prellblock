@@ -17,7 +17,7 @@ humantime = "2.0.0"
 log = "0.4.8"
 newtype-enum = "0.1.0"
 pinxit = { path = "../pinxit" }
-postcard = { version = "0.5.0", git = "https://github.com/felix-gohla/postcard.git#master", features = ["use-std"] }
+postcard = { version = "0.5.0", git = "https://github.com/felix-gohla/postcard.git", rev = "d9bdfe2b", features = ["use-std"] }
 prellblock-client-api = { path = "../prellblock-client-api" }
 pretty_env_logger = "0.4.0"
 rand = "0.7.3"

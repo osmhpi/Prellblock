@@ -1028,7 +1028,7 @@ checksum = "d36492546b6af1463394d46f0c834346f31548646f6ba10849802c9c9a27ac33"
 [[package]]
 name = "postcard"
 version = "0.5.0"
-source = "git+https://github.com/felix-gohla/postcard.git#master#d9bdfe2ba9a057a4e9b24fb5985c42e8d7f64d0a"
+source = "git+https://github.com/felix-gohla/postcard.git?rev=d9bdfe2b#d9bdfe2ba9a057a4e9b24fb5985c42e8d7f64d0a"
 dependencies = [
  "heapless",
  "postcard-cobs",

@@ -3,7 +3,6 @@
 use chrono::prelude::*;
 use pinxit::PeerId;
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 
 /// `Account` stores data needed for permission checking.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,9 +86,9 @@ pub enum AccountType {
     #[serde(rename = "rpu")]
     RPU {
         /// The address on which the `Turi` listens for incoming client requests.
-        turi_address: SocketAddr,
+        turi_address: String,
         /// The address on which the `PeerInbox` listens for incoming RPU-RPU communication.
-        peer_address: SocketAddr,
+        peer_address: String,
     },
     /// An admin that can manage and edit all other accounts.
     Admin,

@@ -21,6 +21,7 @@ use prellblock_client_api::account::{Account, AccountType};
 use std::{
     collections::HashSet,
     fs,
+    net::IpAddr,
     path::Path,
     time::{Duration, SystemTime},
 };
@@ -235,7 +236,7 @@ fn create_rpu_cert(ca: &CA, rpu: &Account) -> Result<(X509, PKey<Private>), Erro
     if let AccountType::RPU {
         peer_address,
         turi_address,
-    } = rpu.account_type
+    } = &rpu.account_type
     {
         println!("Creating Certificate for RPU {}.", rpu.name);
 
@@ -278,12 +279,19 @@ fn create_rpu_cert(ca: &CA, rpu: &Account) -> Result<(X509, PKey<Private>), Erro
         // Set all alternative names and extensions.
         let mut alternative_names = SubjectAlternativeName::new();
         alternative_names.dns(&rpu.name);
-        let ips: HashSet<_> = vec![turi_address, peer_address]
+        let names: HashSet<_> = vec![turi_address, peer_address]
             .iter()
-            .map(|address| address.ip())
+            .map(|address| {
+                let hostname_end = address.find(":").unwrap_or(address.len());
+                &address[0..hostname_end]
+            })
             .collect();
-        for ip in ips {
-            alternative_names.ip(&ip.to_string());
+        for name in names {
+            if let Ok(ip) = name.parse::<IpAddr>() {
+                alternative_names.ip(&ip.to_string());
+            } else {
+                alternative_names.dns(name);
+            }
         }
         let alternative_names = alternative_names
             .build(&x509.x509v3_context(None, None))

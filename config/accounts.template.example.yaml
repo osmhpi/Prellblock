@@ -1,0 +1,60 @@
+- name: "emily"
+  permissions:
+    type:
+      rpu:
+        turi_address: "127.0.0.1:3130"
+        peer_address: "emily:2480"
+    expire_at: never
+    has_writing_rights: false
+    reading_rights: []
+
+- name: "james"
+  permissions:
+    type:
+      rpu:
+        turi_address: "127.0.0.1:3130"
+        peer_address: "james:2480"
+    expire_at: never
+    has_writing_rights: false
+    reading_rights: []
+
+- name: "percy"
+  permissions:
+    type:
+      rpu:
+        turi_address: "127.0.0.1:3130"
+        peer_address: "percy:2480"
+    expire_at: never
+    has_writing_rights: false
+    reading_rights: []
+
+- name: "thomas"
+  permissions:
+    type:
+      rpu:
+        turi_address: "127.0.0.1:3130"
+        peer_address: "thomas:2480"
+    expire_at: never
+    has_writing_rights: false
+    reading_rights: []
+
+- name: "admin"
+  permissions:
+    type: admin
+    expire_at: never
+    has_writing_rights: true
+    reading_rights: []
+    # reading_rights:
+    #   - whitelist:
+    #       accounts:
+    #         - temperature-1
+    #       namespace:
+    #         - scope: temperature
+
+- name: "temperature-1"
+  permissions:
+    type: normal
+    expire_at: never
+    has_writing_rights: true
+    reading_rights: []
+

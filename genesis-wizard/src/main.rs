@@ -16,16 +16,16 @@ use openssl::{
 use pinxit::{Identity, PeerId, Signable};
 use prellblock::RpuPrivateConfig;
 use prellblock_client_api::{
-    account::{Account, AccountType, Permissions, Expiry},
+    account::{Account, AccountType, Permissions},
     consensus::GenesisTransactions,
     transaction, Transaction,
 };
 use std::{fs, path::Path, time::SystemTime};
-use serde::{Deserialize};
 
 mod accounts;
 mod certificates;
 mod util;
+mod templates;
 
 #[derive(Clone)]
 enum Identifier {
@@ -54,45 +54,69 @@ impl AccountMeta {
     }
 }
 
-#[derive(Deserialize)]
-struct AccountTypeInput {
-    #[serde(rename = "type")]
-    account_type: String,
-    turi_address: String,
-    peer_address: String
-}
-
-#[derive(Deserialize)]
-struct AccountInput {
-    name: String,
-    #[serde(rename = "type")]
-    account_type: AccountTypeInput
-}
-
 fn main() {
     // All the variables that are used for writing later.
     let mut accounts: Vec<AccountMeta> = Vec::new();
     let mut ca = None;
 
-    let yaml = fs::read_to_string("config/accounts.yaml").unwrap();
-    let v: Vec<AccountInput> = serde_yaml::from_str(&yaml).unwrap();
+    let yaml = fs::read_to_string("config/accounts.template.yaml").unwrap();
+    let template: Vec<templates::AccountTemplate> = serde_yaml::from_str(&yaml).unwrap();
 
-    for a in v {
-        accounts.push(AccountMeta {
+    for a in template {
+        accounts.push(AccountMeta{
             account: Account {
                 name: a.name,
-                account_type: AccountType::RPU {
-                    turi_address: a.account_type.turi_address.parse().unwrap(),
-                    peer_address: a.account_type.peer_address.parse().unwrap(),
-                },
-                expire_at: Expiry::Never,
-                writing_rights: true,
-                reading_rights: Vec::new()
+                account_type: a.permissions.account_type.unwrap(),
+                expire_at: a.permissions.expire_at.unwrap(),
+                writing_rights: a.permissions.has_writing_rights.unwrap(),
+                reading_rights: a.permissions.reading_rights.unwrap()
             },
             identifier: Identifier::WithIdentity(Identity::generate()),
             rpu_cert: None
         })
     }
+
+    // for a in template {
+    //     accounts.push(match a.account_type.account_type.as_ref() {
+    //         "rpu" => AccountMeta {
+    //             account: Account {
+    //                 name: a.name,
+    //                 account_type: AccountType::RPU {
+    //                     turi_address: a.account_type.turi_address.parse().unwrap(),
+    //                     peer_address: a.account_type.peer_address.parse().unwrap(),
+    //                 },
+    //                 expire_at: Expiry::Never,
+    //                 writing_rights: false,
+    //                 reading_rights: Vec::new()
+    //             },
+    //             identifier: Identifier::WithIdentity(Identity::generate()),
+    //             rpu_cert: None
+    //         },
+    //         "admin" => AccountMeta{
+    //             account: Account {
+    //                 name: a.name,
+    //                 account_type: AccountType::Admin,
+    //                 expire_at: Expiry::Never,
+    //                 writing_rights: true,
+    //                 reading_rights: vec!()
+    //             },
+    //             identifier: Identifier::WithIdentity(Identity::generate()),
+    //             rpu_cert: None
+    //         },
+    //         "normal" => AccountMeta{
+    //             account: Account {
+    //                 name: a.name,
+    //                 account_type: AccountType::Normal,
+    //                 expire_at: Expiry::Never,
+    //                 writing_rights: true,
+    //                 reading_rights: vec!()
+    //             },
+    //             identifier: Identifier::WithIdentity(Identity::generate()),
+    //             rpu_cert: None
+    //         },
+    //         _ => panic!("Invalid account type detected."),
+    //     })
+    // }
 
     let menu_theme = ColorfulTheme::default();
     let main_menu_items = [

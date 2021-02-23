@@ -15,7 +15,7 @@ use prellblock_client_api::{account::AccountType, Transaction};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
-    net::SocketAddr,
+    net::{SocketAddr, ToSocketAddrs},
     ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
 };
@@ -205,7 +205,7 @@ impl WorldState {
                         }
                         _ => {
                             if let Some(AccountType::RPU { peer_address, .. }) =
-                                params.permissions.account_type
+                                &params.permissions.account_type
                             {
                                 // Add account because now it's an RPU.
                                 if self.peers.iter().any(|(id, _)| *id == params.id) {
@@ -214,7 +214,7 @@ impl WorldState {
                                         params.id, account.name
                                     )
                                 }
-                                self.peers.push_back((params.id, peer_address));
+                                self.peers.push_back((params.id, peer_address.to_socket_addrs().unwrap().next().unwrap()));
                             }
                         }
                     }
@@ -239,11 +239,11 @@ impl WorldState {
                 }
 
                 // Add the account as peer, if not exists.
-                if let AccountType::RPU { peer_address, .. } = account.account_type {
+                if let AccountType::RPU { peer_address, .. } = &account.account_type {
                     if self.peers.iter().any(|(id, _)| *id == account_id) {
                         unreachable!("RPU {} ({}) already exists.", account_id, account.name)
                     }
-                    self.peers.push_back((account_id, peer_address));
+                    self.peers.push_back((account_id, peer_address.to_socket_addrs().unwrap().next().unwrap()));
                 }
             }
             Transaction::DeleteAccount(params) => {
